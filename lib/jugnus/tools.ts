@@ -40,11 +40,10 @@ export function buildToolsForJugnu(
     }
     await db.from('messages').insert({
       project_id: projectId,
-      author_type: 'system',
-      author_key: 'system',
-      content: `✅ ${jugnuKey.toUpperCase()} completed: ${input.result}`,
+      author_type: 'jugnu',
+      author_key: jugnuKey,
+      content: String(input.result),
       task_id: taskId,
-      metadata: { task_card: true },
     })
     return { ok: true }
   }
@@ -127,9 +126,8 @@ export function buildToolsForJugnu(
       }
       await db.from('projects').update({ status: 'building' }).eq('id', projectId)
       await db.from('messages').insert({
-        project_id: projectId, author_type: 'system', author_key: 'system',
-        content: `✨ Maya assembled the plan — ${rawTasks.length} task${rawTasks.length !== 1 ? 's' : ''} queued.`,
-        metadata: { task_card: true, plan_created: true },
+        project_id: projectId, author_type: 'jugnu', author_key: jugnuKey,
+        content: `✨ Plan assembled — ${rawTasks.length} task${rawTasks.length !== 1 ? 's' : ''} queued for the team.`,
       })
       return { ok: true, task_count: rawTasks.length, ids: insertedIds }
     }

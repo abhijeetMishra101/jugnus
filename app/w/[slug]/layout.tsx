@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createServiceClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
+import { ProjectList } from './components/ProjectList'
 
 interface Props {
   children: React.ReactNode
@@ -15,14 +16,6 @@ const NAV = [
   { icon: '✉', label: 'Direct Messages' },
 ]
 
-const STATUS_DOT: Record<string, string> = {
-  planning:  'bg-yellow-400',
-  building:  'bg-indigo-400 animate-pulse',
-  reviewing: 'bg-amber-400 animate-pulse',
-  completed: 'bg-emerald-400',
-  blocked:   'bg-red-400',
-  active:    'bg-indigo-400',
-}
 
 export default async function WorkspaceLayout({ children, params }: Props) {
   const { slug } = await params
@@ -71,22 +64,7 @@ export default async function WorkspaceLayout({ children, params }: Props) {
             </Link>
           </div>
 
-          <div className="space-y-0.5">
-            {projects?.map((p) => (
-              <Link
-                key={p.id}
-                href={`/w/${slug}/p/${p.id}`}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors group"
-              >
-                <span className="text-white/40 font-medium">#</span>
-                <span className="truncate flex-1">{p.title}</span>
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[p.status] ?? 'bg-white/20'}`} />
-              </Link>
-            ))}
-            {!projects?.length && (
-              <p className="px-3 py-2 text-xs text-white/30 italic">No projects yet</p>
-            )}
-          </div>
+          <ProjectList projects={projects ?? []} slug={slug} />
         </div>
 
         {/* User footer */}
