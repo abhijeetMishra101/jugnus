@@ -72,8 +72,17 @@ export async function POST(request: Request) {
 
   // Dispatch Maya and run the full pipeline in a single waitUntil (no HTTP self-calling)
   waitUntil(
-    runPipeline(projectId, null, 'maya', db).catch((err) => {
-      console.error('[projects] pipeline error:', err)
+    runPipeline(projectId, null, 'maya', db).catch(async (err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[projects] pipeline error:', msg)
+      try {
+        await db.from('messages').insert({
+          project_id: projectId,
+          author_type: 'system',
+          author_key: 'system',
+          content: `❌ Pipeline error: ${msg}`,
+        })
+      } catch { /* best-effort */ }
     })
   )
 
