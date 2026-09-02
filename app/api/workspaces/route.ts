@@ -2,15 +2,22 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
 /**
- * GET /api/workspaces?ownerId=<id>
- * Returns the first workspace for a user (used by login redirect).
+ * GET /api/workspaces?ownerId=<id>   — returns { slug } for the owner's first workspace
+ * GET /api/workspaces?slug=<slug>    — returns { id, name } for a workspace by slug
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const ownerId = searchParams.get('ownerId')
-  if (!ownerId) return NextResponse.json({ error: 'ownerId required' }, { status: 400 })
-
+  const slug = searchParams.get('slug')
   const db = createServiceClient()
+
+  if (slug) {
+    const { data } = await db.from('workspaces').select('id, name').eq('slug', slug).single()
+    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ id: data.id, name: data.name })
+  }
+
+  if (!ownerId) return NextResponse.json({ error: 'ownerId or slug required' }, { status: 400 })
   const { data } = await db.from('workspaces').select('slug').eq('owner_id', ownerId).limit(1).single()
   return NextResponse.json({ slug: data?.slug ?? null })
 }

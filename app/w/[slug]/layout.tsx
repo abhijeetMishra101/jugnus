@@ -51,7 +51,18 @@ export default async function WorkspaceLayout({ children, params }: Props) {
 
         {/* Projects list */}
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider px-2 mb-1">Projects</p>
+          <div className="flex items-center justify-between px-2 mb-1">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Projects</p>
+            <Link
+              href={`/w/${slug}/new`}
+              className="text-gray-400 hover:text-indigo-600 transition-colors"
+              title="New project"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </Link>
+          </div>
           {projects?.map((project) => (
             <Link
               key={project.id}
