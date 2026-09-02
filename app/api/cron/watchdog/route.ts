@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
-const STUCK_THRESHOLD_MINUTES = 10
+const STUCK_THRESHOLD_MINUTES = 4
 
 /**
  * Watchdog cron — runs every 5 minutes via Vercel Crons.

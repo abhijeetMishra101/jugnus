@@ -70,21 +70,8 @@ export async function POST(request: Request) {
     content: '✨ Maya is reviewing your objective and assembling the team…',
   })
 
-  // Dispatch Maya and run the full pipeline in a single waitUntil (no HTTP self-calling)
-  waitUntil(
-    runPipeline(projectId, null, 'maya', db).catch(async (err) => {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('[projects] pipeline error:', msg)
-      try {
-        await db.from('messages').insert({
-          project_id: projectId,
-          author_type: 'system',
-          author_key: 'system',
-          content: `❌ Pipeline error: ${msg}`,
-        })
-      } catch { /* best-effort */ }
-    })
-  )
+  // Kick off Maya — runPipeline handles its own errors and HTTP-chains to the next jugnu
+  waitUntil(runPipeline(projectId, null, 'maya', db))
 
   return NextResponse.json({ id: projectId, title }, { status: 201 })
 }
