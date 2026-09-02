@@ -113,17 +113,13 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
             const currentTask = tasks.find((t) => t.jugnu_key === j.key && t.status === 'in_progress')
             return (
               <div key={j.key} className="flex items-center gap-3">
-                <div
-                  className="shrink-0 w-9 h-9 rounded-full overflow-hidden shadow-sm"
-                  style={{ border: `2px solid ${j.color}` }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/jugnus/face_${j.key}.png`}
-                    alt={j.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 40%' }}
-                  />
-                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/jugnus/jugnu_${j.key}.png`}
+                  alt={j.name}
+                  className="shrink-0"
+                  style={{ width: 48, height: 46, objectFit: 'contain' }}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-sm font-semibold text-gray-900">{j.name}</p>

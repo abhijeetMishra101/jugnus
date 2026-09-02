@@ -13,11 +13,11 @@ interface Message {
   metadata: Record<string, unknown>
 }
 
-const JUGNU: Record<string, { name: string; color: string; bg: string; dot: string }> = {
-  maya: { name: 'Maya', color: '#8b5cf6', bg: '#f5f3ff', dot: '#8b5cf6' },
-  nia:  { name: 'Nia',  color: '#ec4899', bg: '#fdf2f8', dot: '#ec4899' },
-  leo:  { name: 'Leo',  color: '#06b6d4', bg: '#f0fdfe', dot: '#06b6d4' },
-  tara: { name: 'Tara', color: '#10b981', bg: '#f0fdf4', dot: '#10b981' },
+const JUGNU: Record<string, { name: string; color: string; bg: string; role: string; icon: string }> = {
+  maya: { name: 'Maya', color: '#f472b6', bg: '#fdf2f8', role: 'Planner',  icon: '🎯' },
+  nia:  { name: 'Nia',  color: '#60a5fa', bg: '#eff6ff', role: 'Designer', icon: '🎨' },
+  leo:  { name: 'Leo',  color: '#4ade80', bg: '#f0fdf4', role: 'Builder',  icon: '</>' },
+  tara: { name: 'Tara', color: '#fb923c', bg: '#fff7ed', role: 'Reviewer', icon: '✓'  },
 }
 
 function MessageBubble({ msg }: { msg: Message }) {
@@ -47,26 +47,38 @@ function MessageBubble({ msg }: { msg: Message }) {
     )
   }
 
-  // Jugnu message — large illustrated avatar to the left
-  const color = j?.color ?? '#6366f1'
+  // Jugnu message — illustrated character to the left, role pill in header
+  const color = j?.color ?? '#a78bfa'
   const bg    = j?.bg    ?? '#f5f3ff'
   const name  = j?.name  ?? msg.author_key
+  const role  = j?.role  ?? 'Agent'
+  const icon  = j?.icon  ?? '✦'
   const key   = msg.author_key
 
   return (
-    <div className="flex items-start gap-2 px-4 py-1">
-      {/* Jugnu body + face illustration */}
+    <div className="flex items-start gap-1 px-3 py-1.5">
+      {/* Jugnu character — single pre-composited PNG */}
       <div className="shrink-0">
-        <JugnuIllustration jugnuKey={key} size={110} />
+        <JugnuIllustration jugnuKey={key} size={120} />
       </div>
 
       {/* Bubble */}
-      <div className="flex-1 min-w-0 max-w-lg mt-6">
-        {/* Name + status dot + time */}
-        <div className="flex items-center gap-1.5 mb-2">
-          <span className="text-sm font-bold" style={{ color }}>{name}</span>
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-          <span className="text-xs text-gray-400">
+      <div className="flex-1 min-w-0 max-w-lg mt-8">
+        {/* Name + role pill + role icon + time — matches mockup header row */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className="text-base font-bold" style={{ color }}>{name}</span>
+          {/* Role pill */}
+          <span
+            className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+            style={{ backgroundColor: color + '28', color }}
+          >
+            {role}
+          </span>
+          {/* Role icon */}
+          <span className="text-sm" style={{ color }}>
+            {icon}
+          </span>
+          <span className="text-xs text-gray-400 ml-0.5">
             {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
