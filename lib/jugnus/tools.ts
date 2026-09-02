@@ -1,18 +1,13 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from './registry'
-import { getInstallationOctokit, getInstallationForProject } from '../github/auth'
-import { commitFilesToBranch, createPullRequest, readFileFromBranch, listDirectory } from '../github/operations'
+import { writeFile, readFile, listFiles } from '../storage/files'
 
 export interface ToolSet {
   definitions: Anthropic.Tool[]
   handlers: Record<string, (input: Record<string, unknown>) => Promise<unknown>>
 }
 
-/**
- * Returns the tool definitions and handlers available to a jugnu at dispatch time.
- * Each jugnu gets a capability-appropriate subset — no tool leakage between roles.
- */
 export function buildToolsForJugnu(
   jugnuKey: JugnuKey,
   projectId: string,
@@ -22,65 +17,49 @@ export function buildToolsForJugnu(
   const definitions: Anthropic.Tool[] = []
   const handlers: Record<string, (input: Record<string, unknown>) => Promise<unknown>> = {}
 
-  // ── complete_task — available to all jugnus ──────────────────────────────────
+  // ── complete_task — all jugnus ───────────────────────────────────────────────
   definitions.push({
     name: 'complete_task',
-    description: 'Mark your current task as completed and record your result summary. Call this when your work is done.',
+    description: 'Mark your current task as completed and record your result. Call this when your work is done.',
     input_schema: {
       type: 'object' as const,
       properties: {
         result: { type: 'string', description: 'Summary of what you did and what was produced.' },
-        artifact: {
-          type: 'object',
-          description: 'Optional artifact produced (PR URL, file path, etc.)',
-          properties: {
-            type: { type: 'string', enum: ['github_pr', 'mockup', 'adr', 'document'] },
-            url: { type: 'string' },
-            branch: { type: 'string' },
-          },
-        },
       },
       required: ['result'],
     },
   })
 
   handlers['complete_task'] = async (input) => {
-    const updates: Record<string, unknown> = {
-      status: 'completed',
-      result: input.result,
-      completed_at: new Date().toISOString(),
-    }
-    if (input.artifact) updates.artifact = input.artifact
-
     if (taskId) {
-      await db.from('tasks').update(updates).eq('id', taskId)
+      await db.from('tasks').update({
+        status: 'completed',
+        result: input.result,
+        completed_at: new Date().toISOString(),
+      }).eq('id', taskId)
     }
-
-    // Post system card to project channel
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'system',
       author_key: 'system',
-      content: `✅ Task completed by ${jugnuKey.toUpperCase()}: ${input.result}`,
+      content: `✅ ${jugnuKey.toUpperCase()} completed: ${input.result}`,
       task_id: taskId,
       metadata: { task_card: true },
     })
-
     return { ok: true }
   }
 
-  // ── ask_founder — escalation, Maya only ─────────────────────────────────────
+  // ── Maya tools ───────────────────────────────────────────────────────────────
   if (jugnuKey === 'maya') {
     definitions.push({
       name: 'ask_founder',
-      description: 'Ask the founder a clarifying question or preference decision. Use sparingly — only for genuine unknowns that block task planning.',
+      description: 'Ask the founder a clarifying question. Use sparingly — only for genuine blockers.',
       input_schema: {
         type: 'object' as const,
         properties: {
-          question: { type: 'string', description: 'The question to ask.' },
+          question: { type: 'string' },
           options: {
             type: 'array',
-            description: 'Optional choice options for the founder.',
             items: { type: 'object', properties: { label: { type: 'string' }, value: { type: 'string' } } },
           },
         },
@@ -90,28 +69,20 @@ export function buildToolsForJugnu(
 
     handlers['ask_founder'] = async (input) => {
       await db.from('escalations').insert({
-        project_id: projectId,
-        task_id: taskId,
-        jugnu_key: jugnuKey,
-        question: input.question,
-        options: input.options ?? null,
-        status: 'pending',
+        project_id: projectId, task_id: taskId, jugnu_key: 'maya',
+        question: input.question, options: input.options ?? null, status: 'pending',
       })
       await db.from('messages').insert({
-        project_id: projectId,
-        author_type: 'jugnu',
-        author_key: 'maya',
+        project_id: projectId, author_type: 'jugnu', author_key: 'maya',
         content: `⚠️ **Maya needs your input.**\n\n${input.question}`,
-        task_id: taskId,
-        metadata: { escalation: true },
+        task_id: taskId, metadata: { escalation: true },
       })
       return { ok: true, waiting_for_founder: true }
     }
 
-    // create_task_plan — Maya generates the task graph
     definitions.push({
       name: 'create_task_plan',
-      description: 'Create the task plan for this project. Call once after gathering requirements. Tasks execute in dependency order.',
+      description: 'Create the task plan for this project. Call once after understanding the objective. Tasks execute in dependency order.',
       input_schema: {
         type: 'object' as const,
         properties: {
@@ -121,13 +92,13 @@ export function buildToolsForJugnu(
               type: 'object',
               properties: {
                 title: { type: 'string' },
-                description: { type: 'string', description: 'Detailed instructions for the jugnu assigned to this task.' },
+                description: { type: 'string', description: 'Detailed instructions for the jugnu. For Leo: specify exactly which files to create and what each should contain.' },
                 capability: { type: 'string', enum: ['design', 'build', 'review'] },
                 jugnu_key: { type: 'string', enum: ['nia', 'leo', 'tara'] },
                 depends_on_indices: {
                   type: 'array',
                   items: { type: 'number' },
-                  description: '0-based indices of tasks in this array that must complete before this one starts.',
+                  description: '0-based indices of tasks that must complete first.',
                 },
               },
               required: ['title', 'description', 'capability', 'jugnu_key'],
@@ -140,210 +111,178 @@ export function buildToolsForJugnu(
 
     handlers['create_task_plan'] = async (input) => {
       const rawTasks = input.tasks as Array<{
-        title: string
-        description: string
-        capability: string
-        jugnu_key: string
-        depends_on_indices?: number[]
+        title: string; description: string; capability: string
+        jugnu_key: string; depends_on_indices?: number[]
       }>
-
-      // Insert tasks and collect IDs so depends_on can reference real UUIDs
       const insertedIds: string[] = []
       for (let i = 0; i < rawTasks.length; i++) {
         const t = rawTasks[i]
         const dependsOn = (t.depends_on_indices ?? []).map((idx) => insertedIds[idx]).filter(Boolean)
         const { data } = await db.from('tasks').insert({
-          project_id: projectId,
-          title: t.title,
-          description: t.description,
-          capability: t.capability,
-          jugnu_key: t.jugnu_key,
-          depends_on: dependsOn,
-          sort_order: i,
-          status: 'pending',
+          project_id: projectId, title: t.title, description: t.description,
+          capability: t.capability, jugnu_key: t.jugnu_key,
+          depends_on: dependsOn, sort_order: i, status: 'pending',
         }).select('id').single()
         insertedIds.push(data?.id ?? '')
       }
-
       await db.from('projects').update({ status: 'building' }).eq('id', projectId)
-
       await db.from('messages').insert({
-        project_id: projectId,
-        author_type: 'system',
-        author_key: 'system',
+        project_id: projectId, author_type: 'system', author_key: 'system',
         content: `✨ Maya assembled the plan — ${rawTasks.length} task${rawTasks.length !== 1 ? 's' : ''} queued.`,
         metadata: { task_card: true, plan_created: true },
       })
-
       return { ok: true, task_count: rawTasks.length, ids: insertedIds }
     }
   }
 
-  // ── GitHub tools — Leo and Nia (committers) ──────────────────────────────────
-  if (jugnuKey === 'leo' || jugnuKey === 'nia') {
+  // ── File tools — Leo, Nia, Tara (readers) ────────────────────────────────────
+  if (['leo', 'nia', 'tara'].includes(jugnuKey)) {
+    definitions.push({
+      name: 'list_files',
+      description: 'List all files written for this project so far.',
+      input_schema: { type: 'object' as const, properties: {}, required: [] },
+    })
+    handlers['list_files'] = async () => listFiles(projectId, db)
+
     definitions.push({
       name: 'read_file',
-      description: 'Read a file from the GitHub repo to understand existing patterns.',
+      description: 'Read the content of a specific file in the project.',
       input_schema: {
         type: 'object' as const,
-        properties: {
-          path: { type: 'string' },
-          branch: { type: 'string', description: 'Branch to read from. Defaults to main.' },
-        },
+        properties: { path: { type: 'string', description: 'File path, e.g. "src/components/Button.tsx"' } },
         required: ['path'],
       },
     })
+    handlers['read_file'] = async (input) => readFile(projectId, input.path as string, db)
+  }
 
-    handlers['read_file'] = async (input) => {
-      const install = await getInstallationForProject(projectId, db)
-      if (!install) return { error: 'No GitHub installation found for this project.' }
-      const octokit = await getInstallationOctokit(install.installation_id)
-      const [owner, repo] = install.repo_full_name.split('/')
-      return readFileFromBranch(octokit, owner, repo, input.path as string, (input.branch as string) ?? 'main')
-    }
-
+  // ── Write tools — Leo and Nia ────────────────────────────────────────────────
+  if (jugnuKey === 'leo' || jugnuKey === 'nia') {
     definitions.push({
-      name: 'list_directory',
-      description: 'List files in a directory of the GitHub repo.',
+      name: 'write_file',
+      description: 'Write or update a file in the project. Call once per file. Write complete file content — no placeholders.',
       input_schema: {
         type: 'object' as const,
         properties: {
-          path: { type: 'string', description: 'Directory path, e.g. "app/components"' },
-          branch: { type: 'string' },
+          path: { type: 'string', description: 'File path relative to project root, e.g. "src/index.ts"' },
+          content: { type: 'string', description: 'Complete file content.' },
         },
-        required: ['path'],
+        required: ['path', 'content'],
       },
     })
-
-    handlers['list_directory'] = async (input) => {
-      const install = await getInstallationForProject(projectId, db)
-      if (!install) return { error: 'No GitHub installation found.' }
-      const octokit = await getInstallationOctokit(install.installation_id)
-      const [owner, repo] = install.repo_full_name.split('/')
-      return listDirectory(octokit, owner, repo, input.path as string, (input.branch as string) ?? 'main')
-    }
-
-    definitions.push({
-      name: 'commit_files',
-      description: 'Commit one or more files to a branch in the GitHub repo. Creates the branch if it does not exist.',
-      input_schema: {
-        type: 'object' as const,
-        properties: {
-          branch: { type: 'string', description: 'Branch name, e.g. "jugnu/build-{projectId}"' },
-          message: { type: 'string', description: 'Commit message' },
-          files: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                path: { type: 'string' },
-                content: { type: 'string' },
-              },
-              required: ['path', 'content'],
-            },
-          },
-        },
-        required: ['branch', 'message', 'files'],
-      },
-    })
-
-    handlers['commit_files'] = async (input) => {
-      const install = await getInstallationForProject(projectId, db)
-      if (!install) return { error: 'No GitHub installation found.' }
-      const octokit = await getInstallationOctokit(install.installation_id)
-      const [owner, repo] = install.repo_full_name.split('/')
-      const files = input.files as Array<{ path: string; content: string }>
-      return commitFilesToBranch(octokit, owner, repo, input.branch as string, input.message as string, files)
+    handlers['write_file'] = async (input) => {
+      const result = await writeFile(projectId, taskId, input.path as string, input.content as string, db)
+      await db.from('messages').insert({
+        project_id: projectId, author_type: 'jugnu', author_key: jugnuKey,
+        content: `📄 Wrote \`${input.path}\``,
+        task_id: taskId, metadata: { file_write: true, path: input.path },
+      })
+      return result
     }
   }
 
-  // ── PR tools — Leo only ──────────────────────────────────────────────────────
+  // ── Submit for review — Leo only ─────────────────────────────────────────────
   if (jugnuKey === 'leo') {
     definitions.push({
-      name: 'open_pr',
-      description: 'Open a GitHub Pull Request when your implementation is ready for review.',
+      name: 'submit_for_review',
+      description: 'Submit all written files for Tara\'s review. Call this after writing all files — it ends your turn.',
       input_schema: {
         type: 'object' as const,
         properties: {
-          branch: { type: 'string' },
-          title: { type: 'string' },
-          body: { type: 'string', description: 'PR description with what was built and how to test it.' },
+          summary: { type: 'string', description: 'What you built and which files were written.' },
         },
-        required: ['branch', 'title', 'body'],
+        required: ['summary'],
       },
     })
 
-    handlers['open_pr'] = async (input) => {
-      const install = await getInstallationForProject(projectId, db)
-      if (!install) return { error: 'No GitHub installation found.' }
-      const octokit = await getInstallationOctokit(install.installation_id)
-      const [owner, repo] = install.repo_full_name.split('/')
-      const pr = await createPullRequest(
-        octokit, owner, repo,
-        input.title as string, input.branch as string, 'main', input.body as string
-      )
-
-      // Record in tasks
+    handlers['submit_for_review'] = async (input) => {
+      const { files } = await listFiles(projectId, db)
       if (taskId) {
-        await db.from('tasks').update({ artifact: { type: 'github_pr', url: pr.url, number: pr.number } })
-          .eq('id', taskId)
+        await db.from('tasks').update({
+          status: 'completed',
+          result: input.summary,
+          artifact: { type: 'files', paths: files.map((f) => f.path) },
+          completed_at: new Date().toISOString(),
+        }).eq('id', taskId)
       }
-
       await db.from('messages').insert({
-        project_id: projectId,
-        author_type: 'jugnu',
-        author_key: 'leo',
-        content: `🔀 PR ready for review: [${input.title}](${pr.url})`,
-        task_id: taskId,
-        metadata: { pr_url: pr.url, pr_number: pr.number },
+        project_id: projectId, author_type: 'jugnu', author_key: 'leo',
+        content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}`,
+        task_id: taskId, metadata: { review_ready: true, file_count: files.length },
       })
-
-      return { ok: true, pr_url: pr.url, pr_number: pr.number }
+      return { ok: true, files_submitted: files.length }
     }
   }
 
   // ── Review tools — Tara only ─────────────────────────────────────────────────
   if (jugnuKey === 'tara') {
     definitions.push({
-      name: 'review_pr',
-      description: 'Submit a review on the GitHub PR.',
+      name: 'approve',
+      description: 'Approve the files. The project will be marked complete and the founder notified.',
       input_schema: {
         type: 'object' as const,
         properties: {
-          pr_number: { type: 'number' },
-          verdict: { type: 'string', enum: ['approved', 'changes_requested', 'blocked'] },
-          comment: { type: 'string', description: 'Review summary visible in the project channel.' },
+          comment: { type: 'string', description: 'Review summary for the founder.' },
         },
-        required: ['pr_number', 'verdict', 'comment'],
+        required: ['comment'],
       },
     })
 
-    handlers['review_pr'] = async (input) => {
-      const install = await getInstallationForProject(projectId, db)
-      if (!install) return { error: 'No GitHub installation found.' }
-      const octokit = await getInstallationOctokit(install.installation_id)
-      const [owner, repo] = install.repo_full_name.split('/')
+    handlers['approve'] = async (input) => {
+      if (taskId) {
+        await db.from('tasks').update({
+          status: 'completed',
+          result: input.comment,
+          completed_at: new Date().toISOString(),
+        }).eq('id', taskId)
+      }
+      await db.from('messages').insert({
+        project_id: projectId, author_type: 'jugnu', author_key: 'tara',
+        content: `✅ **Tara approved the work.**\n\n${input.comment}`,
+        task_id: taskId, metadata: { review_verdict: 'approved' },
+      })
+      return { ok: true, verdict: 'approved' }
+    }
 
-      const ghVerdict = input.verdict === 'approved' ? 'APPROVE' : 'REQUEST_CHANGES'
-      await octokit.rest.pulls.createReview({
-        owner, repo,
-        pull_number: input.pr_number as number,
-        event: ghVerdict,
-        body: input.comment as string,
+    definitions.push({
+      name: 'request_changes',
+      description: 'Request changes from Leo. Describe exactly what needs to be fixed.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          feedback: { type: 'string', description: 'Specific changes required, file by file if possible.' },
+        },
+        required: ['feedback'],
+      },
+    })
+
+    handlers['request_changes'] = async (input) => {
+      if (taskId) {
+        await db.from('tasks').update({
+          status: 'completed',
+          result: `Changes requested: ${input.feedback}`,
+          completed_at: new Date().toISOString(),
+        }).eq('id', taskId)
+      }
+
+      // Queue a new Leo build task for the revision
+      const { data: project } = await db.from('projects').select('workspace_id').eq('id', projectId).single()
+      await db.from('tasks').insert({
+        project_id: projectId,
+        title: 'Revise implementation based on Tara\'s feedback',
+        description: `Tara requested these changes:\n\n${input.feedback}\n\nFix the issues in the existing files using write_file, then call submit_for_review again.`,
+        capability: 'build', jugnu_key: 'leo',
+        depends_on: taskId ? [taskId] : [],
+        sort_order: 999, status: 'pending',
       })
 
       await db.from('messages').insert({
-        project_id: projectId,
-        author_type: 'jugnu',
-        author_key: 'tara',
-        content: input.verdict === 'approved'
-          ? `✅ **Tara approved** PR #${input.pr_number}. ${input.comment}`
-          : `🔁 **Tara requested changes** on PR #${input.pr_number}. ${input.comment}`,
-        task_id: taskId,
-        metadata: { review_verdict: input.verdict },
+        project_id: projectId, author_type: 'jugnu', author_key: 'tara',
+        content: `🔁 **Tara requested changes.**\n\n${input.feedback}`,
+        task_id: taskId, metadata: { review_verdict: 'changes_requested' },
       })
 
-      return { ok: true, verdict: input.verdict }
+      return { ok: true, verdict: 'changes_requested' }
     }
   }
 

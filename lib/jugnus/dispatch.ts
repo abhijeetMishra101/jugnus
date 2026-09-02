@@ -120,7 +120,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         const result = await handler(toolUse.input as Record<string, unknown>)
         toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) })
 
-        if (toolUse.name === 'complete_task') {
+        if (['complete_task', 'submit_for_review', 'approve', 'request_changes'].includes(toolUse.name)) {
           done = true
         }
       } catch (err) {

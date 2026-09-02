@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { ProjectChannel } from '../../components/ProjectChannel'
 import { JugnuPanel } from '../../components/JugnuPanel'
+import { FilesPanel } from '../../components/FilesPanel'
 
 interface Props {
   params: Promise<{ slug: string; projectId: string }>
@@ -29,7 +30,7 @@ export default async function ProjectPage({ params }: Props) {
   if (!project) notFound()
 
   // Load initial data in parallel
-  const [messagesRes, tasksRes, jugnusRes, escalationsRes] = await Promise.all([
+  const [messagesRes, tasksRes, jugnusRes, escalationsRes, filesRes] = await Promise.all([
     db.from('messages').select('id,author_type,author_key,content,created_at,metadata')
       .eq('project_id', projectId).order('created_at', { ascending: true }).limit(100),
     db.from('tasks').select('id,title,status,jugnu_key,sort_order')
@@ -38,7 +39,11 @@ export default async function ProjectPage({ params }: Props) {
       .eq('workspace_id', workspace.id),
     db.from('escalations').select('id,question,options')
       .eq('project_id', projectId).eq('status', 'pending'),
+    db.from('file_snapshots').select('path,content,updated_at')
+      .eq('project_id', projectId).order('path', { ascending: true }),
   ])
+
+  const initialFiles = (filesRes.data ?? []) as { path: string; content: string; updated_at: string }[]
 
   return (
     <div className="flex h-full">
@@ -54,6 +59,9 @@ export default async function ProjectPage({ params }: Props) {
           initialMessages={(messagesRes.data ?? []) as Parameters<typeof ProjectChannel>[0]['initialMessages']}
         />
       </div>
+
+      {/* Files panel — shown once Leo writes something */}
+      <FilesPanel projectId={projectId} initialFiles={initialFiles} />
 
       {/* Right panel */}
       <JugnuPanel
