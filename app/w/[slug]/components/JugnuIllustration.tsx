@@ -3,10 +3,10 @@
 // Position of the circular head window on each body PNG (as % of body width/height)
 // left/top = center of the circle, size = diameter as % of body width
 const HEAD: Record<string, { left: string; top: string; size: string }> = {
-  nia:  { left: '46%', top: '38%', size: '34%' },
-  maya: { left: '35%', top: '43%', size: '34%' },
-  leo:  { left: '45%', top: '44%', size: '34%' },
-  tara: { left: '42%', top: '45%', size: '34%' },
+  nia:  { left: '48%', top: '33%', size: '47%' },
+  maya: { left: '51%', top: '32%', size: '46%' },
+  leo:  { left: '51%', top: '33%', size: '43%' },
+  tara: { left: '53%', top: '35%', size: '40%' },
 }
 
 interface Props {
@@ -50,7 +50,7 @@ export function JugnuIllustration({ jugnuKey, size = 120 }: Props) {
         <img
           src={`/jugnus/face_${jugnuKey}.png`}
           alt={jugnuKey}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 40%' }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 35%' }}
         />
       </div>
     </div>
