@@ -32,13 +32,13 @@ export async function GET(request: Request) {
   // Fetch the installation's accessible repos via GitHub API
   const auth = createAppAuth({
     appId: process.env.GITHUB_APP_ID!,
-    privateKey: process.env.GITHUB_PRIVATE_KEY!,
+    privateKey: process.env.GITHUB_APP_PRIVATE_KEY!,
     installationId: Number(installationId),
   })
 
   const octokit = new Octokit({ authStrategy: createAppAuth, auth: {
     appId: process.env.GITHUB_APP_ID!,
-    privateKey: process.env.GITHUB_PRIVATE_KEY!,
+    privateKey: process.env.GITHUB_APP_PRIVATE_KEY!,
     installationId: Number(installationId),
   }})
 

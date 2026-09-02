@@ -21,7 +21,7 @@ export default async function WorkspaceLayout({ children, params }: Props) {
 
   const { data: projects } = await db
     .from('projects')
-    .select('id, name, status')
+    .select('id, title, status')
     .eq('workspace_id', workspace.id)
     .order('created_at', { ascending: false })
 
@@ -59,7 +59,7 @@ export default async function WorkspaceLayout({ children, params }: Props) {
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors group"
             >
               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot[project.status] ?? 'bg-gray-300'}`} />
-              <span className="truncate">{project.name}</span>
+              <span className="truncate">{project.title}</span>
             </Link>
           ))}
           {!projects?.length && (
