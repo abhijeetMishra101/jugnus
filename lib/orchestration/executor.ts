@@ -76,6 +76,11 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
         content: '✨ All tasks completed. Your Jugnus finished the project.',
         metadata: { project_complete: true },
       })
+      // Reset all jugnus in this workspace to idle
+      const { data: proj } = await db.from('projects').select('workspace_id').eq('id', projectId).single()
+      if (proj?.workspace_id) {
+        await db.from('jugnus').update({ status: 'idle' }).eq('workspace_id', proj.workspace_id)
+      }
     }
     return { dispatched: false, jugnuKey: null, taskId: null }
   }

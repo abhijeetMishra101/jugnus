@@ -3,6 +3,15 @@ import { dispatchJugnu } from './dispatch'
 import { advanceProject } from '../orchestration/executor'
 import type { JugnuKey } from './registry'
 
+async function resetJugnuIdle(projectId: string, jugnuKey: JugnuKey, db: SupabaseClient) {
+  const { data: proj } = await db.from('projects').select('workspace_id').eq('id', projectId).single()
+  if (proj?.workspace_id) {
+    await db.from('jugnus').update({ status: 'idle' })
+      .eq('workspace_id', proj.workspace_id)
+      .eq('key', jugnuKey)
+  }
+}
+
 /**
  * Dispatches ONE jugnu, then fires an HTTP handoff to jugnu-respond for the next.
  * Each hop gets its own independent 300s Vercel waitUntil budget.
@@ -24,8 +33,12 @@ export async function runPipeline(
       author_key: 'system',
       content: `❌ ${jugnuKey} hit an error: ${msg}`,
     })
+    await resetJugnuIdle(projectId, jugnuKey, db)
     return
   }
+
+  // Reset current jugnu to idle so the typing bubble clears before the next one lights up
+  await resetJugnuIdle(projectId, jugnuKey, db)
 
   const { dispatched, jugnuKey: nextKey, taskId: nextTaskId } = await advanceProject(projectId, db)
 
