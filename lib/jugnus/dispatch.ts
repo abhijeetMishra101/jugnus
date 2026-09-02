@@ -79,6 +79,18 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
   let done = false
 
   for (let turn = 0; turn < 10 && !done; turn++) {
+    // Post a live activity so the UI shows something during the Claude API call
+    const thinkingLabel = turn === 0
+      ? `💭 Reviewing task and planning approach…`
+      : `💭 Continuing work (turn ${turn + 1})…`
+    await db.from('messages').insert({
+      project_id: projectId,
+      author_type: 'activity',
+      author_key: jugnuKey,
+      content: thinkingLabel,
+      metadata: { tool: 'thinking', jugnu: jugnuKey },
+    })
+
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
