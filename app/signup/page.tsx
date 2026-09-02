@@ -21,21 +21,35 @@ export default function SignupPage() {
     const db = createBrowserClient()
     const { data, error: authError } = await db.auth.signUp({ email, password })
 
-    if (authError || !data.user) {
-      setError(authError?.message ?? 'Signup failed')
+    if (authError) {
+      setError(authError.message)
+      setLoading(false)
+      return
+    }
+
+    // Existing email returns a user with empty identities — redirect to login
+    if (!data.user || (data.user.identities && data.user.identities.length === 0)) {
+      setError('This email is already registered. Please sign in instead.')
       setLoading(false)
       return
     }
 
     // Create workspace
+    const name = workspaceName.trim() || email.split('@')[0]
     const res = await fetch('/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: workspaceName || email.split('@')[0], ownerId: data.user.id }),
+      body: JSON.stringify({ name, ownerId: data.user.id }),
     })
 
-    const { slug } = await res.json()
-    router.push(`/w/${slug}`)
+    const body = await res.json()
+    if (!body.slug) {
+      setError('Account created but workspace setup failed. Please sign in.')
+      setLoading(false)
+      return
+    }
+
+    router.push(`/w/${body.slug}`)
   }
 
   return (
