@@ -22,7 +22,7 @@ const JUGNU: Record<string, { name: string; color: string; bg: string; role: str
   tara: { name: 'Tara', color: '#fb923c', bg: '#fff7ed', role: 'Reviewer', icon: '✓'  },
 }
 
-function TypingBubble({ jugnuKey }: { jugnuKey: string }) {
+function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: string[] }) {
   const j = JUGNU[jugnuKey]
   if (!j) return null
   const color = j.color
@@ -32,7 +32,7 @@ function TypingBubble({ jugnuKey }: { jugnuKey: string }) {
       <div className="shrink-0">
         <JugnuIllustration jugnuKey={jugnuKey} size={80} />
       </div>
-      <div className="mb-2">
+      <div className="mb-2 max-w-sm">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-sm font-bold" style={{ color }}>{j.name}</span>
           <span
@@ -43,22 +43,47 @@ function TypingBubble({ jugnuKey }: { jugnuKey: string }) {
           </span>
           <span className="text-xs" style={{ color }}>{j.icon}</span>
         </div>
-        {/* Typing dots inside a small scrollable-style box */}
+
         <div
-          className="inline-flex items-center gap-1.5 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm"
+          className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm"
           style={{ backgroundColor: j.bg }}
         >
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="block w-2 h-2 rounded-full"
-              style={{
-                backgroundColor: color,
-                animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-              }}
-            />
-          ))}
-          <span className="text-xs ml-1" style={{ color, opacity: 0.7 }}>working…</span>
+          {/* Activity log — scrollable, max 5 lines */}
+          {activities.length > 0 && (
+            <div className="mb-2.5 max-h-28 overflow-y-auto space-y-1.5">
+              {activities.map((a, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span
+                    className="shrink-0 block w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: color, opacity: i === activities.length - 1 ? 1 : 0.35 }}
+                  />
+                  <span
+                    className="text-xs font-mono"
+                    style={{ color, opacity: i === activities.length - 1 ? 0.9 : 0.45 }}
+                  >
+                    {a}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Animated dots */}
+          <div className="flex items-center gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="block w-2 h-2 rounded-full"
+                style={{
+                  backgroundColor: color,
+                  animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+                }}
+              />
+            ))}
+            <span className="text-xs ml-1" style={{ color, opacity: 0.6 }}>
+              {activities.length === 0 ? 'thinking…' : 'working…'}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -143,6 +168,8 @@ interface Props {
 export function ProjectChannel({ projectId, userId, initialMessages, activeJugnuKey: initialActive }: Props) {
   const [messages, setMessages]       = useState<Message[]>(initialMessages)
   const [activeJugnu, setActiveJugnu] = useState<string | null>(initialActive)
+  // Activity log: keyed by jugnu, shows what the current jugnu is doing
+  const [activities, setActivities]   = useState<string[]>([])
   const [input, setInput]             = useState('')
   const [sending, setSending]         = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -150,7 +177,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   useEffect(() => {
     const db = createBrowserClient()
 
-    // Subscribe to new messages — deduplicate in case re-fetch already added the row
+    // Subscribe to new messages — deduplicate; route activity messages to the activity log
     const msgSub = db
       .channel(`project-messages-${projectId}`)
       .on('postgres_changes', {
@@ -159,6 +186,12 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       }, (payload: any) => {
         const msg = payload.new as Message
         if (msg.project_id !== projectId) return
+        if (msg.author_type === 'activity') {
+          setActivities((prev) => [...prev, msg.content])
+          return
+        }
+        // Non-activity: jugnu finished, clear the activity log
+        if (msg.author_type === 'jugnu') setActivities([])
         setMessages((prev) => prev.find((m) => m.id === msg.id) ? prev : [...prev, msg])
       })
       .subscribe()
@@ -229,10 +262,12 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
 
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto py-4 space-y-1">
-          {messages.map((m) => <MessageBubble key={m.id} msg={m} />)}
+          {messages
+            .filter((m) => m.author_type !== 'activity')
+            .map((m) => <MessageBubble key={m.id} msg={m} />)}
 
           {/* Live typing indicator — shows while a jugnu is actively working */}
-          {activeJugnu && <TypingBubble jugnuKey={activeJugnu} />}
+          {activeJugnu && <TypingBubble jugnuKey={activeJugnu} activities={activities} />}
 
           <div ref={bottomRef} />
         </div>

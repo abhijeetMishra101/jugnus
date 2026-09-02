@@ -127,6 +127,26 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         continue
       }
 
+      // Post a live activity update so the UI shows what the jugnu is doing right now
+      const inp = toolUse.input as Record<string, unknown>
+      const activityLabel: Record<string, string> = {
+        write_file:        `📝 Writing \`${inp.path ?? 'file'}\``,
+        read_file:         `👁️ Reading \`${inp.path ?? 'file'}\``,
+        create_task_plan:  `📋 Building task plan`,
+        complete_task:     `✅ Wrapping up`,
+        submit_for_review: `🔍 Submitting for review`,
+        approve:           `✅ Approving`,
+        request_changes:   `✏️ Requesting changes`,
+      }
+      const label = activityLabel[toolUse.name] ?? `🔧 ${toolUse.name}`
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'activity',
+        author_key: jugnuKey,
+        content: label,
+        metadata: { tool: toolUse.name, jugnu: jugnuKey },
+      })
+
       try {
         const result = await handler(toolUse.input as Record<string, unknown>)
         toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) })
