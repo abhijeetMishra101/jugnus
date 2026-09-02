@@ -4,7 +4,12 @@ import { getJugnu, type JugnuKey } from './registry'
 import { buildProjectContext, formatContextBlock } from './context'
 import { buildToolsForJugnu } from './tools'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  ...(process.env.ANTHROPIC_WORKSPACE_ID
+    ? { defaultHeaders: { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } }
+    : {}),
+})
 
 const MODEL = 'claude-sonnet-4-6'
 const MAX_TOKENS = 8192
