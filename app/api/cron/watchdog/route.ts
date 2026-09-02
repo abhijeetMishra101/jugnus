@@ -57,14 +57,10 @@ export async function GET(request: Request): Promise<Response> {
     if (res.ok) {
       recovered.push(task.id)
     } else {
-      // If re-dispatch fails, mark blocked so the founder can see it
-      await db.from('tasks').update({ status: 'blocked' }).eq('id', task.id)
-      await db.from('messages').insert({
-        project_id: task.project_id,
-        author_key: 'system',
-        content: `⚠️ Task "${task.title}" is stuck and couldn't be recovered automatically. Check the Settings page to verify your GitHub connection.`,
-        metadata: { type: 'watchdog_block' },
-      })
+      // Re-dispatch failed — reset to pending so next cron can retry
+      await db.from('tasks').update({ status: 'pending', started_at: null }).eq('id', task.id)
+      await db.from('jugnus').update({ status: 'idle' }).eq('key', task.jugnu_key)
+      console.error(`[watchdog] jugnu-respond returned ${res.status} for task ${task.id}`)
     }
   }
 
