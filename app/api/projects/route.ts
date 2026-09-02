@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-
-export const maxDuration = 300
 import { createServiceClient } from '@/lib/supabase/server'
 import { JUGNU_REGISTRY } from '@/lib/jugnus/registry'
+import { runPipeline } from '@/lib/jugnus/pipeline'
+
+export const maxDuration = 300
 
 /**
  * POST /api/projects
@@ -69,16 +70,11 @@ export async function POST(request: Request) {
     content: '✨ Maya is reviewing your objective and assembling the team…',
   })
 
-  // Dispatch Maya asynchronously
+  // Dispatch Maya and run the full pipeline in a single waitUntil (no HTTP self-calling)
   waitUntil(
-    fetch(new URL('/api/internal/jugnu-respond', process.env.NEXT_PUBLIC_APP_URL!).toString(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
-      },
-      body: JSON.stringify({ projectId, taskId: null, jugnuKey: 'maya' }),
-    }).catch((err) => console.error('[projects] dispatch failed:', err))
+    runPipeline(projectId, null, 'maya', db).catch((err) => {
+      console.error('[projects] pipeline error:', err)
+    })
   )
 
   return NextResponse.json({ id: projectId, title }, { status: 201 })
