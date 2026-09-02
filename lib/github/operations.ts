@@ -104,5 +104,5 @@ export async function verifyWebhookSignature(
 ): Promise<boolean> {
   if (!signature || !process.env.GITHUB_WEBHOOK_SECRET) return false
   const { verify } = await import('@octokit/webhooks-methods')
-  return verify(process.env.GITHUB_WEBHOOK_SECRET, rawBody, signature)
+  return verify(process.env.GITHUB_WEBHOOK_SECRET, rawBody.toString('utf-8'), signature)
 }
