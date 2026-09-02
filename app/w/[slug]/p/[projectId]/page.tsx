@@ -51,6 +51,7 @@ export default async function ProjectPage({ params }: Props) {
           projectId={projectId}
           userId={workspace.owner_id}
           initialMessages={(messagesRes.data ?? []) as Parameters<typeof ProjectChannel>[0]['initialMessages']}
+          activeJugnuKey={(jugnusRes.data ?? []).find((j) => j.status === 'working')?.key ?? null}
         />
       </div>
 
