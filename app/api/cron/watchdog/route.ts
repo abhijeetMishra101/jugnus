@@ -19,7 +19,12 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
-  const db = createServiceClient()
+  let db: ReturnType<typeof createServiceClient>
+  try {
+    db = createServiceClient()
+  } catch (e) {
+    return NextResponse.json({ error: 'db_init_failed', detail: String(e) }, { status: 500 })
+  }
   const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000).toISOString()
 
   const { data: stuckTasks } = await db
