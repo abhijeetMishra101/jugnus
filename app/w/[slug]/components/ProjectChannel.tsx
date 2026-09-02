@@ -6,6 +6,7 @@ import { JugnuIllustration } from './JugnuIllustration'
 
 interface Message {
   id: string
+  project_id: string
   author_type: string
   author_key: string
   content: string
@@ -112,9 +113,12 @@ export function ProjectChannel({ projectId, userId, initialMessages }: Props) {
       .channel(`project-${projectId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'messages',
-        filter: `project_id=eq.${projectId}`,
+        // No server-side filter — RLS blocks delivery for unauthed clients; filter client-side
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }, (payload: any) => setMessages((prev) => [...prev, payload.new as Message]))
+      }, (payload: any) => {
+        const msg = payload.new as Message
+        if (msg.project_id === projectId) setMessages((prev) => [...prev, msg])
+      })
       .subscribe()
     return () => { void db.removeChannel(sub) }
   }, [projectId])

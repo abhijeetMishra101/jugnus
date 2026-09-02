@@ -50,7 +50,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
     .order('created_at', { ascending: false })
     .limit(30)
 
-  const history = ((recentMessages ?? []) as { author_type: string; author_key: string; content: string }[])
+  const rawHistory = ((recentMessages ?? []) as { author_type: string; author_key: string; content: string }[])
     .reverse()
     .filter((m) => m.author_type === 'user' || m.author_type === 'jugnu') // drop system messages
     .map((m) => ({
@@ -59,7 +59,11 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         ? `[${m.author_key.toUpperCase()}]: ${m.content}`
         : m.content,
     }))
-    .filter((_, i, arr) => !(i === arr.length - 1 && arr[i].role === 'assistant')) // never end on assistant
+
+  // Strip ALL trailing assistant messages — Claude rejects assistant-prefill
+  let endIdx = rawHistory.length - 1
+  while (endIdx >= 0 && rawHistory[endIdx].role === 'assistant') endIdx--
+  const history = rawHistory.slice(0, endIdx + 1)
 
   // 3. Build tool set for this jugnu
   const tools = buildToolsForJugnu(jugnuKey, projectId, taskId, db)
