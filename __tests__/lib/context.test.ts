@@ -1,6 +1,54 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { formatContextBlock } from '@/lib/jugnus/context'
+import { describe, it, expect, vi } from 'vitest'
+import { buildProjectContext, formatContextBlock } from '@/lib/jugnus/context'
 import type { ProjectContext } from '@/lib/jugnus/context'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+type TaskRow = { id: string; title: string; description: string; capability: string; jugnu_key: string; status: string; result: string | null; artifact: null }
+
+function makeCtxDb(project: Record<string, unknown> | null, tasks: TaskRow[]) {
+  return {
+    from: vi.fn((table: string) => {
+      if (table === 'projects') {
+        return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: project }) }) }) }
+      }
+      return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ order: vi.fn().mockResolvedValue({ data: tasks }) }) }) }
+    }),
+  } as unknown as SupabaseClient
+}
+
+describe('buildProjectContext', () => {
+  it('returns null when project is not found', async () => {
+    const db = makeCtxDb(null, [])
+    expect(await buildProjectContext('proj-1', null, db)).toBeNull()
+  })
+
+  it('returns context with correct currentTask when currentTaskId is given', async () => {
+    const project = { id: 'p1', title: 'T', objective: 'O', constraints: {}, status: 'building' }
+    const tasks: TaskRow[] = [
+      { id: 't1', title: 'Design', description: '', capability: 'design', jugnu_key: 'nia', status: 'in_progress', result: null, artifact: null },
+      { id: 't2', title: 'Build',  description: '', capability: 'build',  jugnu_key: 'leo', status: 'pending',     result: null, artifact: null },
+    ]
+    const ctx = await buildProjectContext('p1', 't1', makeCtxDb(project, tasks))
+    expect(ctx?.currentTask?.id).toBe('t1')
+    expect(ctx?.pendingTasks).toHaveLength(1)
+    expect(ctx?.completedTasks).toHaveLength(0)
+  })
+
+  it('auto-finds in_progress task when no currentTaskId', async () => {
+    const project = { id: 'p1', title: 'T', objective: 'O', constraints: {}, status: 'building' }
+    const tasks: TaskRow[] = [
+      { id: 't1', title: 'Design', description: '', capability: 'design', jugnu_key: 'nia', status: 'in_progress', result: null, artifact: null },
+    ]
+    const ctx = await buildProjectContext('p1', null, makeCtxDb(project, tasks))
+    expect(ctx?.currentTask?.id).toBe('t1')
+  })
+
+  it('returns null currentTask when no tasks are in_progress and no id given', async () => {
+    const project = { id: 'p1', title: 'T', objective: 'O', constraints: {}, status: 'planning' }
+    const ctx = await buildProjectContext('p1', null, makeCtxDb(project, []))
+    expect(ctx?.currentTask).toBeNull()
+  })
+})
 
 const BASE_CTX: ProjectContext = {
   projectId: 'proj-123',
@@ -78,5 +126,36 @@ describe('formatContextBlock', () => {
     const ctx: ProjectContext = { ...BASE_CTX, currentTask: null }
     const block = formatContextBlock(ctx, 'maya')
     expect(block).toContain('No current task assigned')
+  })
+
+  it('omits constraints section when constraints is empty', () => {
+    const ctx: ProjectContext = { ...BASE_CTX, constraints: {} }
+    const block = formatContextBlock(ctx, 'nia')
+    expect(block).not.toContain('CONSTRAINTS')
+  })
+
+  it('omits completed section when completedTasks is empty', () => {
+    const ctx: ProjectContext = { ...BASE_CTX, completedTasks: [] }
+    const block = formatContextBlock(ctx, 'nia')
+    expect(block).not.toContain('COMPLETED TASKS')
+  })
+
+  it('omits pending section when pendingTasks is empty', () => {
+    const ctx: ProjectContext = { ...BASE_CTX, pendingTasks: [] }
+    const block = formatContextBlock(ctx, 'nia')
+    expect(block).not.toContain('UPCOMING TASKS')
+  })
+
+  it('includes artifact url in completed tasks when present', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      completedTasks: [
+        { id: 'done-1', title: 'Mockup', description: '', capability: 'design',
+          jugnu_key: 'nia', status: 'completed', result: null,
+          artifact: { url: 'https://example.com/file.html' } as Record<string, unknown> },
+      ],
+    }
+    const block = formatContextBlock(ctx, 'leo')
+    expect(block).toContain('https://example.com/file.html')
   })
 })
