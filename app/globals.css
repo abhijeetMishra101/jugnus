@@ -24,3 +24,78 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Jugnu firefly animations */
+@keyframes jugnu-fly-maya {
+  0%   { transform: translate(0px, 0px); }
+  15%  { transform: translate(60px, -40px); }
+  30%  { transform: translate(120px, 20px); }
+  45%  { transform: translate(80px, 80px); }
+  60%  { transform: translate(-20px, 60px); }
+  75%  { transform: translate(-60px, 10px); }
+  90%  { transform: translate(30px, -30px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+@keyframes jugnu-fly-leo {
+  0%   { transform: translate(0px, 0px); }
+  20%  { transform: translate(-80px, 50px); }
+  40%  { transform: translate(-40px, 120px); }
+  55%  { transform: translate(60px, 90px); }
+  70%  { transform: translate(100px, 20px); }
+  85%  { transform: translate(40px, -60px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+@keyframes jugnu-fly-nia {
+  0%   { transform: translate(0px, 0px); }
+  10%  { transform: translate(40px, 70px); }
+  25%  { transform: translate(-30px, 110px); }
+  40%  { transform: translate(-90px, 50px); }
+  60%  { transform: translate(-60px, -20px); }
+  75%  { transform: translate(20px, -70px); }
+  90%  { transform: translate(70px, -10px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+@keyframes jugnu-fly-tara {
+  0%   { transform: translate(0px, 0px); }
+  18%  { transform: translate(-50px, -60px); }
+  36%  { transform: translate(30px, -100px); }
+  54%  { transform: translate(90px, -40px); }
+  72%  { transform: translate(50px, 40px); }
+  88%  { transform: translate(-30px, 60px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+@keyframes jugnu-glow {
+  0%, 100% { opacity: 0.9; filter: blur(0px); }
+  40%       { opacity: 0.3; filter: blur(1px); }
+  60%       { opacity: 1;   filter: blur(0px); }
+}
+
+@keyframes jugnu-glow-idle {
+  0%, 100% { opacity: 0.12; }
+  50%       { opacity: 0.06; }
+}
+
+.jugnu-firefly {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.jugnu-firefly.active {
+  animation: jugnu-glow 2.4s ease-in-out infinite;
+}
+
+.jugnu-firefly.idle {
+  animation: jugnu-glow-idle 3s ease-in-out infinite;
+}
+
+.jugnu-firefly.fly-maya  { animation-name: jugnu-fly-maya,  jugnu-glow; animation-duration: 18s, 2.4s; animation-timing-function: ease-in-out, ease-in-out; animation-iteration-count: infinite, infinite; }
+.jugnu-firefly.fly-leo   { animation-name: jugnu-fly-leo,   jugnu-glow; animation-duration: 22s, 3.1s; animation-timing-function: ease-in-out, ease-in-out; animation-iteration-count: infinite, infinite; }
+.jugnu-firefly.fly-nia   { animation-name: jugnu-fly-nia,   jugnu-glow; animation-duration: 19s, 2.7s; animation-timing-function: ease-in-out, ease-in-out; animation-iteration-count: infinite, infinite; }
+.jugnu-firefly.fly-tara  { animation-name: jugnu-fly-tara,  jugnu-glow; animation-duration: 25s, 3.5s; animation-timing-function: ease-in-out, ease-in-out; animation-iteration-count: infinite, infinite; }
