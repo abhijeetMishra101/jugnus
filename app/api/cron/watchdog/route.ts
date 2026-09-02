@@ -8,7 +8,7 @@ const STUCK_THRESHOLD_MINUTES = 4
  * Finds tasks that have been in_progress for over STUCK_THRESHOLD_MINUTES,
  * marks them blocked, and posts a recovery message.
  */
-export async function GET(request: Request) {
+export async function GET(request: Request): Promise<Response> {
   // Vercel Crons sends Authorization: Bearer <CRON_SECRET>.
   // Only enforce the check when CRON_SECRET is actually configured.
   const envSecret = process.env.CRON_SECRET
@@ -35,9 +35,10 @@ export async function GET(request: Request) {
   const recovered: string[] = []
 
   for (const task of stuckTasks) {
-    // Re-dispatch the jugnu for this task
+    // Derive base URL from the incoming request so no env var is needed
+    const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
     const res = await fetch(
-      new URL('/api/internal/jugnu-respond', process.env.NEXT_PUBLIC_APP_URL!).toString(),
+      `${base}/api/internal/jugnu-respond`,
       {
         method: 'POST',
         headers: {
