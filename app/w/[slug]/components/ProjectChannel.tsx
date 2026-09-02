@@ -108,7 +108,9 @@ export function ProjectChannel({ projectId, userId, initialMessages }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const db  = createBrowserClient()
+    const db = createBrowserClient()
+
+    // Subscribe to new inserts — deduplicate in case re-fetch already added the row
     const sub = db
       .channel(`project-${projectId}`)
       .on('postgres_changes', {
@@ -117,9 +119,31 @@ export function ProjectChannel({ projectId, userId, initialMessages }: Props) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       }, (payload: any) => {
         const msg = payload.new as Message
-        if (msg.project_id === projectId) setMessages((prev) => [...prev, msg])
+        if (msg.project_id !== projectId) return
+        setMessages((prev) => prev.find((m) => m.id === msg.id) ? prev : [...prev, msg])
       })
       .subscribe()
+
+    // Re-fetch all messages to catch any inserted between SSR and subscription setup
+    db.from('messages')
+      .select('id,project_id,author_type,author_key,content,created_at,metadata')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+      .limit(100)
+      .then(({ data }) => {
+        if (data?.length) {
+          setMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id))
+            const incoming = data as Message[]
+            const merged = [
+              ...prev,
+              ...incoming.filter((m) => !seen.has(m.id)),
+            ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            return merged.length === prev.length ? prev : merged
+          })
+        }
+      })
+
     return () => { void db.removeChannel(sub) }
   }, [projectId])
 
