@@ -50,10 +50,14 @@ export function FlyingJugnus({ projectId, initialJugnus }: { projectId: string; 
               top: pos.top,
               left: pos.left,
               backgroundColor: j.color,
-              boxShadow: isActive ? `0 0 12px 4px ${j.color}88, 0 0 24px 8px ${j.color}44` : 'none',
+              boxShadow: isActive
+                ? `0 0 16px 6px ${j.color}99, 0 0 32px 12px ${j.color}44`
+                : 'none',
             }}
             title={`${j.name} — ${j.status}`}
-          />
+          >
+            {j.name.slice(0, 2).toUpperCase()}
+          </div>
         )
       })}
     </div>

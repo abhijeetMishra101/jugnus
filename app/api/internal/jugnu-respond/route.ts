@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
+
+export const maxDuration = 300
 import { createServiceClient } from '@/lib/supabase/server'
 import { dispatchJugnu } from '@/lib/jugnus/dispatch'
 import { advanceProject } from '@/lib/orchestration/executor'
