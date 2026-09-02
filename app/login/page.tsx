@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createAnonClient } from '@/lib/supabase/server'
+import { createBrowserClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const db = createAnonClient()
+    const db = createBrowserClient()
     const { data, error: authError } = await db.auth.signInWithPassword({ email, password })
 
     if (authError || !data.user) {

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createAnonClient } from '@/lib/supabase/server'
+import { createBrowserClient } from '@/lib/supabase/client'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -18,7 +18,7 @@ export default function SignupPage() {
     setLoading(true)
     setError('')
 
-    const db = createAnonClient()
+    const db = createBrowserClient()
     const { data, error: authError } = await db.auth.signUp({ email, password })
 
     if (authError || !data.user) {

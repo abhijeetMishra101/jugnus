@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createAnonClient } from '@/lib/supabase/server'
+import { createBrowserClient } from '@/lib/supabase/client'
 
 interface Message {
   id: string
@@ -89,7 +89,7 @@ export function ProjectChannel({ projectId, userId, initialMessages }: Props) {
 
   // Real-time subscription
   useEffect(() => {
-    const db = createAnonClient()
+    const db = createBrowserClient()
     const sub = db
       .channel(`project-${projectId}`)
       .on('postgres_changes', {
@@ -97,8 +97,8 @@ export function ProjectChannel({ projectId, userId, initialMessages }: Props) {
         schema: 'public',
         table: 'messages',
         filter: `project_id=eq.${projectId}`,
-      }, (payload) => {
-        setMessages((prev) => [...prev, payload.new as Message])
+      }, (payload: { new: Message }) => {
+        setMessages((prev) => [...prev, payload.new])
       })
       .subscribe()
     return () => { void db.removeChannel(sub) }
