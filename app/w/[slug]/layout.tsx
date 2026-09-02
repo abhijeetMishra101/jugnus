@@ -7,6 +7,15 @@ interface Props {
   params: Promise<{ slug: string }>
 }
 
+const STATUS_DOT: Record<string, string> = {
+  planning:  'bg-yellow-400',
+  building:  'bg-indigo-400 animate-pulse',
+  reviewing: 'bg-amber-400 animate-pulse',
+  completed: 'bg-emerald-400',
+  blocked:   'bg-red-400',
+  active:    'bg-indigo-400',
+}
+
 export default async function WorkspaceLayout({ children, params }: Props) {
   const { slug } = await params
   const db = createServiceClient()
@@ -25,37 +34,27 @@ export default async function WorkspaceLayout({ children, params }: Props) {
     .eq('workspace_id', workspace.id)
     .order('created_at', { ascending: false })
 
-  const statusDot: Record<string, string> = {
-    planning: 'bg-yellow-400',
-    building: 'bg-indigo-400 animate-pulse',
-    reviewing: 'bg-yellow-400 animate-pulse',
-    completed: 'bg-emerald-400',
-    blocked: 'bg-red-400',
-    cancelled: 'bg-gray-300',
-    active: 'bg-indigo-400',
-  }
-
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+    <div className="flex h-screen overflow-hidden" style={{ background: '#0f0f1a' }}>
+      {/* Dark sidebar */}
+      <aside className="w-56 flex-shrink-0 flex flex-col" style={{ background: '#16162a' }}>
         {/* Workspace header */}
-        <div className="px-4 py-3 border-b border-gray-200">
-          <Link href={`/w/${slug}`} className="flex items-center gap-2 group">
-            <span className="text-indigo-600 font-bold text-base">✦</span>
-            <span className="text-sm font-semibold text-gray-800 group-hover:text-indigo-600 truncate">
+        <div className="px-4 py-4 border-b border-white/10">
+          <Link href={`/w/${slug}`} className="flex items-center gap-2.5 group">
+            <span className="text-indigo-400 font-bold text-lg">✦</span>
+            <span className="text-sm font-bold text-white group-hover:text-indigo-300 truncate">
               {workspace.name}
             </span>
           </Link>
         </div>
 
-        {/* Projects list */}
+        {/* Projects */}
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-          <div className="flex items-center justify-between px-2 mb-1">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Projects</p>
+          <div className="flex items-center justify-between px-2 mb-2">
+            <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Projects</p>
             <Link
               href={`/w/${slug}/new`}
-              className="text-gray-400 hover:text-indigo-600 transition-colors"
+              className="text-white/40 hover:text-indigo-400 transition-colors"
               title="New project"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,26 +62,28 @@ export default async function WorkspaceLayout({ children, params }: Props) {
               </svg>
             </Link>
           </div>
-          {projects?.map((project) => (
+
+          {projects?.map((p) => (
             <Link
-              key={project.id}
-              href={`/w/${slug}/p/${project.id}`}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors group"
+              key={p.id}
+              href={`/w/${slug}/p/${p.id}`}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors group"
             >
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot[project.status] ?? 'bg-gray-300'}`} />
-              <span className="truncate">{project.title}</span>
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[p.status] ?? 'bg-white/20'}`} />
+              <span className="truncate">{p.title}</span>
             </Link>
           ))}
+
           {!projects?.length && (
-            <p className="px-2 py-1.5 text-xs text-gray-400 italic">No projects yet</p>
+            <p className="px-2 py-2 text-xs text-white/30 italic">No projects yet</p>
           )}
         </nav>
 
-        {/* Footer links */}
-        <div className="px-2 py-3 border-t border-gray-200 space-y-0.5">
+        {/* Footer */}
+        <div className="px-2 py-3 border-t border-white/10 space-y-0.5">
           <Link
             href={`/w/${slug}/settings`}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-white/50 hover:bg-white/10 hover:text-white transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -95,7 +96,7 @@ export default async function WorkspaceLayout({ children, params }: Props) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden bg-white rounded-tl-2xl">
         {children}
       </main>
     </div>

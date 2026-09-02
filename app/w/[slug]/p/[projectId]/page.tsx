@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import { ProjectChannel } from '../../components/ProjectChannel'
 import { JugnuPanel } from '../../components/JugnuPanel'
 import { FilesPanel } from '../../components/FilesPanel'
-import { FlyingJugnus } from '../../components/FlyingJugnus'
 
 interface Props {
   params: Promise<{ slug: string; projectId: string }>
@@ -13,24 +12,15 @@ export default async function ProjectPage({ params }: Props) {
   const { slug, projectId } = await params
   const db = createServiceClient()
 
-  // Resolve workspace
   const { data: workspace } = await db
-    .from('workspaces')
-    .select('id, name, owner_id')
-    .eq('slug', slug)
-    .single()
+    .from('workspaces').select('id, name, owner_id').eq('slug', slug).single()
   if (!workspace) notFound()
 
-  // Load project
   const { data: project } = await db
-    .from('projects')
-    .select('id, title, objective, status')
-    .eq('id', projectId)
-    .eq('workspace_id', workspace.id)
-    .single()
+    .from('projects').select('id, title, objective, status')
+    .eq('id', projectId).eq('workspace_id', workspace.id).single()
   if (!project) notFound()
 
-  // Load initial data in parallel
   const [messagesRes, tasksRes, jugnusRes, escalationsRes, filesRes] = await Promise.all([
     db.from('messages').select('id,author_type,author_key,content,created_at,metadata')
       .eq('project_id', projectId).order('created_at', { ascending: true }).limit(100),
@@ -48,17 +38,15 @@ export default async function ProjectPage({ params }: Props) {
 
   return (
     <div className="flex h-full">
-      {/* Project header + channel */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        <header className="shrink-0 px-6 py-3 border-b border-gray-200 bg-white relative z-10">
-          <h1 className="text-base font-semibold text-gray-900 truncate">{project.title}</h1>
-          <p className="text-xs text-gray-400 truncate">{project.objective}</p>
+      {/* Channel */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="shrink-0 px-6 py-3 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400 text-sm font-medium">#</span>
+            <h1 className="text-sm font-semibold text-gray-900 truncate">{project.title}</h1>
+          </div>
+          <p className="text-xs text-gray-400 truncate mt-0.5 pl-4">{project.objective}</p>
         </header>
-        {/* Flying jugnus overlay — behind messages, above background */}
-        <FlyingJugnus
-          projectId={projectId}
-          initialJugnus={(jugnusRes.data ?? []) as { key: string; name: string; color: string; status: string }[]}
-        />
         <ProjectChannel
           projectId={projectId}
           userId={workspace.owner_id}
@@ -66,11 +54,12 @@ export default async function ProjectPage({ params }: Props) {
         />
       </div>
 
-      {/* Files panel — shown once Leo writes something */}
+      {/* Files panel */}
       <FilesPanel projectId={projectId} initialFiles={initialFiles} />
 
       {/* Right panel */}
       <JugnuPanel
+        projectId={projectId}
         jugnus={(jugnusRes.data ?? []) as Parameters<typeof JugnuPanel>[0]['jugnus']}
         tasks={(tasksRes.data ?? []) as Parameters<typeof JugnuPanel>[0]['tasks']}
         escalations={(escalationsRes.data ?? []) as Parameters<typeof JugnuPanel>[0]['escalations']}
