@@ -1,0 +1,140 @@
+import Anthropic from '@anthropic-ai/sdk'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { getJugnu, type JugnuKey } from './registry'
+import { buildProjectContext, formatContextBlock } from './context'
+import { buildToolsForJugnu } from './tools'
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const MODEL = 'claude-sonnet-4-6'
+const MAX_TOKENS = 8192
+
+export interface DispatchInput {
+  projectId: string
+  taskId: string | null
+  jugnuKey: JugnuKey
+  db: SupabaseClient
+}
+
+export interface DispatchResult {
+  posted: boolean
+  toolsUsed: string[]
+  finalMessage: string | null
+}
+
+/**
+ * Core jugnu invocation loop.
+ * Builds full project context, injects it above conversation history,
+ * and runs the agentic loop until the jugnu calls complete_task or runs out of turns.
+ */
+export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResult> {
+  const { projectId, taskId, jugnuKey, db } = input
+  const jugnu = getJugnu(jugnuKey)
+
+  // 1. Build full project context — no channel history inference needed
+  const ctx = await buildProjectContext(projectId, taskId, db)
+  if (!ctx) return { posted: false, toolsUsed: [], finalMessage: null }
+
+  const contextBlock = formatContextBlock(ctx, jugnuKey)
+
+  // 2. Fetch recent project messages as conversation history (last 30)
+  const { data: recentMessages } = await db
+    .from('messages')
+    .select('author_type, author_key, content')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(30)
+
+  const history = ((recentMessages ?? []) as { author_type: string; author_key: string; content: string }[])
+    .reverse()
+    .map((m) => ({
+      role: (m.author_type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.author_type === 'jugnu'
+        ? `[${m.author_key.toUpperCase()}]: ${m.content}`
+        : m.content,
+    }))
+
+  // 3. Build tool set for this jugnu
+  const tools = buildToolsForJugnu(jugnuKey, projectId, taskId, db)
+
+  // 4. Agentic loop — jugnu acts until complete_task or max turns
+  const systemPrompt = `${contextBlock}\n\n${jugnu.systemPrompt}`
+  let messages: Anthropic.MessageParam[] = history.length > 0
+    ? history
+    : [{ role: 'user', content: 'Begin your assigned task.' }]
+
+  const toolsUsed: string[] = []
+  let finalMessage: string | null = null
+  let done = false
+
+  for (let turn = 0; turn < 10 && !done; turn++) {
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system: systemPrompt,
+      tools: tools.definitions,
+      messages,
+    })
+
+    // Post any text content as a message in the project channel
+    const textContent = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+      .trim()
+
+    if (textContent) {
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'jugnu',
+        author_key: jugnuKey,
+        content: textContent,
+        task_id: taskId,
+      })
+      finalMessage = textContent
+    }
+
+    if (response.stop_reason === 'end_turn') {
+      done = true
+      break
+    }
+
+    if (response.stop_reason !== 'tool_use') break
+
+    // Execute tool calls
+    const toolUseBlocks = response.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+    )
+
+    const toolResults: Anthropic.ToolResultBlockParam[] = []
+
+    for (const toolUse of toolUseBlocks) {
+      toolsUsed.push(toolUse.name)
+      const handler = tools.handlers[toolUse.name]
+      if (!handler) {
+        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: 'Unknown tool' })
+        continue
+      }
+
+      try {
+        const result = await handler(toolUse.input as Record<string, unknown>)
+        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) })
+
+        if (toolUse.name === 'complete_task') {
+          done = true
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: `Error: ${msg}`, is_error: true })
+      }
+    }
+
+    messages = [
+      ...messages,
+      { role: 'assistant', content: response.content },
+      { role: 'user', content: toolResults },
+    ]
+  }
+
+  return { posted: true, toolsUsed, finalMessage }
+}
