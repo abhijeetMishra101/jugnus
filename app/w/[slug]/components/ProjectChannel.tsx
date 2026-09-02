@@ -54,14 +54,14 @@ function MessageBubble({ msg }: { msg: Message }) {
   const key   = msg.author_key
 
   return (
-    <div className="flex items-start gap-1 px-4 py-2">
-      {/* Large jugnu illustration */}
-      <div className="shrink-0 -mt-2">
-        <JugnuIllustration jugnuKey={key} size={88} />
+    <div className="flex items-start gap-3 px-4 py-2">
+      {/* Jugnu face */}
+      <div className="shrink-0 mt-0.5">
+        <JugnuIllustration jugnuKey={key} size={44} />
       </div>
 
       {/* Bubble */}
-      <div className="flex-1 min-w-0 max-w-lg mt-2">
+      <div className="flex-1 min-w-0 max-w-lg">
         {/* Name + status dot + time */}
         <div className="flex items-center gap-1.5 mb-2">
           <span className="text-sm font-bold" style={{ color }}>{name}</span>
