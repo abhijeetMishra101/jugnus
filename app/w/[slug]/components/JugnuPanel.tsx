@@ -114,10 +114,15 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
             return (
               <div key={j.key} className="flex items-center gap-3">
                 <div
-                  className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm"
-                  style={{ backgroundColor: j.color }}
+                  className="shrink-0 w-9 h-9 rounded-full overflow-hidden shadow-sm"
+                  style={{ border: `2px solid ${j.color}` }}
                 >
-                  {j.name.slice(0, 2).toUpperCase()}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/jugnus/face_${j.key}.png`}
+                    alt={j.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 40%' }}
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
