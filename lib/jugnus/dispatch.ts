@@ -52,12 +52,14 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
   const history = ((recentMessages ?? []) as { author_type: string; author_key: string; content: string }[])
     .reverse()
+    .filter((m) => m.author_type === 'user' || m.author_type === 'jugnu') // drop system messages
     .map((m) => ({
       role: (m.author_type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.author_type === 'jugnu'
         ? `[${m.author_key.toUpperCase()}]: ${m.content}`
         : m.content,
     }))
+    .filter((_, i, arr) => !(i === arr.length - 1 && arr[i].role === 'assistant')) // never end on assistant
 
   // 3. Build tool set for this jugnu
   const tools = buildToolsForJugnu(jugnuKey, projectId, taskId, db)
