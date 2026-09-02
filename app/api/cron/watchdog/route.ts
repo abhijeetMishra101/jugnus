@@ -9,10 +9,14 @@ const STUCK_THRESHOLD_MINUTES = 4
  * marks them blocked, and posts a recovery message.
  */
 export async function GET(request: Request) {
-  // Vercel Crons sends this header; reject other callers
-  const cronSecret = request.headers.get('authorization')
-  if (cronSecret !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Vercel Crons sends Authorization: Bearer <CRON_SECRET>.
+  // Only enforce the check when CRON_SECRET is actually configured.
+  const envSecret = process.env.CRON_SECRET
+  if (envSecret) {
+    const cronSecret = request.headers.get('authorization')
+    if (cronSecret !== `Bearer ${envSecret}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   const db = createServiceClient()
