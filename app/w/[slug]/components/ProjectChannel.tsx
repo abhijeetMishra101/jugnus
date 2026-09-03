@@ -22,10 +22,35 @@ const JUGNU: Record<string, { name: string; color: string; bg: string; role: str
   tara: { name: 'Tara', color: '#fb923c', bg: '#fff7ed', role: 'Reviewer', icon: '✓'  },
 }
 
+// ─── Feed grouping ────────────────────────────────────────────────────────────
+
+type JugnuGroup = { type: 'jugnu'; authorKey: string; messages: Message[] }
+type SoloItem   = { type: 'system' | 'user'; message: Message }
+type FeedItem   = JugnuGroup | SoloItem
+
+function buildFeed(messages: Message[]): FeedItem[] {
+  const feed: FeedItem[] = []
+  for (const msg of messages) {
+    if (msg.author_type === 'activity') continue
+    if (msg.author_type === 'jugnu') {
+      const last = feed[feed.length - 1]
+      if (last?.type === 'jugnu' && last.authorKey === msg.author_key) {
+        last.messages.push(msg)
+      } else {
+        feed.push({ type: 'jugnu', authorKey: msg.author_key, messages: [msg] })
+      }
+    } else {
+      feed.push({ type: msg.author_type as 'system' | 'user', message: msg })
+    }
+  }
+  return feed
+}
+
+// ─── TypingBubble ─────────────────────────────────────────────────────────────
+
 function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: string[] }) {
   const j = JUGNU[jugnuKey]
   if (!j) return null
-  const color = j.color
 
   return (
     <div className="flex items-end gap-1 px-3 py-1.5">
@@ -34,53 +59,28 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
       </div>
       <div className="mb-2 max-w-sm">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-sm font-bold" style={{ color }}>{j.name}</span>
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: color + '28', color }}
-          >
+          <span className="text-sm font-bold" style={{ color: j.color }}>{j.name}</span>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: j.color + '28', color: j.color }}>
             {j.role}
           </span>
-          <span className="text-xs" style={{ color }}>{j.icon}</span>
+          <span className="text-xs" style={{ color: j.color }}>{j.icon}</span>
         </div>
-
-        <div
-          className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm"
-          style={{ backgroundColor: j.bg }}
-        >
-          {/* Activity log — scrollable, max 5 lines */}
+        <div className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm" style={{ backgroundColor: j.bg }}>
           {activities.length > 0 && (
             <div className="mb-2.5 max-h-28 overflow-y-auto space-y-1.5">
               {activities.map((a, i) => (
                 <div key={i} className="flex items-center gap-1.5">
-                  <span
-                    className="shrink-0 block w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: color, opacity: i === activities.length - 1 ? 1 : 0.35 }}
-                  />
-                  <span
-                    className="text-xs font-mono"
-                    style={{ color, opacity: i === activities.length - 1 ? 0.9 : 0.45 }}
-                  >
-                    {a}
-                  </span>
+                  <span className="shrink-0 block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: j.color, opacity: i === activities.length - 1 ? 1 : 0.35 }} />
+                  <span className="text-xs font-mono" style={{ color: j.color, opacity: i === activities.length - 1 ? 0.9 : 0.45 }}>{a}</span>
                 </div>
               ))}
             </div>
           )}
-
-          {/* Animated dots */}
           <div className="flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className="block w-2 h-2 rounded-full"
-                style={{
-                  backgroundColor: color,
-                  animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-                }}
-              />
+              <span key={i} className="block w-2 h-2 rounded-full" style={{ backgroundColor: j.color, animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
             ))}
-            <span className="text-xs ml-1" style={{ color, opacity: 0.6 }}>
+            <span className="text-xs ml-1" style={{ color: j.color, opacity: 0.6 }}>
               {activities.length === 0 ? 'thinking…' : 'working…'}
             </span>
           </div>
@@ -90,61 +90,12 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
   )
 }
 
-function MessageBubble({ msg }: { msg: Message }) {
-  const isUser   = msg.author_type === 'user'
-  const isSystem = msg.author_type === 'system'
-  const j = JUGNU[msg.author_key]
+// ─── Single message bubble (no avatar — used inside JugnuSection) ─────────────
 
-  if (isSystem) {
-    return (
-      <div className="flex justify-center my-3">
-        <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-4 py-1.5">{msg.content}</span>
-      </div>
-    )
-  }
-
-  if (isUser) {
-    return (
-      <div className="flex items-end gap-3 justify-end px-8 py-1">
-        <div className="max-w-md bg-indigo-600 text-white rounded-2xl rounded-br-sm px-5 py-3 text-sm leading-relaxed shadow-sm">
-          {msg.content}
-        </div>
-        <div className="shrink-0 w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600 shadow-sm">
-          You
-        </div>
-      </div>
-    )
-  }
-
-  const color = j?.color ?? '#a78bfa'
-  const bg    = j?.bg    ?? '#f5f3ff'
-  const name  = j?.name  ?? msg.author_key
-  const role  = j?.role  ?? 'Agent'
-  const icon  = j?.icon  ?? '✦'
-  const key   = msg.author_key
-
+function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: string }) {
   return (
-    <div className="flex items-start gap-1 px-3 py-1.5">
-      <div className="shrink-0">
-        <JugnuIllustration jugnuKey={key} size={120} />
-      </div>
-
-      <div className="flex-1 min-w-0 max-w-lg mt-8">
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <span className="text-base font-bold" style={{ color }}>{name}</span>
-          <span
-            className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
-            style={{ backgroundColor: color + '28', color }}
-          >
-            {role}
-          </span>
-          <span className="text-sm" style={{ color }}>{icon}</span>
-          <span className="text-xs text-gray-400 ml-0.5">
-            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        </div>
-
-        {/* Markdown-rendered message in a neat scrollable box (max ~320px before scroll) */}
+    <div className="flex items-start gap-3 py-0.5">
+      <div className="flex-1 min-w-0 max-w-lg">
         <div
           className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm overflow-y-auto"
           style={{ backgroundColor: bg, maxHeight: 360 }}
@@ -153,10 +104,83 @@ function MessageBubble({ msg }: { msg: Message }) {
             <ReactMarkdown>{msg.content}</ReactMarkdown>
           </div>
         </div>
+        <span className="text-[10px] text-gray-400 mt-1 ml-1">
+          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
       </div>
     </div>
   )
 }
+
+// ─── Jugnu section with sticky header ─────────────────────────────────────────
+
+function JugnuSection({ authorKey, messages }: { authorKey: string; messages: Message[] }) {
+  const j = JUGNU[authorKey]
+  if (!j) return null
+
+  return (
+    <div className="relative">
+      {/* Section header — sticks to top of scroll container while messages scroll past */}
+      <div
+        className="sticky top-0 z-10 flex items-center gap-3 px-4 py-2.5 border-b border-gray-100/80"
+        style={{
+          backgroundColor: 'rgba(255,255,255,0.88)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}
+      >
+        <div className="shrink-0 -my-1">
+          <JugnuIllustration jugnuKey={authorKey} size={56} />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold" style={{ color: j.color }}>{j.name}</span>
+          <span
+            className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+            style={{ backgroundColor: j.color + '28', color: j.color }}
+          >
+            {j.role}
+          </span>
+          <span className="text-sm" style={{ color: j.color }}>{j.icon}</span>
+          <span className="text-xs text-gray-400">
+            {new Date(messages[0].created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      </div>
+
+      {/* Messages — left-padded, no avatar */}
+      <div className="px-5 pl-16 pt-2 pb-5 space-y-3">
+        {messages.map((msg) => (
+          <MessageContent key={msg.id} msg={msg} color={j.color} bg={j.bg} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── System / User standalone items ──────────────────────────────────────────
+
+function SystemItem({ msg }: { msg: Message }) {
+  return (
+    <div className="flex justify-center my-3 px-4">
+      <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-4 py-1.5">{msg.content}</span>
+    </div>
+  )
+}
+
+function UserItem({ msg }: { msg: Message }) {
+  return (
+    <div className="flex items-end gap-3 justify-end px-8 py-1">
+      <div className="max-w-md bg-indigo-600 text-white rounded-2xl rounded-br-sm px-5 py-3 text-sm leading-relaxed shadow-sm">
+        {msg.content}
+      </div>
+      <div className="shrink-0 w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600 shadow-sm">
+        You
+      </div>
+    </div>
+  )
+}
+
+// ─── ProjectChannel ───────────────────────────────────────────────────────────
 
 interface Props {
   projectId: string
@@ -168,7 +192,6 @@ interface Props {
 export function ProjectChannel({ projectId, userId, initialMessages, activeJugnuKey: initialActive }: Props) {
   const [messages, setMessages]       = useState<Message[]>(initialMessages)
   const [activeJugnu, setActiveJugnu] = useState<string | null>(initialActive)
-  // Activity log: keyed by jugnu, shows what the current jugnu is doing
   const [activities, setActivities]   = useState<string[]>([])
   const [input, setInput]             = useState('')
   const [sending, setSending]         = useState(false)
@@ -177,7 +200,6 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   useEffect(() => {
     const db = createBrowserClient()
 
-    // Subscribe to new messages — deduplicate; route activity messages to the activity log
     const msgSub = db
       .channel(`project-messages-${projectId}`)
       .on('postgres_changes', {
@@ -190,13 +212,11 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           setActivities((prev) => [...prev, msg.content])
           return
         }
-        // Non-activity: jugnu finished, clear the activity log
         if (msg.author_type === 'jugnu') setActivities([])
         setMessages((prev) => prev.find((m) => m.id === msg.id) ? prev : [...prev, msg])
       })
       .subscribe()
 
-    // Track which jugnu is working for the typing indicator
     const jugnuSub = db
       .channel(`project-jugnu-typing-${projectId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jugnus' },
@@ -208,7 +228,6 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         })
       .subscribe()
 
-    // Re-fetch to fill gap between SSR and subscription setup
     db.from('messages')
       .select('id,project_id,author_type,author_key,content,created_at,metadata')
       .eq('project_id', projectId)
@@ -250,9 +269,10 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     setSending(false)
   }
 
+  const feed = buildFeed(messages)
+
   return (
     <>
-      {/* Bounce keyframes injected once */}
       <style>{`
         @keyframes jugnu-bounce {
           0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
@@ -261,12 +281,17 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       `}</style>
 
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex-1 overflow-y-auto py-4 space-y-1">
-          {messages
-            .filter((m) => m.author_type !== 'activity')
-            .map((m) => <MessageBubble key={m.id} msg={m} />)}
+        <div className="flex-1 overflow-y-auto py-4">
+          {feed.map((item, i) => {
+            if (item.type === 'jugnu') {
+              return <JugnuSection key={`${item.authorKey}-${i}`} authorKey={item.authorKey} messages={item.messages} />
+            }
+            if (item.type === 'system') {
+              return <SystemItem key={item.message.id} msg={item.message} />
+            }
+            return <UserItem key={item.message.id} msg={item.message} />
+          })}
 
-          {/* Live typing indicator — shows while a jugnu is actively working */}
           {activeJugnu && <TypingBubble jugnuKey={activeJugnu} activities={activities} />}
 
           <div ref={bottomRef} />
