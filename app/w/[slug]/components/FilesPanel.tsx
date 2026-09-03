@@ -12,11 +12,19 @@ interface FileSnapshot {
 interface Props {
   projectId: string
   initialFiles: FileSnapshot[]
+  projectStatus: string
 }
 
 type ViewMode = 'preview' | 'code'
 
-export function FilesPanel({ projectId, initialFiles }: Props) {
+function bestFile(files: FileSnapshot[]): { file: FileSnapshot; mode: ViewMode } | null {
+  if (!files.length) return null
+  const html = files.find((f) => f.path.endsWith('.html'))
+  if (html) return { file: html, mode: 'preview' }
+  return { file: files[0], mode: 'code' }
+}
+
+export function FilesPanel({ projectId, initialFiles, projectStatus }: Props) {
   const [files, setFiles] = useState<FileSnapshot[]>(initialFiles)
   const [selected, setSelected] = useState<FileSnapshot | null>(null)
   const [open, setOpen] = useState(false)
@@ -24,9 +32,24 @@ export function FilesPanel({ projectId, initialFiles }: Props) {
 
   const isHtml = selected?.path.endsWith('.html') ?? false
 
+  // Auto-open in preview for already-completed projects on page load
+  useEffect(() => {
+    if (projectStatus === 'completed') {
+      const best = bestFile(initialFiles)
+      if (best) {
+        setOpen(true)
+        setSelected(best.file)
+        setViewMode(best.mode)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     const db = createBrowserClient()
-    const sub = db
+
+    // Watch for new/updated files
+    const fileSub = db
       .channel(`files:${projectId}`)
       .on('postgres_changes', {
         event: '*',
@@ -43,7 +66,35 @@ export function FilesPanel({ projectId, initialFiles }: Props) {
         })
       })
       .subscribe()
-    return () => { void db.removeChannel(sub) }
+
+    // When the project completes, auto-open the best file in preview
+    const completeSub = db
+      .channel(`project-complete-files:${projectId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `project_id=eq.${projectId}`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }, (payload: any) => {
+        const meta = payload.new?.metadata as Record<string, unknown> | null
+        if (!meta?.project_complete) return
+        setFiles((currentFiles) => {
+          const best = bestFile(currentFiles)
+          if (best) {
+            setOpen(true)
+            setSelected(best.file)
+            setViewMode(best.mode)
+          }
+          return currentFiles
+        })
+      })
+      .subscribe()
+
+    return () => {
+      void db.removeChannel(fileSub)
+      void db.removeChannel(completeSub)
+    }
   }, [projectId])
 
   function selectFile(f: FileSnapshot) {
@@ -108,7 +159,6 @@ export function FilesPanel({ projectId, initialFiles }: Props) {
           {/* File content */}
           {selected ? (
             <div className="flex-1 flex flex-col min-h-0">
-              {/* Sub-header: path + preview/code toggle */}
               <div className="px-3 py-1.5 border-b border-gray-100 bg-white flex items-center justify-between gap-2 shrink-0">
                 <span className="text-xs font-mono text-gray-500 truncate">{selected.path}</span>
                 {isHtml && (

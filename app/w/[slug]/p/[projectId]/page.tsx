@@ -56,7 +56,7 @@ export default async function ProjectPage({ params }: Props) {
       </div>
 
       {/* Files panel */}
-      <FilesPanel projectId={projectId} initialFiles={initialFiles} />
+      <FilesPanel projectId={projectId} initialFiles={initialFiles} projectStatus={project.status} />
 
       {/* Right panel */}
       <JugnuPanel
