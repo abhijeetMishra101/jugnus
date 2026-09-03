@@ -112,28 +112,25 @@ function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: s
   )
 }
 
-// ─── Jugnu section with sticky header ─────────────────────────────────────────
+// ─── Jugnu section — illustration sticky on the left ─────────────────────────
 
 function JugnuSection({ authorKey, messages }: { authorKey: string; messages: Message[] }) {
   const j = JUGNU[authorKey]
   if (!j) return null
 
   return (
-    <div className="relative">
-      {/* Section header — sticks to top of scroll container while messages scroll past */}
-      <div
-        className="sticky top-0 z-10 flex items-center gap-3 px-4 py-2.5 border-b border-gray-100/80"
-        style={{
-          backgroundColor: 'rgba(255,255,255,0.88)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-        }}
-      >
-        <div className="shrink-0 -my-1">
-          <JugnuIllustration jugnuKey={authorKey} size={56} />
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-bold" style={{ color: j.color }}>{j.name}</span>
+    <div className="flex items-start gap-1 px-3 py-1.5">
+      {/* Illustration — sticky on the left, stays pinned while messages scroll past.
+          self-start prevents flex from stretching it to full section height,
+          which is required for position:sticky to activate. */}
+      <div className="shrink-0 self-start sticky top-4">
+        <JugnuIllustration jugnuKey={authorKey} size={120} />
+      </div>
+
+      {/* Right column: name + role shown once, then all messages stacked */}
+      <div className="flex-1 min-w-0 max-w-lg mt-8">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-base font-bold" style={{ color: j.color }}>{j.name}</span>
           <span
             className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
             style={{ backgroundColor: j.color + '28', color: j.color }}
@@ -145,13 +142,26 @@ function JugnuSection({ authorKey, messages }: { authorKey: string; messages: Me
             {new Date(messages[0].created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
-      </div>
 
-      {/* Messages — left-padded, no avatar */}
-      <div className="px-5 pl-16 pt-2 pb-5 space-y-3">
-        {messages.map((msg) => (
-          <MessageContent key={msg.id} msg={msg} color={j.color} bg={j.bg} />
-        ))}
+        <div className="space-y-3">
+          {messages.map((msg, i) => (
+            <div key={msg.id}>
+              <div
+                className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm overflow-y-auto"
+                style={{ backgroundColor: j.bg, maxHeight: 360 }}
+              >
+                <div className="jugnu-markdown">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              </div>
+              {i > 0 && (
+                <span className="block text-[10px] text-gray-400 mt-0.5 ml-1">
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
