@@ -22,6 +22,14 @@ const JUGNU: Record<string, { name: string; color: string; bg: string; role: str
   tara: { name: 'Tara', color: '#fb923c', bg: '#fff7ed', role: 'Reviewer', icon: '✓'  },
 }
 
+// Stagger each jugnu's float phase so they never oscillate in lockstep
+const FLOAT_DELAY: Record<string, string> = {
+  maya: '0s',
+  nia:  '0.65s',
+  leo:  '1.3s',
+  tara: '1.95s',
+}
+
 // ─── Feed grouping ────────────────────────────────────────────────────────────
 
 type JugnuGroup = { type: 'jugnu'; authorKey: string; messages: Message[] }
@@ -123,7 +131,10 @@ function JugnuSection({ authorKey, messages }: { authorKey: string; messages: Me
       {/* Illustration — sticky on the left, stays pinned while messages scroll past.
           self-start prevents flex from stretching it to full section height,
           which is required for position:sticky to activate. */}
-      <div className="shrink-0 self-start sticky top-4">
+      <div
+        className="shrink-0 self-start sticky top-4"
+        style={{ animation: `jugnu-float 2.6s ease-in-out ${FLOAT_DELAY[authorKey] ?? '0s'} infinite` }}
+      >
         <JugnuIllustration jugnuKey={authorKey} size={120} />
       </div>
 
@@ -287,6 +298,10 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         @keyframes jugnu-bounce {
           0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
           40% { transform: translateY(-6px); opacity: 1; }
+        }
+        @keyframes jugnu-float {
+          0%, 100% { transform: translateY(0px); }
+          50%       { transform: translateY(-8px); }
         }
       `}</style>
 
