@@ -85,8 +85,8 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
     return { dispatched: false, jugnuKey: null, taskId: null }
   }
 
-  // Mark task in_progress and jugnu as working
-  await db.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', next.id)
+  // Mark task in_progress and jugnu as working; reset retry_count for a fresh start
+  await db.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString(), retry_count: 0 }).eq('id', next.id)
   await db.from('jugnus').update({ status: 'working' }).eq('workspace_id', (
     await db.from('projects').select('workspace_id').eq('id', projectId).single()
   ).data?.workspace_id).eq('key', next.jugnu_key)

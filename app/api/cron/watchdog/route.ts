@@ -2,15 +2,14 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
 const STUCK_THRESHOLD_MINUTES = 4
+const MAX_RETRIES = 3
 
 /**
  * Watchdog cron — runs every 5 minutes via Vercel Crons.
- * Finds tasks that have been in_progress for over STUCK_THRESHOLD_MINUTES,
- * marks them blocked, and posts a recovery message.
+ * Finds tasks in_progress > STUCK_THRESHOLD_MINUTES.
+ * Restarts them up to MAX_RETRIES times, then marks as failed to stop credit drain.
  */
 export async function GET(request: Request): Promise<Response> {
-  // Vercel Crons sends Authorization: Bearer <CRON_SECRET>.
-  // Only enforce the check when CRON_SECRET is actually configured.
   const envSecret = process.env.CRON_SECRET
   if (envSecret) {
     const cronSecret = request.headers.get('authorization')
@@ -25,39 +24,62 @@ export async function GET(request: Request): Promise<Response> {
   } catch (e) {
     return NextResponse.json({ error: 'db_init_failed', detail: String(e) }, { status: 500 })
   }
+
   const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000).toISOString()
 
   const { data: stuckTasks } = await db
     .from('tasks')
-    .select('id, project_id, jugnu_key, title')
+    .select('id, project_id, jugnu_key, title, retry_count')
     .eq('status', 'in_progress')
     .lt('started_at', cutoff)
 
   if (!stuckTasks?.length) {
-    return NextResponse.json({ recovered: 0 })
+    return NextResponse.json({ recovered: 0, failed: 0 })
   }
 
   const recovered: string[] = []
+  const failed: string[] = []
 
   for (const task of stuckTasks) {
-    // Derive base URL from the incoming request so no env var is needed
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
-    const res = await fetch(
-      `${base}/api/internal/jugnu-respond`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
-        },
-        body: JSON.stringify({
-          projectId: task.project_id,
-          taskId: task.id,
-          jugnuKey: task.jugnu_key,
-          nudge: `Your last attempt on "${task.title}" appears to have stalled. Please retry — pick up exactly where you left off.`,
-        }),
+    const retries = (task.retry_count as number) ?? 0
+
+    if (retries >= MAX_RETRIES) {
+      // Give up — mark failed so the watchdog never touches this task again
+      await db.from('tasks').update({ status: 'failed' }).eq('id', task.id)
+      await db.from('messages').insert({
+        project_id: task.project_id,
+        author_type: 'system',
+        author_key: 'system',
+        content: `⚠️ Task "${task.title}" failed after ${MAX_RETRIES} retries and was stopped.`,
+      })
+      // Reset jugnu to idle
+      const { data: proj } = await db.from('projects').select('workspace_id').eq('id', task.project_id).single()
+      if (proj?.workspace_id) {
+        await db.from('jugnus').update({ status: 'idle' })
+          .eq('workspace_id', proj.workspace_id)
+          .eq('key', task.jugnu_key)
       }
-    )
+      failed.push(task.id)
+      continue
+    }
+
+    // Increment retry count before attempting
+    await db.from('tasks').update({ retry_count: retries + 1 }).eq('id', task.id)
+
+    const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
+    const res = await fetch(`${base}/api/internal/jugnu-respond`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
+      },
+      body: JSON.stringify({
+        projectId: task.project_id,
+        taskId: task.id,
+        jugnuKey: task.jugnu_key,
+        nudge: `Your last attempt on "${task.title}" appears to have stalled (retry ${retries + 1}/${MAX_RETRIES}). Please retry — pick up exactly where you left off.`,
+      }),
+    })
 
     if (res.ok) {
       recovered.push(task.id)
@@ -69,5 +91,5 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
-  return NextResponse.json({ recovered: recovered.length, ids: recovered })
+  return NextResponse.json({ recovered: recovered.length, failed: failed.length, ids: { recovered, failed } })
 }
