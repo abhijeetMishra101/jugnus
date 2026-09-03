@@ -32,11 +32,12 @@ const FLOAT_DELAY: Record<string, string> = {
 
 // ─── Feed grouping ────────────────────────────────────────────────────────────
 
-type JugnuGroup = { type: 'jugnu'; authorKey: string; messages: Message[] }
+// isNew = first message of this section arrived via Realtime (not from initial load)
+type JugnuGroup = { type: 'jugnu'; authorKey: string; messages: Message[]; isNew: boolean }
 type SoloItem   = { type: 'system' | 'user'; message: Message }
 type FeedItem   = JugnuGroup | SoloItem
 
-function buildFeed(messages: Message[]): FeedItem[] {
+function buildFeed(messages: Message[], initialIds: Set<string>): FeedItem[] {
   const feed: FeedItem[] = []
   for (const msg of messages) {
     if (msg.author_type === 'activity') continue
@@ -45,7 +46,7 @@ function buildFeed(messages: Message[]): FeedItem[] {
       if (last?.type === 'jugnu' && last.authorKey === msg.author_key) {
         last.messages.push(msg)
       } else {
-        feed.push({ type: 'jugnu', authorKey: msg.author_key, messages: [msg] })
+        feed.push({ type: 'jugnu', authorKey: msg.author_key, messages: [msg], isNew: !initialIds.has(msg.id) })
       }
     } else {
       feed.push({ type: msg.author_type as 'system' | 'user', message: msg })
@@ -122,20 +123,25 @@ function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: s
 
 // ─── Jugnu section — illustration sticky on the left ─────────────────────────
 
-function JugnuSection({ authorKey, messages }: { authorKey: string; messages: Message[] }) {
+function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messages: Message[]; isNew: boolean }) {
   const j = JUGNU[authorKey]
   if (!j) return null
 
+  // Two nested wrappers so fly-in and float transforms don't overwrite each other.
+  // Outer: sticky positioning + one-shot fly-in (new sections only).
+  // Inner: continuous float — delayed until fly-in finishes for new sections.
+  const floatDelay  = FLOAT_DELAY[authorKey] ?? '0s'
+  const flyDuration = 1.4
+
   return (
     <div className="flex items-start gap-1 px-3 py-1.5">
-      {/* Illustration — sticky on the left, stays pinned while messages scroll past.
-          self-start prevents flex from stretching it to full section height,
-          which is required for position:sticky to activate. */}
       <div
         className="shrink-0 self-start sticky top-4"
-        style={{ animation: `jugnu-float 2.6s ease-in-out ${FLOAT_DELAY[authorKey] ?? '0s'} infinite` }}
+        style={isNew ? { animation: `jugnu-fly-in ${flyDuration}s cubic-bezier(0.22,1,0.36,1) forwards` } : {}}
       >
-        <JugnuIllustration jugnuKey={authorKey} size={120} />
+        <div style={{ animation: `jugnu-float 2.6s ease-in-out ${isNew ? `${flyDuration}s` : floatDelay} infinite` }}>
+          <JugnuIllustration jugnuKey={authorKey} size={120} />
+        </div>
       </div>
 
       {/* Right column: name + role shown once, then all messages stacked */}
@@ -216,7 +222,9 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const [activities, setActivities]   = useState<string[]>([])
   const [input, setInput]             = useState('')
   const [sending, setSending]         = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const bottomRef   = useRef<HTMLDivElement>(null)
+  // IDs of messages that existed at load time — those sections never play the fly-in
+  const initialIds  = useRef(new Set(initialMessages.map((m) => m.id)))
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -256,6 +264,9 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       .limit(100)
       .then(({ data }) => {
         if (data?.length) {
+          // Mark gap-fill results as initial before the re-render so they
+          // don't trigger fly-in animations (they already existed in the DB).
+          ;(data as Message[]).forEach((m) => initialIds.current.add(m.id))
           setMessages((prev) => {
             const seen = new Set(prev.map((m) => m.id))
             const merged = [
@@ -290,7 +301,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     setSending(false)
   }
 
-  const feed = buildFeed(messages)
+  const feed = buildFeed(messages, initialIds.current)
 
   return (
     <>
@@ -303,13 +314,25 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           0%, 100% { transform: translateY(0px); }
           50%       { transform: translateY(-8px); }
         }
+        /* Bee launches from near the send button (bottom-right) and
+           zigzags up-left to its sticky resting spot on the left side. */
+        @keyframes jugnu-fly-in {
+          0%   { transform: translate(340px, 300px) scale(0.5) rotate(22deg);  opacity: 0; }
+          6%   { opacity: 1; }
+          22%  { transform: translate(195px, 190px) scale(0.72) rotate(-13deg); }
+          42%  { transform: translate(68px,  100px) scale(0.88) rotate(8deg);  }
+          60%  { transform: translate(-16px,  38px) scale(0.96) rotate(-4deg); }
+          78%  { transform: translate(8px,    10px) scale(1)    rotate(2deg);  }
+          90%  { transform: translate(-3px,    3px) scale(1)    rotate(-1deg); }
+          100% { transform: translate(0px,    0px)  scale(1)    rotate(0deg);  opacity: 1; }
+        }
       `}</style>
 
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto py-4">
           {feed.map((item, i) => {
             if (item.type === 'jugnu') {
-              return <JugnuSection key={`${item.authorKey}-${i}`} authorKey={item.authorKey} messages={item.messages} />
+              return <JugnuSection key={`${item.authorKey}-${i}`} authorKey={item.authorKey} messages={item.messages} isNew={item.isNew} />
             }
             if (item.type === 'system') {
               return <SystemItem key={item.message.id} msg={item.message} />
