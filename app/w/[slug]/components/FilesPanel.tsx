@@ -14,10 +14,15 @@ interface Props {
   initialFiles: FileSnapshot[]
 }
 
+type ViewMode = 'preview' | 'code'
+
 export function FilesPanel({ projectId, initialFiles }: Props) {
   const [files, setFiles] = useState<FileSnapshot[]>(initialFiles)
   const [selected, setSelected] = useState<FileSnapshot | null>(null)
   const [open, setOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('code')
+
+  const isHtml = selected?.path.endsWith('.html') ?? false
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -41,11 +46,22 @@ export function FilesPanel({ projectId, initialFiles }: Props) {
     return () => { void db.removeChannel(sub) }
   }, [projectId])
 
+  function selectFile(f: FileSnapshot) {
+    if (selected?.path === f.path) {
+      setSelected(null)
+      return
+    }
+    setSelected(f)
+    setViewMode(f.path.endsWith('.html') ? 'preview' : 'code')
+  }
+
   if (!files.length) return null
+
+  const panelWidth = open && isHtml && viewMode === 'preview' ? 'w-[480px]' : 'w-80'
 
   return (
     <>
-      {/* Collapsed tab — always visible when files exist */}
+      {/* Collapsed tab */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
@@ -59,13 +75,16 @@ export function FilesPanel({ projectId, initialFiles }: Props) {
         </button>
       )}
 
-      {/* Expanded panel — fixed width, never squishes the chat */}
+      {/* Expanded panel */}
       {open && (
-        <div className="shrink-0 w-80 flex h-full border-l border-gray-200 flex-col bg-white">
+        <div className={`shrink-0 ${panelWidth} flex h-full border-l border-gray-200 flex-col bg-white transition-[width] duration-200`}>
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Files</span>
-            <button onClick={() => { setOpen(false); setSelected(null) }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+            <button
+              onClick={() => { setOpen(false); setSelected(null) }}
+              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            >×</button>
           </div>
 
           {/* File list */}
@@ -73,7 +92,7 @@ export function FilesPanel({ projectId, initialFiles }: Props) {
             {files.map((f) => (
               <button
                 key={f.path}
-                onClick={() => setSelected(selected?.path === f.path ? null : f)}
+                onClick={() => selectFile(f)}
                 className={`w-full text-left px-3 py-1.5 text-xs truncate transition-colors ${
                   selected?.path === f.path
                     ? 'bg-indigo-50 text-indigo-700 font-medium'
@@ -89,12 +108,40 @@ export function FilesPanel({ projectId, initialFiles }: Props) {
           {/* File content */}
           {selected ? (
             <div className="flex-1 flex flex-col min-h-0">
-              <div className="px-3 py-1.5 border-b border-gray-100 bg-white">
-                <span className="text-xs font-mono text-gray-500 truncate block">{selected.path}</span>
+              {/* Sub-header: path + preview/code toggle */}
+              <div className="px-3 py-1.5 border-b border-gray-100 bg-white flex items-center justify-between gap-2 shrink-0">
+                <span className="text-xs font-mono text-gray-500 truncate">{selected.path}</span>
+                {isHtml && (
+                  <div className="flex shrink-0 rounded border border-gray-200 overflow-hidden text-xs">
+                    <button
+                      onClick={() => setViewMode('preview')}
+                      className={`px-2 py-0.5 transition-colors ${viewMode === 'preview' ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      Preview
+                    </button>
+                    <button
+                      onClick={() => setViewMode('code')}
+                      className={`px-2 py-0.5 border-l border-gray-200 transition-colors ${viewMode === 'code' ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      Code
+                    </button>
+                  </div>
+                )}
               </div>
-              <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-gray-800 bg-gray-50 whitespace-pre leading-relaxed">
-                {selected.content}
-              </pre>
+
+              {viewMode === 'preview' && isHtml ? (
+                <iframe
+                  key={selected.path}
+                  srcDoc={selected.content}
+                  className="flex-1 w-full border-0 bg-white"
+                  sandbox="allow-scripts"
+                  title={selected.path}
+                />
+              ) : (
+                <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-gray-800 bg-gray-50 whitespace-pre leading-relaxed">
+                  {selected.content}
+                </pre>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-xs text-gray-400">
