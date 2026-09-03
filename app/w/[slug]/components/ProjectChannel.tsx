@@ -137,7 +137,7 @@ function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messa
     <div className="flex items-start gap-1 px-3 py-1.5">
       <div
         className="shrink-0 self-start sticky top-4"
-        style={isNew ? { animation: `jugnu-fly-in ${flyDuration}s cubic-bezier(0.22,1,0.36,1) forwards` } : {}}
+        style={isNew ? { animation: `jugnu-fly-in ${flyDuration}s cubic-bezier(0.22,1,0.36,1) forwards`, willChange: 'transform' } : {}}
       >
         <div style={{ animation: `jugnu-float 2.6s ease-in-out ${isNew ? `${flyDuration}s` : floatDelay} infinite` }}>
           <JugnuIllustration jugnuKey={authorKey} size={120} />
@@ -314,17 +314,17 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           0%, 100% { transform: translateY(0px); }
           50%       { transform: translateY(-8px); }
         }
-        /* Bee launches from near the send button (bottom-right) and
-           zigzags up-left to its sticky resting spot on the left side. */
+        /* Bee flies in from the right (where the send button lives).
+           Keeps Y movement small so the path is correct whether the
+           section appears near the top or bottom of the chat. */
         @keyframes jugnu-fly-in {
-          0%   { transform: translate(340px, 300px) scale(0.5) rotate(22deg);  opacity: 0; }
-          6%   { opacity: 1; }
-          22%  { transform: translate(195px, 190px) scale(0.72) rotate(-13deg); }
-          42%  { transform: translate(68px,  100px) scale(0.88) rotate(8deg);  }
-          60%  { transform: translate(-16px,  38px) scale(0.96) rotate(-4deg); }
-          78%  { transform: translate(8px,    10px) scale(1)    rotate(2deg);  }
-          90%  { transform: translate(-3px,    3px) scale(1)    rotate(-1deg); }
-          100% { transform: translate(0px,    0px)  scale(1)    rotate(0deg);  opacity: 1; }
+          0%   { transform: translate(280px, 30px) scale(0.5) rotate(18deg);  opacity: 0; }
+          8%   { opacity: 1; }
+          28%  { transform: translate(110px, -14px) scale(0.78) rotate(-10deg); }
+          52%  { transform: translate(22px,   9px)  scale(0.94) rotate(5deg);  }
+          72%  { transform: translate(-9px,  -3px)  scale(1)    rotate(-2deg); }
+          87%  { transform: translate(4px,    1px)  scale(1)    rotate(1deg);  }
+          100% { transform: translate(0px,   0px)   scale(1)    rotate(0deg);  opacity: 1; }
         }
       `}</style>
 
