@@ -171,7 +171,7 @@ export function buildToolsForJugnu(
     handlers['write_file'] = async (input) => {
       const result = await writeFile(projectId, taskId, input.path as string, input.content as string, db)
       await db.from('messages').insert({
-        project_id: projectId, author_type: 'jugnu', author_key: jugnuKey,
+        project_id: projectId, author_type: 'activity', author_key: jugnuKey,
         content: `📄 Wrote \`${input.path}\``,
         task_id: taskId, metadata: { file_write: true, path: input.path },
       })
