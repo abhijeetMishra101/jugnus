@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from './registry'
 import { writeFile, readFile, listFiles } from '../storage/files'
+import { pushProjectToGitHub } from './github'
 
 export interface ToolSet {
   definitions: Anthropic.Tool[]
@@ -203,10 +204,30 @@ export function buildToolsForJugnu(
           completed_at: new Date().toISOString(),
         }).eq('id', taskId)
       }
+
+      // Fetch full file contents for GitHub push (listFiles only returns paths)
+      const { data: fullFiles } = await db
+        .from('file_snapshots')
+        .select('path, content')
+        .eq('project_id', projectId)
+        .order('path', { ascending: true })
+
+      // Push files to GitHub and get a PR URL for a Vercel preview
+      const { data: proj } = await db.from('projects').select('title').eq('id', projectId).single()
+      const { prUrl, error: ghError } = await pushProjectToGitHub({
+        files: (fullFiles ?? []) as { path: string; content: string }[],
+        projectTitle: proj?.title ?? 'Jugnus project',
+        projectId,
+      })
+
+      const prLine = prUrl
+        ? `\n\n[**→ View PR + Vercel preview**](${prUrl})`
+        : ghError ? `\n\n⚠️ GitHub push skipped: ${ghError}` : ''
+
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'leo',
-        content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}`,
-        task_id: taskId, metadata: { review_ready: true, file_count: files.length },
+        content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}${prLine}`,
+        task_id: taskId, metadata: { review_ready: true, file_count: files.length, pr_url: prUrl },
       })
       return { ok: true, files_submitted: files.length }
     }
