@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from './registry'
 import { writeFile, readFile, listFiles } from '../storage/files'
 import { pushProjectToGitHub } from './github'
+import { getPreviewUrl } from './deploy-static'
 
 export interface ToolSet {
   definitions: Anthropic.Tool[]
@@ -255,10 +256,27 @@ export function buildToolsForJugnu(
           completed_at: new Date().toISOString(),
         }).eq('id', taskId)
       }
+
+      // Check if there's a deliverable HTML file (skip Nia's design/ mockups)
+      const { data: htmlFiles } = await db
+        .from('file_snapshots')
+        .select('path')
+        .eq('project_id', projectId)
+        .ilike('path', '%.html')
+        .not('path', 'ilike', 'design/%')
+        .limit(1)
+
+      const hasHtml = (htmlFiles?.length ?? 0) > 0
+      const liveUrl = hasHtml ? getPreviewUrl(projectId) : null
+      const deployLine = liveUrl ? `\n\n🌐 [**View live →**](${liveUrl})` : ''
+
+      // Mark project completed
+      await db.from('projects').update({ status: 'completed' }).eq('id', projectId)
+
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'tara',
-        content: `✅ **Tara approved the work.**\n\n${input.comment}`,
-        task_id: taskId, metadata: { review_verdict: 'approved' },
+        content: `✅ **Tara approved the work.**\n\n${input.comment}${deployLine}`,
+        task_id: taskId, metadata: { review_verdict: 'approved', project_complete: true, live_url: liveUrl },
       })
       return { ok: true, verdict: 'approved' }
     }
