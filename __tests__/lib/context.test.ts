@@ -55,6 +55,7 @@ const BASE_CTX: ProjectContext = {
   title: 'Dark Mode Toggle',
   objective: 'Add a dark mode toggle button to the navigation bar.',
   constraints: { timeline: '2 days' },
+  jugnu_roles: {},
   status: 'building',
   currentTask: {
     id: 'task-1',

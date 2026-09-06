@@ -13,6 +13,8 @@ const anthropic = new Anthropic({
 
 const MODEL = 'claude-sonnet-4-6'
 const MAX_TOKENS = 8192
+// Flush streaming content to DB every N characters to keep UI live without hammering Supabase
+const STREAM_FLUSH_INTERVAL = 150
 
 export interface DispatchInput {
   projectId: string
@@ -27,22 +29,15 @@ export interface DispatchResult {
   finalMessage: string | null
 }
 
-/**
- * Core jugnu invocation loop.
- * Builds full project context, injects it above conversation history,
- * and runs the agentic loop until the jugnu calls complete_task or runs out of turns.
- */
 export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResult> {
   const { projectId, taskId, jugnuKey, db } = input
   const jugnu = getJugnu(jugnuKey)
 
-  // 1. Build full project context — no channel history inference needed
   const ctx = await buildProjectContext(projectId, taskId, db)
   if (!ctx) return { posted: false, toolsUsed: [], finalMessage: null }
 
   const contextBlock = formatContextBlock(ctx, jugnuKey)
 
-  // 2. Fetch recent project messages as conversation history (last 30)
   const { data: recentMessages } = await db
     .from('messages')
     .select('author_type, author_key, content')
@@ -52,7 +47,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
   const rawHistory = ((recentMessages ?? []) as { author_type: string; author_key: string; content: string }[])
     .reverse()
-    .filter((m) => m.author_type === 'user' || m.author_type === 'jugnu') // drop system messages
+    .filter((m) => m.author_type === 'user' || m.author_type === 'jugnu')
     .map((m) => ({
       role: (m.author_type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.author_type === 'jugnu'
@@ -60,16 +55,22 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         : m.content,
     }))
 
-  // Strip ALL trailing assistant messages — Claude rejects assistant-prefill
   let endIdx = rawHistory.length - 1
   while (endIdx >= 0 && rawHistory[endIdx].role === 'assistant') endIdx--
   const history = rawHistory.slice(0, endIdx + 1)
 
-  // 3. Build tool set for this jugnu
   const tools = buildToolsForJugnu(jugnuKey, projectId, taskId, db)
 
-  // 4. Agentic loop — jugnu acts until complete_task or max turns
-  const systemPrompt = `${contextBlock}\n\n${jugnu.systemPrompt}`
+  // System prompt with prompt caching on the large context block
+  const systemContent: Anthropic.TextBlockParam[] = [
+    {
+      type: 'text',
+      text: contextBlock,
+      cache_control: { type: 'ephemeral' },
+    },
+    { type: 'text', text: jugnu.systemPrompt },
+  ]
+
   let messages: Anthropic.MessageParam[] = history.length > 0
     ? history
     : [{ role: 'user', content: 'Begin your assigned task.' }]
@@ -79,43 +80,68 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
   let done = false
 
   for (let turn = 0; turn < 10 && !done; turn++) {
-    // Post a live activity so the UI shows something during the Claude API call
-    const thinkingLabel = turn === 0
-      ? `💭 Reviewing task and planning approach…`
-      : `💭 Continuing work (turn ${turn + 1})…`
+    // Activity indicator while waiting for first token
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'activity',
       author_key: jugnuKey,
-      content: thinkingLabel,
-      metadata: { tool: 'thinking', jugnu: jugnuKey },
+      content: turn === 0 ? `💭 Reviewing task and planning approach…` : `💭 Continuing work (turn ${turn + 1})…`,
+      metadata: { event_type: 'JUGNU_THINKING', jugnu_key: jugnuKey, turn },
     })
 
-    const response = await anthropic.messages.create({
+    // Streaming API call
+    const stream = anthropic.messages.stream({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: systemPrompt,
+      system: systemContent as Anthropic.MessageCreateParams['system'],
       tools: tools.definitions,
       messages,
     })
 
-    // Post any text content as a message in the project channel
-    const textContent = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-      .trim()
+    // Stream text tokens to DB in batches
+    let liveRowId: string | null = null
+    let textBuffer = ''
+    let lastFlushedLen = 0
 
-    if (textContent) {
-      await db.from('messages').insert({
-        project_id: projectId,
-        author_type: 'jugnu',
-        author_key: jugnuKey,
-        content: textContent,
-        task_id: taskId,
-      })
-      finalMessage = textContent
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        textBuffer += event.delta.text
+
+        if (!liveRowId && textBuffer.length > 0) {
+          // Create the live row on first text so UI shows something immediately
+          const { data: row } = await db.from('messages').insert({
+            project_id: projectId,
+            author_type: 'jugnu',
+            author_key: jugnuKey,
+            content: textBuffer,
+            task_id: taskId,
+            metadata: { event_type: 'JUGNU_STARTED', streaming: true, jugnu_key: jugnuKey },
+          }).select('id').single()
+          liveRowId = row?.id ?? null
+          lastFlushedLen = textBuffer.length
+        } else if (liveRowId && textBuffer.length - lastFlushedLen >= STREAM_FLUSH_INTERVAL) {
+          await db.from('messages').update({ content: textBuffer }).eq('id', liveRowId)
+          lastFlushedLen = textBuffer.length
+        }
+      }
     }
+
+    // Finalize the streaming row with complete text + correct event_type
+    if (liveRowId) {
+      const finalText = textBuffer.trim()
+      if (finalText) {
+        await db.from('messages').update({
+          content: finalText,
+          metadata: { event_type: 'JUGNU_SPOKE', jugnu_key: jugnuKey },
+        }).eq('id', liveRowId)
+        finalMessage = finalText
+      } else {
+        // No text was generated (tool-only turn) — delete the placeholder row
+        await db.from('messages').delete().eq('id', liveRowId)
+      }
+    }
+
+    const response = await stream.finalMessage()
 
     if (response.stop_reason === 'end_turn') {
       done = true
@@ -124,7 +150,6 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
     if (response.stop_reason !== 'tool_use') break
 
-    // Execute tool calls
     const toolUseBlocks = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
     )
@@ -139,7 +164,6 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         continue
       }
 
-      // Post a live activity update so the UI shows what the jugnu is doing right now
       const inp = toolUse.input as Record<string, unknown>
       const activityLabel: Record<string, string> = {
         write_file:        `📝 Writing \`${inp.path ?? 'file'}\``,
@@ -149,21 +173,22 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         submit_for_review: `🔍 Submitting for review`,
         approve:           `✅ Approving`,
         request_changes:   `✏️ Requesting changes`,
+        ask_founder:       `💬 Asking for your input`,
       }
-      const label = activityLabel[toolUse.name] ?? `🔧 ${toolUse.name}`
       await db.from('messages').insert({
         project_id: projectId,
         author_type: 'activity',
         author_key: jugnuKey,
-        content: label,
-        metadata: { tool: toolUse.name, jugnu: jugnuKey },
+        content: activityLabel[toolUse.name] ?? `🔧 ${toolUse.name}`,
+        metadata: { event_type: 'JUGNU_THINKING', tool: toolUse.name, jugnu_key: jugnuKey },
       })
 
       try {
         const result = await handler(toolUse.input as Record<string, unknown>)
         toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) })
 
-        if (['complete_task', 'submit_for_review', 'approve', 'request_changes'].includes(toolUse.name)) {
+        // Terminal tools — stop the agentic loop after this turn
+        if (['complete_task', 'submit_for_review', 'approve', 'request_changes', 'ask_founder'].includes(toolUse.name)) {
           done = true
         }
       } catch (err) {

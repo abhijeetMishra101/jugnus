@@ -32,12 +32,12 @@ export async function runPipeline(
       author_type: 'system',
       author_key: 'system',
       content: `❌ ${jugnuKey} hit an error: ${msg}`,
+      metadata: { event_type: 'REVIEW_FAILED', jugnu_key: jugnuKey, error: msg },
     })
     await resetJugnuIdle(projectId, jugnuKey, db)
     return
   }
 
-  // Reset current jugnu to idle so the typing bubble clears before the next one lights up
   await resetJugnuIdle(projectId, jugnuKey, db)
 
   const { dispatched, jugnuKey: nextKey, taskId: nextTaskId } = await advanceProject(projectId, db)

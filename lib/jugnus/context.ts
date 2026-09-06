@@ -1,11 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from './registry'
 
+export interface JugnuRole {
+  display_role: string
+  focus: string
+}
+
 export interface ProjectContext {
   projectId: string
   title: string
   objective: string
   constraints: Record<string, unknown>
+  jugnu_roles: Record<string, JugnuRole>
   status: string
   currentTask: TaskContext | null
   completedTasks: TaskContext[]
@@ -23,11 +29,6 @@ export interface TaskContext {
   artifact: Record<string, unknown> | null
 }
 
-/**
- * Builds the full project context injected into every jugnu dispatch.
- * This is the fix for channel-history pollution: jugnus never need to infer
- * their assignment from noisy message history — it's handed to them explicitly.
- */
 export async function buildProjectContext(
   projectId: string,
   currentTaskId: string | null,
@@ -52,11 +53,15 @@ export async function buildProjectContext(
     ? allTasks.find((t) => t.id === currentTaskId) ?? null
     : allTasks.find((t) => t.status === 'in_progress') ?? null
 
+  const constraints = (project.constraints ?? {}) as Record<string, unknown>
+  const jugnu_roles = (constraints.jugnu_roles ?? {}) as Record<string, JugnuRole>
+
   return {
     projectId: project.id,
     title: project.title,
     objective: project.objective,
-    constraints: (project.constraints ?? {}) as Record<string, unknown>,
+    constraints,
+    jugnu_roles,
     status: project.status,
     currentTask,
     completedTasks: allTasks.filter((t) => t.status === 'completed'),
@@ -64,10 +69,6 @@ export async function buildProjectContext(
   }
 }
 
-/**
- * Formats the project context as a structured system-level prefix.
- * Prepended above the conversation history so the jugnu cannot miss it.
- */
 export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): string {
   const completed = ctx.completedTasks.map((t) =>
     `  ✅ ${t.title}${t.result ? `: ${t.result}` : ''}${t.artifact ? ` [${(t.artifact as Record<string, string>).url ?? ''}]` : ''}`
@@ -82,8 +83,15 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
     : 'No current task assigned.'
 
   const constraintLines = Object.entries(ctx.constraints)
+    .filter(([k]) => k !== 'jugnu_roles')
     .map(([k, v]) => `  ${k}: ${v}`)
     .join('\n')
+
+  // Inject project-specific persona for this jugnu
+  const role = ctx.jugnu_roles[jugnuKey]
+  const personaLine = role
+    ? `\nYOUR ROLE ON THIS PROJECT:\n  ${role.display_role}\n  Focus: ${role.focus}`
+    : ''
 
   return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 JUGNUS PROJECT BRIEF
@@ -99,8 +107,8 @@ ${completed ? `\nCOMPLETED TASKS:\n${completed}` : ''}
 ${pending ? `\nUPCOMING TASKS:\n${pending}` : ''}
 
 ${current}
+${personaLine}
 
 You are acting as ${jugnuKey.toUpperCase()} for this project.
-Stack: Next.js + Supabase + Vercel (always — no configuration needed).
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 }

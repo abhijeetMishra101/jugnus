@@ -46,6 +46,7 @@ export function buildToolsForJugnu(
       author_key: jugnuKey,
       content: String(input.result),
       task_id: taskId,
+      metadata: { event_type: 'TASK_COMPLETED', jugnu_key: jugnuKey },
     })
     return { ok: true }
   }
@@ -54,7 +55,7 @@ export function buildToolsForJugnu(
   if (jugnuKey === 'maya') {
     definitions.push({
       name: 'ask_founder',
-      description: 'Ask the founder a clarifying question. Use sparingly — only for genuine blockers.',
+      description: 'Ask the founder clarifying questions. Use only when answers would materially change what gets built or who does it. Ask all questions in one call.',
       input_schema: {
         type: 'object' as const,
         properties: {
@@ -76,7 +77,8 @@ export function buildToolsForJugnu(
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'maya',
         content: `⚠️ **Maya needs your input.**\n\n${input.question}`,
-        task_id: taskId, metadata: { escalation: true },
+        task_id: taskId,
+        metadata: { event_type: 'CLARIFICATION_REQUIRED', escalation: true },
       })
       return { ok: true, waiting_for_founder: true }
     }
@@ -93,9 +95,9 @@ export function buildToolsForJugnu(
               type: 'object',
               properties: {
                 title: { type: 'string' },
-                description: { type: 'string', description: 'Detailed instructions for the jugnu. For Leo: specify exactly which files to create and what each should contain.' },
-                capability: { type: 'string', enum: ['design', 'build', 'review'] },
-                jugnu_key: { type: 'string', enum: ['nia', 'leo', 'tara'] },
+                description: { type: 'string', description: 'Detailed instructions including all clarification answers as explicit constraints. For Leo: specify exactly which files to create.' },
+                capability: { type: 'string', enum: ['design', 'build', 'review', 'approval'] },
+                jugnu_key: { type: 'string', enum: ['nia', 'leo', 'tara', 'human'] },
                 depends_on_indices: {
                   type: 'array',
                   items: { type: 'number' },
@@ -103,6 +105,16 @@ export function buildToolsForJugnu(
                 },
               },
               required: ['title', 'description', 'capability', 'jugnu_key'],
+            },
+          },
+          jugnu_roles: {
+            type: 'object',
+            description: 'Domain-specific display roles for each jugnu on this project.',
+            properties: {
+              maya: { type: 'object', properties: { display_role: { type: 'string' }, focus: { type: 'string' } }, required: ['display_role', 'focus'] },
+              nia:  { type: 'object', properties: { display_role: { type: 'string' }, focus: { type: 'string' } }, required: ['display_role', 'focus'] },
+              leo:  { type: 'object', properties: { display_role: { type: 'string' }, focus: { type: 'string' } }, required: ['display_role', 'focus'] },
+              tara: { type: 'object', properties: { display_role: { type: 'string' }, focus: { type: 'string' } }, required: ['display_role', 'focus'] },
             },
           },
         },
@@ -115,6 +127,8 @@ export function buildToolsForJugnu(
         title: string; description: string; capability: string
         jugnu_key: string; depends_on_indices?: number[]
       }>
+      const jugnu_roles = input.jugnu_roles as Record<string, { display_role: string; focus: string }> | undefined
+
       const insertedIds: string[] = []
       for (let i = 0; i < rawTasks.length; i++) {
         const t = rawTasks[i]
@@ -126,10 +140,23 @@ export function buildToolsForJugnu(
         }).select('id').single()
         insertedIds.push(data?.id ?? '')
       }
-      await db.from('projects').update({ status: 'building' }).eq('id', projectId)
+
+      // Store jugnu_roles in project constraints for context injection
+      if (jugnu_roles) {
+        const { data: proj } = await db.from('projects').select('constraints').eq('id', projectId).single()
+        const existing = (proj?.constraints ?? {}) as Record<string, unknown>
+        await db.from('projects').update({
+          status: 'building',
+          constraints: { ...existing, jugnu_roles },
+        }).eq('id', projectId)
+      } else {
+        await db.from('projects').update({ status: 'building' }).eq('id', projectId)
+      }
+
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: jugnuKey,
         content: `✨ Plan assembled — ${rawTasks.length} task${rawTasks.length !== 1 ? 's' : ''} queued for the team.`,
+        metadata: { event_type: 'PLAN_CREATED', task_count: rawTasks.length },
       })
       return { ok: true, task_count: rawTasks.length, ids: insertedIds }
     }
@@ -175,7 +202,8 @@ export function buildToolsForJugnu(
       await db.from('messages').insert({
         project_id: projectId, author_type: 'activity', author_key: jugnuKey,
         content: `📄 Wrote \`${input.path}\``,
-        task_id: taskId, metadata: { file_write: true, path: input.path },
+        task_id: taskId,
+        metadata: { event_type: 'FILE_WRITTEN', file_write: true, path: input.path, jugnu_key: jugnuKey },
       })
       return result
     }
@@ -206,14 +234,12 @@ export function buildToolsForJugnu(
         }).eq('id', taskId)
       }
 
-      // Fetch full file contents for GitHub push (listFiles only returns paths)
       const { data: fullFiles } = await db
         .from('file_snapshots')
         .select('path, content')
         .eq('project_id', projectId)
         .order('path', { ascending: true })
 
-      // Push files to GitHub and get a PR URL for a Vercel preview
       const { data: proj } = await db.from('projects').select('title').eq('id', projectId).single()
       const { prUrl, error: ghError } = await pushProjectToGitHub({
         files: (fullFiles ?? []) as { path: string; content: string }[],
@@ -228,7 +254,8 @@ export function buildToolsForJugnu(
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'leo',
         content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}${prLine}`,
-        task_id: taskId, metadata: { review_ready: true, file_count: files.length, pr_url: prUrl },
+        task_id: taskId,
+        metadata: { event_type: 'REVIEW_STARTED', review_ready: true, file_count: files.length, pr_url: prUrl },
       })
       return { ok: true, files_submitted: files.length }
     }
@@ -257,7 +284,6 @@ export function buildToolsForJugnu(
         }).eq('id', taskId)
       }
 
-      // Check if there's a deliverable HTML file (skip Nia's design/ mockups)
       const { data: htmlFiles } = await db
         .from('file_snapshots')
         .select('path')
@@ -270,20 +296,20 @@ export function buildToolsForJugnu(
       const liveUrl = hasHtml ? getPreviewUrl(projectId) : null
       const deployLine = liveUrl ? `\n\n🌐 [**View live →**](${liveUrl})` : ''
 
-      // Mark project completed
       await db.from('projects').update({ status: 'completed' }).eq('id', projectId)
 
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'tara',
         content: `✅ **Tara approved the work.**\n\n${input.comment}${deployLine}`,
-        task_id: taskId, metadata: { review_verdict: 'approved', project_complete: true, live_url: liveUrl },
+        task_id: taskId,
+        metadata: { event_type: 'REVIEW_PASSED', review_verdict: 'approved', project_complete: true, live_url: liveUrl },
       })
       return { ok: true, verdict: 'approved' }
     }
 
     definitions.push({
       name: 'request_changes',
-      description: 'Request changes from Leo. Describe exactly what needs to be fixed.',
+      description: 'Request changes from Leo. Describe exactly what needs to be fixed. Do not call this if Leo has already revised once — approve with reservations instead.',
       input_schema: {
         type: 'object' as const,
         properties: {
@@ -294,6 +320,32 @@ export function buildToolsForJugnu(
     })
 
     handlers['request_changes'] = async (input) => {
+      // Count how many Leo tasks are already completed — cap at 1 revision cycle
+      const { count: leoRevisions } = await db
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('jugnu_key', 'leo')
+        .eq('status', 'completed')
+
+      if ((leoRevisions ?? 0) >= 2) {
+        // Correction loop bound reached — escalate instead of another revision
+        await db.from('messages').insert({
+          project_id: projectId, author_type: 'jugnu', author_key: 'tara',
+          content: `⚠️ **Tara: review cycle limit reached.**\n\nAfter two revision cycles, the following issues remain:\n\n${input.feedback}\n\nPlease review and decide how to proceed.`,
+          task_id: taskId,
+          metadata: { event_type: 'REVIEW_FAILED', escalation: true, feedback: input.feedback },
+        })
+        if (taskId) {
+          await db.from('tasks').update({
+            status: 'completed',
+            result: `Escalated after correction limit: ${input.feedback}`,
+            completed_at: new Date().toISOString(),
+          }).eq('id', taskId)
+        }
+        return { ok: true, verdict: 'escalated' }
+      }
+
       if (taskId) {
         await db.from('tasks').update({
           status: 'completed',
@@ -302,8 +354,6 @@ export function buildToolsForJugnu(
         }).eq('id', taskId)
       }
 
-      // Queue a new Leo build task for the revision
-      const { data: project } = await db.from('projects').select('workspace_id').eq('id', projectId).single()
       await db.from('tasks').insert({
         project_id: projectId,
         title: 'Revise implementation based on Tara\'s feedback',
@@ -316,7 +366,8 @@ export function buildToolsForJugnu(
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'tara',
         content: `🔁 **Tara requested changes.**\n\n${input.feedback}`,
-        task_id: taskId, metadata: { review_verdict: 'changes_requested' },
+        task_id: taskId,
+        metadata: { event_type: 'TASK_RETURNED', review_verdict: 'changes_requested' },
       })
 
       return { ok: true, verdict: 'changes_requested' }

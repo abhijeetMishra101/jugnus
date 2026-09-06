@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { JugnuIllustration } from './JugnuIllustration'
+import { useProjectEvents } from '../hooks/useProjectEvents'
 
 interface Message {
   id: string
@@ -207,6 +208,85 @@ function UserItem({ msg }: { msg: Message }) {
   )
 }
 
+// ─── ApprovalCard ────────────────────────────────────────────────────────────
+
+function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string | null }) {
+  const [feedback, setFeedback] = useState('')
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [loading, setLoading] = useState<'approved' | 'changes' | null>(null)
+
+  const submit = async (verdict: 'approved' | 'changes') => {
+    setLoading(verdict)
+    await fetch(`/api/projects/${projectId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verdict, feedback: verdict === 'changes' ? feedback : undefined, taskId }),
+    })
+    setLoading(null)
+    setShowFeedback(false)
+    setFeedback('')
+  }
+
+  return (
+    <div className="mx-6 mb-4 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white shadow-sm overflow-hidden">
+      <div className="px-5 py-4">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-lg">👀</span>
+          <p className="text-sm font-semibold text-gray-900">Ready for your review</p>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          Your team is ready to build. Approve the direction or share feedback for Nia to revise.
+        </p>
+
+        {showFeedback ? (
+          <div className="space-y-3">
+            <textarea
+              autoFocus
+              rows={3}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="What should be changed or clarified?"
+              className="w-full text-sm border border-gray-200 rounded-xl px-4 py-2.5 resize-none outline-none focus:border-indigo-400 transition-colors"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => void submit('changes')}
+                disabled={!feedback.trim() || loading !== null}
+                className="flex-1 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+              >
+                {loading === 'changes' ? 'Sending…' : 'Send feedback'}
+              </button>
+              <button
+                onClick={() => { setShowFeedback(false); setFeedback('') }}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={() => void submit('approved')}
+              disabled={loading !== null}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-40 transition-colors shadow-sm"
+            >
+              {loading === 'approved' ? 'Approving…' : '✅ Approve & Build'}
+            </button>
+            <button
+              onClick={() => setShowFeedback(true)}
+              disabled={loading !== null}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 transition-colors"
+            >
+              ✏️ Request changes
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── ProjectChannel ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -222,9 +302,26 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const [activities, setActivities]   = useState<string[]>([])
   const [input, setInput]             = useState('')
   const [sending, setSending]         = useState(false)
+  const [approvalTask, setApprovalTask] = useState<{ taskId: string | null } | null>(null)
   const bottomRef   = useRef<HTMLDivElement>(null)
   // IDs of messages that existed at load time — those sections never play the fly-in
   const initialIds  = useRef(new Set(initialMessages.map((m) => m.id)))
+
+  // Listen for approval events
+  const events = useProjectEvents(projectId)
+  useEffect(() => {
+    const latest = events[events.length - 1]
+    if (!latest) return
+    if (latest.event_type === 'APPROVAL_REQUIRED') {
+      setApprovalTask({ taskId: latest.task_id ?? null })
+    } else if (
+      latest.event_type === 'PROTOTYPE_APPROVED' ||
+      latest.event_type === 'PROTOTYPE_REVISED' ||
+      latest.event_type === 'PROJECT_COMPLETED'
+    ) {
+      setApprovalTask(null)
+    }
+  }, [events])
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -344,6 +441,11 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
 
           <div ref={bottomRef} />
         </div>
+
+        {/* Approval gate card — shown when APPROVAL_REQUIRED fires */}
+        {approvalTask && (
+          <ApprovalCard projectId={projectId} taskId={approvalTask.taskId} />
+        )}
 
         {/* Input bar */}
         <div className="shrink-0 border-t border-gray-100 px-6 py-4">
