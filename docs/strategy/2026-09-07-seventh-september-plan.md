@@ -16,6 +16,35 @@
 5. Both a chat renderer and a 2D world renderer reading the same event stream, switchable via a toggle
 6. A semantic event vocabulary that future UIs can consume without pipeline changes
 
+### Nia vs Leo — the critical output distinction
+
+**Nia** produces a self-contained HTML file (inline CSS, no external deps) as a cheap visual
+prototype. This is shown to the founder for approval before Leo starts. It is a reference
+spec, not the deliverable.
+
+**Leo** produces the real product: Next.js App Router + Supabase + Tailwind CSS + TypeScript,
+multi-file, pushed to GitHub via Trees API, deployed to Vercel. Output quality is equivalent
+to Lovable and Bolt.
+
+These are different things. Do not collapse them. The prototype and the product serve
+different purposes at different costs.
+
+---
+
+## Competitive position at v0.2.0
+
+| Capability | Jugnus v0.2 | Lovable | Bolt | Devin |
+|---|---|---|---|---|
+| Output | Next.js + Supabase (multi-file) | React/Vite | React/Vite | Full codebase |
+| Output quality | Equivalent to Lovable | ✅ | ✅ | Superior |
+| Domain routing | ✅ | ❌ | ❌ | ❌ |
+| Visual prototype before build | ✅ (Nia's HTML) | ❌ | ❌ | ❌ |
+| Independent reviewer | ✅ (Tara ≠ Leo) | ❌ | ❌ | ❌ |
+| Founder sees output before Leo builds | ✅ | ❌ | ❌ | Partial |
+| Non-technical positioning | ✅ | Partial | ❌ | ❌ |
+| 2D world | ✅ (Phase 3) | ❌ | ❌ | ❌ |
+| Proven at scale | ❌ | ✅ | ✅ | ✅ |
+
 ---
 
 ## Core architectural principle
