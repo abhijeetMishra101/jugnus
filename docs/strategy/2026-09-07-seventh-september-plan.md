@@ -16,18 +16,35 @@
 5. Both a chat renderer and a 2D world renderer reading the same event stream, switchable via a toggle
 6. A semantic event vocabulary that future UIs can consume without pipeline changes
 
-### Nia vs Leo — the critical output distinction
+### Nia and Leo — stable identity, contextual specialisation
 
-**Nia** produces a self-contained HTML file (inline CSS, no external deps) as a cheap visual
-prototype. This is shown to the founder for approval before Leo starts. It is a reference
-spec, not the deliverable.
+**Nia = shape / propose / align.** Nia produces the alignment artifact: a cheap, tangible
+representation of the proposed direction that the founder reviews before execution begins.
+The format depends on the domain — HTML mockup for software/web, structured document for
+business/research/travel, outline for reports, draft content for creative work. Nia is not
+"the HTML jugnu." HTML is the first implementation of a broader alignment concept.
 
-**Leo** produces the real product: Next.js App Router + Supabase + Tailwind CSS + TypeScript,
-multi-file, pushed to GitHub via Trees API, deployed to Vercel. Output quality is equivalent
-to Lovable and Bolt.
+**Leo = execute / produce / build.** Leo takes the approved direction and produces a
+deliverable that requires genuine construction. For v0.2 Leo's implemented capability is
+software-focused (Next.js + Supabase + TypeScript). Future non-software workflows may have
+legitimate execution work for Leo — document generation pipelines, API integrations,
+data processing. Leo is not hardcoded to software as an identity invariant; it is his
+current implemented specialisation.
 
-These are different things. Do not collapse them. The prototype and the product serve
-different purposes at different costs.
+**When Leo is skipped:** when the deliverable does not require building or executing
+anything — a document, plan, research output, or written artifact. In those cases Nia's
+alignment artifact IS the deliverable and goes directly to Tara for review.
+
+Do not collapse Nia and Leo. Do not expand Leo into domains he cannot yet handle.
+
+### Human approval — default boundary, not invariant
+
+One approval checkpoint is the default: after Nia's alignment artifact, before Leo executes.
+This is the commitment boundary — cheap and reversible before it, expensive after it.
+
+Future high-risk external actions (spending money, publishing content, sending messages,
+making bookings) may require additional explicit authorisation. Do not build those now.
+Do not architect exactly-one-gate as an invariant.
 
 ---
 
@@ -160,15 +177,18 @@ Add `cache_control: { type: 'ephemeral' }` to the system prompt and context bloc
 
 Anthropic caches these for 5 minutes. Subsequent jugnu dispatches skip re-processing the full context. ~40% reduction in input processing latency. Two-line change.
 
-### 1d — Maya domain classifier + runtime persona assignment
+### 1d — Maya routing + runtime persona assignment
 
 Expand `create_task_plan` tool schema with two new fields:
 
 ```typescript
-complexity: { type: 'string', enum: ['simple', 'medium', 'complex'] }
-// simple  → skip Nia, straight to Leo (or Maya handles alone)
-// medium  → Nia prototype + approval gate + Leo
-// complex → Maya asks 1-3 questions first, then medium path
+needs_clarification: { type: 'boolean' }
+// true  → ask before planning (uncertainty-based, not complexity-based)
+// false → plan immediately
+//
+// Rule: ask only when the answer would materially change WHAT gets built
+// or WHO does it. A vague simple request may need questions. A detailed
+// complex spec may need none. Complexity is not the trigger — uncertainty is.
 
 jugnu_roles: {
   type: 'object',
@@ -195,25 +215,40 @@ UI reads `project.constraints.jugnu_roles` and shows "Nia · Itinerary Curator" 
 
 ## Phase 2 — Smart pipeline (3–4 days, parallel with Phase 3)
 
-### 2a — Approval task type
+### 2a — Approval task type (domain-neutral alignment gate)
 
-Add `jugnu_key: 'human'` as a valid task type. `advanceProject` in `executor.ts` skips tasks where `jugnu_key === 'human'` — they do not dispatch a jugnu. They wait until the founder resolves them.
+Add `jugnu_key: 'human'` as a valid task type. `advanceProject` in `executor.ts` skips tasks
+where `jugnu_key === 'human'` — they do not dispatch a jugnu. They wait until the founder
+resolves them.
 
-When `complexity === 'medium'` or `'complex'`, Maya's plan includes an approval task between the Nia prototype task and the Leo build task:
+The gate is domain-neutral. It pauses on any alignment artifact Nia produces — HTML mockup,
+structured document, outline, draft. The mechanism is identical regardless of what Nia wrote.
 
+Maya's plan structure when an alignment artifact is needed:
 ```
-[Nia: create prototype] → [human: approve prototype] → [Leo: full build] → [Tara: review]
+[Nia: create alignment artifact] → [human: approve direction] → [Leo: execute] → [Tara: review]
+```
+or when Leo is not needed:
+```
+[Nia: produce deliverable] → [human: approve] → [Tara: verify]
 ```
 
-UI: when `APPROVAL_REQUIRED` event fires, show the prototype in the files panel with an approve button and a feedback input. On approve: mark the human task `completed`, `advanceProject` naturally picks up Leo. On feedback: insert a Nia revision task, loop back.
+UI: when `APPROVAL_REQUIRED` fires, show Nia's artifact in the files panel with an approve
+button and a feedback input. On approve: mark human task `completed`, pipeline resumes.
+On feedback: insert a Nia revision task before the human task, loop back.
+
+**Correction loop bound:** Tara↔Leo revision cycles are capped at 2. If Tara requests
+changes twice and the second Leo revision still fails review, Tara escalates to the founder
+rather than requesting a third cycle. Unbounded loops waste tokens and time.
 
 ### 2b — Maya rewrite
 
 New system prompt for Maya:
-- Permits 1–3 questions for `complex` classification only
-- Hard rule: only ask if the answer changes the plan structure (not output quality)
-- `ask_founder` now sets the current Maya task to `awaiting_input` — executor will not advance until resolved
+- Ask only when the answer would materially change what gets built or who does it — not based on request length or apparent complexity
+- A vague short request may need questions; a detailed long spec may need none
+- Hard rule: if you can make a reasonable decision without the answer, make it
 - Questions delivered as a single `ask_founder` call with an array, never one at a time
+- Clarification answers must be embedded explicitly in task descriptions so they propagate as durable constraints to Nia, Leo, and Tara — do not rely on chat history alone
 
 ### 2c — Pipeline resume after clarification
 
@@ -225,7 +260,10 @@ When founder answers Maya's questions: mark the escalation `resolved`, re-invoke
 
 ### 3a — View toggle
 
-Add a `view: 'chat' | 'world'` state to the workspace layout. Two icon buttons in the top bar switch views. Both renderers are always mounted but only one is visible — preserves Realtime subscriptions across switches.
+Add a `view: 'chat' | 'world'` state to the workspace layout. Two icon buttons in the top
+bar switch views. The chat renderer is always mounted. The 2D renderer is lazy-mounted on
+first switch and stays mounted after that — avoids unnecessary render cost while preserving
+Realtime subscriptions once activated.
 
 ### 3b — 2D world renderer v1
 
@@ -271,19 +309,40 @@ Both renderers use this hook. It subscribes to Realtime once and returns typed e
 ## Phase 4 — Connect and ship (2 days)
 
 - Verify streaming works end-to-end on Vercel (SSE handling, `waitUntil` compatibility)
-- Run real projects through simple / medium / complex routing
 - Verify persona names appear correctly in both chat and 2D renderers
-- Verify approval gate pauses and resumes correctly
-- Git tag `v0.2.0`
+- Verify approval gate pauses and resumes correctly for a software project
+- Verify correction loop bound fires correctly after 2 Tara revision cycles
+
+**v0.2.0 exit criteria — two required test prompts:**
+
+1. `"Build a landing page for my bakery"` — must complete the full software path:
+   Maya plans → Nia produces HTML mockup → founder approves → Leo builds Next.js →
+   Tara reviews → live PR URL in chat.
+
+2. `"Plan a weekend trip to Lonavala"` — architectural test only, not a travel product:
+   - Must NOT automatically produce a website or Next.js app
+   - Must recognise this as a non-software objective
+   - Must either produce an appropriate artifact with current capabilities (a structured
+     document via Nia) OR gracefully surface that travel-specific execution is not yet
+     supported
+   - Leo must be skipped unless explicitly appropriate
+   - Do not add travel-specific infrastructure to make this pass — the test is whether
+     the routing logic is domain-neutral, not whether Jugnus is a travel product
+
+Git tag `v0.2.0` after both tests pass.
 
 ---
 
 ## What is explicitly NOT in this plan
 
-- Adding a 5th or 6th jugnu (the persona model makes this unnecessary for v0.2)
+- Adding a 5th or 6th jugnu — persona model makes this unnecessary for v0.2
 - A game engine (Phaser, Unity, etc.) — CSS + Framer Motion is sufficient for v1
-- Pro tier / Next.js output — Leo stays on self-contained HTML for now
-- Dynamic team assembly beyond Maya's skip logic — deferred to v0.3
+- Travel, marketing, or business domain infrastructure — general-purpose architecture, narrow MVP
+- Deterministic verification for Tara (build runners, test execution, browser checks) — v0.3+
+- Budget/cost estimation before job acceptance — preserve the architectural place at the
+  commitment boundary; do not build the feature yet
+- Multiple approval gates for high-risk actions (publishing, spending, booking) — noted as
+  future; do not build or hardcode exactly-one-gate as invariant
 
 ---
 
