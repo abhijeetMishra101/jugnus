@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { JugnuIllustration } from './JugnuIllustration'
 import { useProjectEvents } from '../hooks/useProjectEvents'
@@ -37,91 +37,92 @@ const ARTIFACT_POSITIONS: Record<ArtifactPos, { x: string; y: string }> = {
 
 const JUGNU_ORDER: JugnuKey[] = ['maya', 'nia', 'leo', 'tara']
 
-export function WorldRenderer({ projectId, jugnus }: Props) {
-  const events = useProjectEvents(projectId)
-  const [deskStates, setDeskStates] = useState<Record<string, DeskState>>({
-    maya: 'idle', nia: 'idle', leo: 'idle', tara: 'idle',
-  })
-  const [artifactPos, setArtifactPos] = useState<ArtifactPos>('center')
-  const [activeJugnu, setActiveJugnu] = useState<string | null>(null)
-  const [thinkingJugnu, setThinkingJugnu] = useState<string | null>(null)
-  const [isComplete, setIsComplete] = useState(false)
-  const [awaitingApproval, setAwaitingApproval] = useState(false)
+interface WorldState {
+  deskStates: Record<string, DeskState>
+  artifactPos: ArtifactPos
+  activeJugnu: string | null
+  thinkingJugnu: string | null
+  isComplete: boolean
+  awaitingApproval: boolean
+}
 
-  useEffect(() => {
-    const latest = events[events.length - 1]
-    if (!latest) return
+function deriveWorldState(events: ReturnType<typeof useProjectEvents>): WorldState {
+  const deskStates: Record<string, DeskState> = { maya: 'idle', nia: 'idle', leo: 'idle', tara: 'idle' }
+  let artifactPos: ArtifactPos = 'center'
+  let activeJugnu: string | null = null
+  let thinkingJugnu: string | null = null
+  let isComplete = false
+  let awaitingApproval = false
 
-    const { event_type, jugnu_key } = latest
-
+  for (const { event_type, jugnu_key } of events) {
     switch (event_type) {
       case 'TASK_ASSIGNED':
         if (jugnu_key && DESK_POSITIONS[jugnu_key]) {
-          setActiveJugnu(jugnu_key)
-          setDeskStates((s) => ({ ...s, [jugnu_key]: 'working' }))
-          setArtifactPos(jugnu_key as ArtifactPos)
-          setAwaitingApproval(false)
+          activeJugnu = jugnu_key
+          deskStates[jugnu_key] = 'working'
+          artifactPos = jugnu_key as ArtifactPos
+          awaitingApproval = false
         }
         break
-
       case 'JUGNU_THINKING':
-        if (jugnu_key) setThinkingJugnu(jugnu_key)
+        if (jugnu_key) thinkingJugnu = jugnu_key
         break
-
       case 'JUGNU_SPOKE':
       case 'JUGNU_STARTED':
-        setThinkingJugnu(null)
+        thinkingJugnu = null
         break
-
       case 'PROTOTYPE_READY':
       case 'APPROVAL_REQUIRED':
-        setArtifactPos('center')
-        setAwaitingApproval(true)
-        setActiveJugnu(null)
+        artifactPos = 'center'
+        awaitingApproval = true
+        activeJugnu = null
         break
-
       case 'PROTOTYPE_APPROVED':
-        setAwaitingApproval(false)
+        awaitingApproval = false
         break
-
       case 'PROTOTYPE_REVISED':
-        setAwaitingApproval(false)
-        setDeskStates((s) => ({ ...s, nia: 'working' }))
-        setArtifactPos('nia')
+        awaitingApproval = false
+        deskStates['nia'] = 'working'
+        artifactPos = 'nia'
+        activeJugnu = 'nia'
         break
-
       case 'FILE_WRITTEN':
         if (jugnu_key && DESK_POSITIONS[jugnu_key]) {
-          setDeskStates((s) => ({ ...s, [jugnu_key]: 'working' }))
+          deskStates[jugnu_key] = 'working'
         }
         break
-
       case 'REVIEW_STARTED':
-        setDeskStates((s) => ({ ...s, tara: 'working' }))
-        setArtifactPos('tara')
-        setActiveJugnu('tara')
+        deskStates['tara'] = 'working'
+        artifactPos = 'tara'
+        activeJugnu = 'tara'
         break
-
       case 'TASK_RETURNED':
-        setDeskStates((s) => ({ ...s, tara: 'idle', leo: 'working' }))
-        setArtifactPos('leo')
-        setActiveJugnu('leo')
+        deskStates['tara'] = 'idle'
+        deskStates['leo'] = 'working'
+        artifactPos = 'leo'
+        activeJugnu = 'leo'
         break
-
       case 'REVIEW_PASSED':
       case 'PROJECT_COMPLETED':
-        setDeskStates({ maya: 'done', nia: 'done', leo: 'done', tara: 'done' })
-        setArtifactPos('delivered')
-        setActiveJugnu(null)
-        setThinkingJugnu(null)
-        setIsComplete(true)
+        Object.keys(deskStates).forEach((k) => { deskStates[k] = 'done' })
+        artifactPos = 'delivered'
+        activeJugnu = null
+        thinkingJugnu = null
+        isComplete = true
         break
-
       case 'TASK_COMPLETED':
-        if (jugnu_key) setDeskStates((s) => ({ ...s, [jugnu_key]: 'done' }))
+        if (jugnu_key) deskStates[jugnu_key] = 'done'
         break
     }
-  }, [events])
+  }
+
+  return { deskStates, artifactPos, activeJugnu, thinkingJugnu, isComplete, awaitingApproval }
+}
+
+export function WorldRenderer({ projectId, jugnus }: Props) {
+  const events = useProjectEvents(projectId)
+  const { deskStates, artifactPos, activeJugnu, thinkingJugnu, isComplete, awaitingApproval } =
+    useMemo(() => deriveWorldState(events), [events])
 
   const roleFor = (key: JugnuKey) =>
     jugnus.find((j) => j.key === key)?.display_role ?? key.charAt(0).toUpperCase() + key.slice(1)
