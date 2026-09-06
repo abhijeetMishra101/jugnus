@@ -26,24 +26,19 @@ function bestFile(files: FileSnapshot[]): { file: FileSnapshot; mode: ViewMode }
 
 export function FilesPanel({ projectId, initialFiles, projectStatus }: Props) {
   const [files, setFiles] = useState<FileSnapshot[]>(initialFiles)
-  const [selected, setSelected] = useState<FileSnapshot | null>(null)
-  const [open, setOpen] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('code')
+  const [selected, setSelected] = useState<FileSnapshot | null>(() => {
+    if (projectStatus === 'completed') return bestFile(initialFiles)?.file ?? null
+    return null
+  })
+  const [open, setOpen] = useState(() =>
+    projectStatus === 'completed' && bestFile(initialFiles) !== null
+  )
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (projectStatus === 'completed') return bestFile(initialFiles)?.mode ?? 'code'
+    return 'code'
+  })
 
   const isHtml = selected?.path.endsWith('.html') ?? false
-
-  // Auto-open in preview for already-completed projects on page load
-  useEffect(() => {
-    if (projectStatus === 'completed') {
-      const best = bestFile(initialFiles)
-      if (best) {
-        setOpen(true)
-        setSelected(best.file)
-        setViewMode(best.mode)
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     const db = createBrowserClient()

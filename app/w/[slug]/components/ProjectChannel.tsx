@@ -302,26 +302,18 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const [activities, setActivities]   = useState<string[]>([])
   const [input, setInput]             = useState('')
   const [sending, setSending]         = useState(false)
-  const [approvalTask, setApprovalTask] = useState<{ taskId: string | null } | null>(null)
   const bottomRef   = useRef<HTMLDivElement>(null)
   // IDs of messages that existed at load time — those sections never play the fly-in
   const initialIds  = useRef(new Set(initialMessages.map((m) => m.id)))
 
-  // Listen for approval events
+  // Derive approval gate state from event stream — no separate state needed
   const events = useProjectEvents(projectId)
-  useEffect(() => {
-    const latest = events[events.length - 1]
-    if (!latest) return
-    if (latest.event_type === 'APPROVAL_REQUIRED') {
-      setApprovalTask({ taskId: latest.task_id ?? null })
-    } else if (
-      latest.event_type === 'PROTOTYPE_APPROVED' ||
-      latest.event_type === 'PROTOTYPE_REVISED' ||
-      latest.event_type === 'PROJECT_COMPLETED'
-    ) {
-      setApprovalTask(null)
-    }
-  }, [events])
+  const lastRelevant = [...events].reverse().find((e) =>
+    ['APPROVAL_REQUIRED', 'PROTOTYPE_APPROVED', 'PROTOTYPE_REVISED', 'PROJECT_COMPLETED'].includes(e.event_type)
+  )
+  const approvalTask = lastRelevant?.event_type === 'APPROVAL_REQUIRED'
+    ? { taskId: lastRelevant.task_id ?? null }
+    : null
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -398,6 +390,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     setSending(false)
   }
 
+  // eslint-disable-next-line react-hooks/refs
   const feed = buildFeed(messages, initialIds.current)
 
   return (

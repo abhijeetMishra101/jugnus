@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { ProjectChannel } from './ProjectChannel'
 import { FilesPanel } from './FilesPanel'
 import { JugnuPanel } from './JugnuPanel'
@@ -43,8 +43,7 @@ export function ProjectPageClient({
   jugnuRoles,
 }: Props) {
   const [view, setView] = useState<'chat' | 'world'>('chat')
-  const worldMounted = useRef(false)
-  if (view === 'world') worldMounted.current = true
+  const [worldEverMounted, setWorldEverMounted] = useState(false)
 
   // Build jugnu info list for WorldRenderer from jugnu_roles + registry keys
   const jugnuInfos: JugnuInfo[] = (['maya', 'nia', 'leo', 'tara'] as JugnuKey[]).map((key) => ({
@@ -82,7 +81,7 @@ export function ProjectPageClient({
               Chat
             </button>
             <button
-              onClick={() => setView('world')}
+              onClick={() => { setWorldEverMounted(true); setView('world') }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 view === 'world'
                   ? 'bg-white text-gray-900 shadow-sm'
@@ -108,7 +107,7 @@ export function ProjectPageClient({
         </div>
 
         {/* World — lazy-mounted on first toggle, then always in DOM */}
-        {worldMounted.current && (
+        {worldEverMounted && (
           <div className={`flex-1 min-h-0 ${view === 'chat' ? 'hidden' : ''}`}>
             <WorldRenderer projectId={project.id} jugnus={jugnuInfos} />
           </div>
