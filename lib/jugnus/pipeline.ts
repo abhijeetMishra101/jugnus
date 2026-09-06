@@ -43,8 +43,16 @@ export async function runPipeline(
   const { dispatched, jugnuKey: nextKey, taskId: nextTaskId } = await advanceProject(projectId, db)
 
   if (dispatched && nextKey) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-    await fetch(`${appUrl}/api/internal/jugnu-respond`, {
+    // Derive the app URL — NEXT_PUBLIC_APP_URL must be set in Vercel env vars;
+    // fall back to VERCEL_URL (auto-set by Vercel) so handoffs work even if
+    // the env var is missing.
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ??
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+
+    // Fire and forget — jugnu-respond runs the next jugnu synchronously in its
+    // own 300s invocation. We don't await so this invocation can exit cleanly.
+    void fetch(`${appUrl}/api/internal/jugnu-respond`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

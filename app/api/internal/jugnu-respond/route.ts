@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { waitUntil } from '@vercel/functions'
 import { createServiceClient } from '@/lib/supabase/server'
 import { runPipeline } from '@/lib/jugnus/pipeline'
 import type { JugnuKey } from '@/lib/jugnus/registry'
@@ -8,9 +7,10 @@ export const maxDuration = 300
 
 /**
  * POST /api/internal/jugnu-respond
- * Starts or resumes the pipeline for a project from a given jugnu.
- * Used by the watchdog cron to unstick timed-out tasks.
- * Guarded by INTERNAL_API_SECRET.
+ * Runs one jugnu synchronously up to maxDuration.
+ * Each jugnu is its own 300s Vercel invocation — no waitUntil needed.
+ * The caller fires and forgets (no await on the fetch); each hop gets
+ * its own independent budget.
  */
 export async function POST(request: Request) {
   const secret = process.env.INTERNAL_API_SECRET ?? ''
@@ -31,11 +31,11 @@ export async function POST(request: Request) {
 
   const db = createServiceClient()
 
-  waitUntil(
-    runPipeline(projectId, taskId, jugnuKey, db).catch((err) => {
-      console.error('[jugnu-respond] pipeline error:', err)
-    })
-  )
+  // Run synchronously — this function stays alive for the full jugnu execution.
+  // The CALLER fires this request and forgets (no await on its side).
+  await runPipeline(projectId, taskId, jugnuKey, db).catch((err) => {
+    console.error('[jugnu-respond] pipeline error:', err)
+  })
 
   return NextResponse.json({ ok: true })
 }

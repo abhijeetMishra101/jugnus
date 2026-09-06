@@ -46,7 +46,7 @@ export async function POST(
     const { dispatched, jugnuKey, taskId } = await advanceProject(projectId, db)
 
     if (dispatched && jugnuKey) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
       await fetch(`${appUrl}/api/internal/jugnu-respond`, {
         method: 'POST',
         headers: {
@@ -87,7 +87,7 @@ export async function POST(
 
   const { dispatched, jugnuKey, taskId } = await advanceProject(projectId, db)
   if (dispatched && jugnuKey) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
     await fetch(`${appUrl}/api/internal/jugnu-respond`, {
       method: 'POST',
       headers: {
