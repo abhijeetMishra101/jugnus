@@ -124,6 +124,7 @@ export function ProjectPageClient({
         tasks={tasks}
         escalations={escalations}
         onEscalationReply={onEscalationReply}
+        jugnuRoles={jugnuRoles}
       />
     </div>
   )

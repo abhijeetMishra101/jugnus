@@ -31,6 +31,7 @@ interface Props {
   escalations: Escalation[]
   projectId: string
   onEscalationReply: (escalationId: string, answer: string) => void
+  jugnuRoles?: Record<string, { display_role: string; focus: string }>
 }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -55,7 +56,7 @@ const JUGNU_ROLE: Record<string, string> = {
   tara: 'Reviewer',
 }
 
-export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalations: initialEscalations, projectId, onEscalationReply }: Props) {
+export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalations: initialEscalations, projectId, onEscalationReply, jugnuRoles }: Props) {
   const [jugnus, setJugnus]           = useState<Jugnu[]>(initialJugnus)
   const [tasks, setTasks]             = useState<Task[]>(initialTasks)
   const [escalations, setEscalations] = useState<Escalation[]>(initialEscalations)
@@ -128,7 +129,9 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
                     </span>
                   </div>
                   <p className="text-xs text-gray-400 truncate">
-                    {currentTask ? currentTask.title : JUGNU_ROLE[j.key] ?? j.role}
+                    {currentTask
+                      ? currentTask.title
+                      : jugnuRoles?.[j.key]?.display_role ?? JUGNU_ROLE[j.key] ?? j.role}
                   </p>
                 </div>
               </div>

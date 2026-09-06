@@ -322,16 +322,28 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       .channel(`project-messages-${projectId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'messages',
+        filter: `project_id=eq.${projectId}`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       }, (payload: any) => {
         const msg = payload.new as Message
-        if (msg.project_id !== projectId) return
         if (msg.author_type === 'activity') {
           setActivities((prev) => [...prev, msg.content])
           return
         }
         if (msg.author_type === 'jugnu') setActivities([])
         setMessages((prev) => prev.find((m) => m.id === msg.id) ? prev : [...prev, msg])
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'messages',
+        filter: `project_id=eq.${projectId}`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }, (payload: any) => {
+        const msg = payload.new as Message
+        if (msg.author_type !== 'jugnu') return
+        // Streaming: update content of an existing live row in place
+        setMessages((prev) =>
+          prev.map((m) => m.id === msg.id ? { ...m, content: msg.content } : m)
+        )
       })
       .subscribe()
 
