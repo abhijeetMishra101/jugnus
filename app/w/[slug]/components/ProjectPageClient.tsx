@@ -1,11 +1,42 @@
 'use client'
 
-import { useState } from 'react'
+import { Component, useState, type ReactNode } from 'react'
 import { ProjectChannel } from './ProjectChannel'
 import { FilesPanel } from './FilesPanel'
 import { JugnuPanel } from './JugnuPanel'
 import { WorldRenderer } from './WorldRenderer'
 import type { JugnuKey } from '@/lib/jugnus/registry'
+
+class WorldErrorBoundary extends Component<
+  { children: ReactNode },
+  { crashed: boolean; msg: string }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { crashed: false, msg: '' }
+  }
+  static getDerivedStateFromError(err: unknown) {
+    return { crashed: true, msg: err instanceof Error ? err.message : String(err) }
+  }
+  render() {
+    if (this.state.crashed) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-[#0f172a] text-gray-500 text-sm font-mono flex-col gap-3">
+          <span className="text-2xl">⚠️</span>
+          <p>World view failed to render</p>
+          <p className="text-xs text-gray-700 max-w-xs text-center">{this.state.msg}</p>
+          <button
+            onClick={() => this.setState({ crashed: false, msg: '' })}
+            className="mt-2 px-4 py-1.5 rounded-lg border border-gray-700 text-xs hover:border-gray-500 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 interface JugnuInfo {
   key: JugnuKey
@@ -109,7 +140,9 @@ export function ProjectPageClient({
         {/* World — lazy-mounted on first toggle, then always in DOM */}
         {worldEverMounted && (
           <div className={`flex-1 min-h-0 ${view === 'chat' ? 'hidden' : ''}`}>
-            <WorldRenderer projectId={project.id} jugnus={jugnuInfos} />
+            <WorldErrorBoundary>
+              <WorldRenderer projectId={project.id} jugnus={jugnuInfos} />
+            </WorldErrorBoundary>
           </div>
         )}
       </div>

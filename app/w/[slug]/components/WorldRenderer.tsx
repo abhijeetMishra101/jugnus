@@ -213,6 +213,8 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
       className="relative w-full h-full overflow-hidden select-none"
       style={{ background: 'linear-gradient(160deg, #0d1117 0%, #0f172a 60%, #111827 100%)' }}
     >
+      <style>{`@keyframes w-pulse{0%,100%{r:3px;opacity:.9}50%{r:7px;opacity:.3}}`}</style>
+
       {/* Scanline texture overlay for pixel-art feel */}
       <div
         className="absolute inset-0 pointer-events-none z-10"
@@ -227,29 +229,7 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
         viewBox={`0 0 ${VW} ${VH}`}
         preserveAspectRatio="xMidYMid meet"
       >
-        <defs>
-          <filter id="w-glow" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="w-glow-sm" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="w-artifact-glow" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation="8" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+        <defs>{/* no filters — SVG feGaussianBlur + feMerge cause GPU crashes */}</defs>
 
         {/* ── Floor tiles ── */}
         {floorTiles.map(({ col, row }) => {
@@ -299,7 +279,7 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
           const cy = sy(g.col, g.row)
 
           return (
-            <g key={key} filter={isWorking ? 'url(#w-glow)' : undefined}>
+            <g key={key}>
               {/* Block body */}
               <polygon points={leftPts(g.col, g.row, BH)}  fill={pal.l} />
               <polygon points={rightPts(g.col, g.row, BH)} fill={pal.r} />
@@ -329,19 +309,17 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
                 />
               ))}
 
-              {/* Active: pulsing orb on top */}
+              {/* Active: pulsing orb (CSS animation, not SMIL — more compatible) */}
               {isWorking && (
-                <circle cx={cx} cy={cy - BH - 4} r={4} fill={accent} filter="url(#w-glow-sm)">
-                  <animate attributeName="r" values="3;6;3" dur="1.4s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="1;0.4;1" dur="1.4s" repeatCount="indefinite" />
-                </circle>
+                <circle cx={cx} cy={cy - BH - 4} r={5} fill={accent} opacity="0.9"
+                  style={{ animation: 'w-pulse 1.4s ease-in-out infinite' }}
+                />
               )}
 
               {/* Done: checkmark glyph */}
               {isDone && (
                 <text x={cx} y={cy - BH - 10} textAnchor="middle"
                   fontSize="11" fill={accent} fontFamily="monospace" fontWeight="bold"
-                  filter="url(#w-glow-sm)"
                 >
                   ✓
                 </text>
@@ -382,7 +360,6 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
             transform: `translate(${artX}px, ${artY}px)`,
             transition: 'transform 0.75s cubic-bezier(0.34, 1.4, 0.64, 1)',
           }}
-          filter="url(#w-artifact-glow)"
         >
           <polygon points={ART_LEFT}  fill={artColors.l} />
           <polygon points={ART_RIGHT} fill={artColors.r} />
@@ -409,7 +386,6 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
               stroke="#10b981"
               strokeWidth="1.5"
               strokeDasharray="4 3"
-              filter="url(#w-glow-sm)"
             />
             <text
               x={sx(2.5, 4.5)}
