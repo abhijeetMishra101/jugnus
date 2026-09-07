@@ -210,10 +210,10 @@ function UserItem({ msg }: { msg: Message }) {
 
 // ─── DesignPreviewCard ───────────────────────────────────────────────────────
 
-function DesignPreviewCard({ projectId }: { projectId: string }) {
+function DesignPreviewCard({ projectId, isRevising }: { projectId: string; isRevising: boolean }) {
   return (
     <div className="ml-[136px] mr-6 mb-3">
-      <div className="rounded-2xl border border-blue-100 bg-white overflow-hidden shadow-sm">
+      <div className={`rounded-2xl border overflow-hidden shadow-sm transition-all ${isRevising ? 'border-amber-200 bg-white' : 'border-blue-100 bg-white'}`}>
         {/* Scaled iframe thumbnail */}
         <div className="relative w-full overflow-hidden" style={{ height: 220 }}>
           <iframe
@@ -227,21 +227,33 @@ function DesignPreviewCard({ projectId }: { projectId: string }) {
               transformOrigin: 'top left',
             }}
           />
+          {isRevising && (
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-full px-4 py-2 shadow-sm">
+                <span className="block w-2 h-2 rounded-full bg-amber-400" style={{ animation: 'jugnu-bounce 1.2s ease-in-out infinite' }} />
+                <span className="text-xs font-semibold text-amber-700">Nia is updating the design…</span>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="px-4 py-3 flex items-center justify-between border-t border-blue-100 bg-blue-50">
+        <div className={`px-4 py-3 flex items-center justify-between border-t ${isRevising ? 'border-amber-100 bg-amber-50' : 'border-blue-100 bg-blue-50'}`}>
           <div className="flex items-center gap-2">
             <span>🎨</span>
             <span className="text-sm font-semibold text-gray-800">Nia&apos;s design</span>
-            <span className="text-xs text-gray-400">ready for review</span>
+            <span className={`text-xs ${isRevising ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+              {isRevising ? 'being revised' : 'ready for review'}
+            </span>
           </div>
-          <a
-            href={`/preview/${projectId}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
-          >
-            Open full design →
-          </a>
+          {!isRevising && (
+            <a
+              href={`/preview/${projectId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              Open full design →
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -490,7 +502,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
               <div key={key}>
                 {inner}
                 {niaCompleted && i === lastNiaFeedIndex && (
-                  <DesignPreviewCard projectId={projectId} />
+                  <DesignPreviewCard projectId={projectId} isRevising={activeJugnu === 'nia'} />
                 )}
               </div>
             )
