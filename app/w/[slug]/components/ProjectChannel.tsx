@@ -208,6 +208,46 @@ function UserItem({ msg }: { msg: Message }) {
   )
 }
 
+// ─── DesignPreviewCard ───────────────────────────────────────────────────────
+
+function DesignPreviewCard({ projectId }: { projectId: string }) {
+  return (
+    <div className="ml-[136px] mr-6 mb-3">
+      <div className="rounded-2xl border border-blue-100 bg-white overflow-hidden shadow-sm">
+        {/* Scaled iframe thumbnail */}
+        <div className="relative w-full overflow-hidden" style={{ height: 220 }}>
+          <iframe
+            src={`/preview/${projectId}`}
+            title="Design preview"
+            className="border-0 pointer-events-none"
+            style={{
+              width: '250%',
+              height: '550px',
+              transform: 'scale(0.4)',
+              transformOrigin: 'top left',
+            }}
+          />
+        </div>
+        <div className="px-4 py-3 flex items-center justify-between border-t border-blue-100 bg-blue-50">
+          <div className="flex items-center gap-2">
+            <span>🎨</span>
+            <span className="text-sm font-semibold text-gray-800">Nia&apos;s design</span>
+            <span className="text-xs text-gray-400">ready for review</span>
+          </div>
+          <a
+            href={`/preview/${projectId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            Open full design →
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── ApprovalCard ────────────────────────────────────────────────────────────
 
 function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string | null }) {
@@ -405,6 +445,11 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   // eslint-disable-next-line react-hooks/refs
   const feed = buildFeed(messages, initialIds.current)
 
+  // Show inline design preview after Nia's last message group once she completes
+  const niaCompleted = events.some((e) => e.event_type === 'TASK_COMPLETED' && e.jugnu_key === 'nia')
+  const lastNiaFeedIndex = feed.reduce((acc, item, i) =>
+    item.type === 'jugnu' && item.authorKey === 'nia' ? i : acc, -1)
+
   return (
     <>
       <style>{`
@@ -433,13 +478,22 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto py-4">
           {feed.map((item, i) => {
-            if (item.type === 'jugnu') {
-              return <JugnuSection key={`${item.authorKey}-${i}`} authorKey={item.authorKey} messages={item.messages} isNew={item.isNew} />
-            }
-            if (item.type === 'system') {
-              return <SystemItem key={item.message.id} msg={item.message} />
-            }
-            return <UserItem key={item.message.id} msg={item.message} />
+            const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
+            const inner = (() => {
+              if (item.type === 'jugnu') {
+                return <JugnuSection authorKey={item.authorKey} messages={item.messages} isNew={item.isNew} />
+              }
+              if (item.type === 'system') return <SystemItem msg={item.message} />
+              return <UserItem msg={item.message} />
+            })()
+            return (
+              <div key={key}>
+                {inner}
+                {niaCompleted && i === lastNiaFeedIndex && (
+                  <DesignPreviewCard projectId={projectId} />
+                )}
+              </div>
+            )
           })}
 
           {activeJugnu && <TypingBubble jugnuKey={activeJugnu} activities={activities} />}
