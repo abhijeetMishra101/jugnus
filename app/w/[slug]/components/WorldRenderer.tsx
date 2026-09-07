@@ -20,7 +20,7 @@ const BH = 30     // crafting-station block height
 const AH = 14     // artifact block height
 
 const OX = 295    // screen X for world col=0,row=0
-const OY = 138    // screen Y for world col=0,row=0
+const OY = 162    // screen Y for world col=0,row=0 (bumped down to keep Maya block in frame)
 
 function sx(col: number, row: number): number { return OX + (col - row) * TW / 2 }
 function sy(col: number, row: number): number { return OY + (col + row) * TH / 2 }
@@ -399,43 +399,40 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
             </text>
           </g>
         )}
-      </svg>
 
-      {/* ── Jugnu illustrations (overlay, avoids SVG distortion) ──
-          Outer div: static centering via transform (no framer-motion — avoids
-          the crash where motion parses % units from style.transform as an
-          initial animation value).
-          Inner motion.div: ONLY handles the y-bob, no transform in style. */}
-      {JUGNU_ORDER.map((key) => {
-        const g = GRID[key]
-        const isWorking = activeJugnu === key
+        {/* ── Jugnu illustrations (inside SVG as foreignObject so they scale
+            with the viewBox — avoids % overlay drift when SVG letterboxes) ── */}
+        {JUGNU_ORDER.map((key) => {
+          const g = GRID[key]
+          const isWorking = activeJugnu === key
+          const jw = 56
+          const jh = Math.round(jw * (248 / 256))
+          const cx = sx(g.col, g.row)
+          const cy = sy(g.col, g.row)
 
-        const screenX = sx(g.col, g.row)
-        const screenY = sy(g.col, g.row) - BH - 60
-
-        return (
-          <div
-            key={key}
-            className="absolute pointer-events-none z-20"
-            style={{
-              left: (screenX / VW) * 100 + '%',
-              top:  (screenY / VH) * 100 + '%',
-              transform: 'translate(-50%, -50%)',
-            }}
-          >
-            <motion.div
-              animate={isWorking ? { y: [0, -6, 0] } : { y: 0 }}
-              transition={
-                isWorking
-                  ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
-                  : { duration: 0.4 }
-              }
+          return (
+            <foreignObject
+              key={`fo-${key}`}
+              x={cx - jw / 2}
+              y={cy - BH - 60 - jh / 2}
+              width={jw}
+              height={jh + 8}
+              style={{ overflow: 'visible' }}
             >
-              <JugnuIllustration jugnuKey={key} size={56} />
-            </motion.div>
-          </div>
-        )
-      })}
+              <motion.div
+                animate={isWorking ? { y: [0, -6, 0] } : { y: 0 }}
+                transition={
+                  isWorking
+                    ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
+                    : { duration: 0.4 }
+                }
+              >
+                <JugnuIllustration jugnuKey={key} size={jw} />
+              </motion.div>
+            </foreignObject>
+          )
+        })}
+      </svg>
 
       {/* ── Legend ── */}
       <div className="absolute bottom-3 right-3 z-20 flex flex-col gap-1.5">
