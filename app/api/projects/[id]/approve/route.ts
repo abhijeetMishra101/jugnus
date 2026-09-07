@@ -34,6 +34,29 @@ export async function POST(
       completed_at: new Date().toISOString(),
     }).eq('id', humanTask.id)
 
+    // Record approval metrics in project constraints
+    const { data: niaTasks } = await db
+      .from('tasks')
+      .select('id, status')
+      .eq('project_id', projectId)
+      .eq('jugnu_key', 'nia')
+
+    const { data: projForMetrics } = await db
+      .from('projects')
+      .select('constraints')
+      .eq('id', projectId)
+      .single()
+
+    const existingConstraints = (projForMetrics?.constraints ?? {}) as Record<string, unknown>
+    const approvalMetrics = {
+      nia_revision_count: ((niaTasks ?? []).filter((t) => t.status === 'completed').length) - 1,
+      approved_immediately: !feedback || feedback === '',
+      approved_at: new Date().toISOString(),
+    }
+    await db.from('projects').update({
+      constraints: { ...existingConstraints, approval_metrics: approvalMetrics },
+    }).eq('id', projectId)
+
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'system',
@@ -58,6 +81,25 @@ export async function POST(
     }
 
     return NextResponse.json({ ok: true, verdict: 'approved' })
+  }
+
+  // Nia revision loop guard — count completed Nia tasks to cap revision cycles
+  const { count: niaDoneCount } = await db
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('project_id', projectId)
+    .eq('jugnu_key', 'nia')
+    .eq('status', 'completed')
+
+  if ((niaDoneCount ?? 0) >= 3) {
+    await db.from('messages').insert({
+      project_id: projectId,
+      author_type: 'system',
+      author_key: 'system',
+      content: 'Maximum revision cycles reached. Consider approving the current version or starting a new project.',
+      metadata: { event_type: 'REVISION_LIMIT_REACHED', nia_done_count: niaDoneCount },
+    })
+    return NextResponse.json({ ok: false, reason: 'revision_limit_reached' }, { status: 409 })
   }
 
   // Feedback — insert a Nia revision task before the human approval task

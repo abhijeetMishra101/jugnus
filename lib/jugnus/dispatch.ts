@@ -79,7 +79,36 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
   let finalMessage: string | null = null
   let done = false
 
+  // Telemetry accumulators for this dispatch run
+  let totalInputTokens = 0
+  let totalCachedTokens = 0
+  let totalOutputTokens = 0
+  let totalModelCalls = 0
+  let totalCost = 0
+
   for (let turn = 0; turn < 10 && !done; turn++) {
+    // Budget ceiling check before each model call
+    if (taskId) {
+      const { data: budgetProj } = await db
+        .from('projects')
+        .select('total_cost_usd, credit_ceiling_usd')
+        .eq('id', projectId)
+        .single()
+      if (
+        budgetProj?.credit_ceiling_usd != null &&
+        (budgetProj.total_cost_usd ?? 0) >= budgetProj.credit_ceiling_usd
+      ) {
+        await db.from('messages').insert({
+          project_id: projectId,
+          author_type: 'system',
+          author_key: 'system',
+          content: `Project paused: execution budget of $${budgetProj.credit_ceiling_usd} reached. Resume from your project settings.`,
+          metadata: { event_type: 'BUDGET_EXCEEDED', ceiling: budgetProj.credit_ceiling_usd, spent: budgetProj.total_cost_usd },
+        })
+        break
+      }
+    }
+
     // Activity indicator while waiting for first token
     await db.from('messages').insert({
       project_id: projectId,
@@ -143,6 +172,19 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
     const response = await stream.finalMessage()
 
+    // Accumulate token usage — claude-sonnet-4-6 pricing: $3/M input, $0.30/M cache read, $15/M output
+    if (response.usage) {
+      const inputTok = response.usage.input_tokens ?? 0
+      const cacheTok = (response.usage as unknown as Record<string, unknown>).cache_read_input_tokens as number ?? 0
+      const outputTok = response.usage.output_tokens ?? 0
+      const turnCost = (inputTok * 3 + cacheTok * 0.30 + outputTok * 15) / 1_000_000
+      totalInputTokens += inputTok
+      totalCachedTokens += cacheTok
+      totalOutputTokens += outputTok
+      totalModelCalls += 1
+      totalCost += turnCost
+    }
+
     if (response.stop_reason === 'end_turn') {
       done = true
       break
@@ -202,6 +244,43 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       { role: 'assistant', content: response.content },
       { role: 'user', content: toolResults },
     ]
+  }
+
+  // Write telemetry to DB after the loop completes
+  if (taskId && totalModelCalls > 0) {
+    const { data: rawTask } = await db
+      .from('tasks')
+      .select('input_tokens, cached_tokens, output_tokens, model_calls, estimated_cost_usd')
+      .eq('id', taskId)
+      .single()
+
+    await db.from('tasks').update({
+      model: MODEL,
+      input_tokens: (rawTask?.input_tokens ?? 0) + totalInputTokens,
+      cached_tokens: (rawTask?.cached_tokens ?? 0) + totalCachedTokens,
+      output_tokens: (rawTask?.output_tokens ?? 0) + totalOutputTokens,
+      model_calls: (rawTask?.model_calls ?? 0) + totalModelCalls,
+      estimated_cost_usd: ((rawTask?.estimated_cost_usd as number) ?? 0) + totalCost,
+    }).eq('id', taskId)
+  }
+
+  // Increment project total cost using a raw SQL increment to avoid read-modify-write race
+  if (totalCost > 0) {
+    await db.rpc('increment_project_cost', { p_project_id: projectId, p_cost: totalCost }).maybeSingle()
+      .then(({ error }) => {
+        if (error) {
+          // Fallback: read-modify-write if rpc not available
+          return db
+            .from('projects')
+            .select('total_cost_usd')
+            .eq('id', projectId)
+            .single()
+            .then(({ data }) => {
+              const current = (data?.total_cost_usd as number) ?? 0
+              return db.from('projects').update({ total_cost_usd: current + totalCost }).eq('id', projectId)
+            })
+        }
+      })
   }
 
   return { posted: true, toolsUsed, finalMessage }

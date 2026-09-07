@@ -76,7 +76,14 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
 
   // Human approval task — pause pipeline, emit event, do not dispatch a jugnu
   if (next.jugnu_key === 'human') {
-    await db.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', next.id)
+    const { data: humanClaimed } = await db
+      .from('tasks')
+      .update({ status: 'in_progress', started_at: new Date().toISOString() })
+      .eq('id', next.id)
+      .eq('status', 'pending')
+      .select('id')
+      .single()
+    if (!humanClaimed) return { dispatched: false, jugnuKey: null, taskId: next.id }
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'system',
@@ -88,7 +95,17 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
     return { dispatched: false, jugnuKey: null, taskId: next.id }
   }
 
-  await db.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString(), retry_count: 0 }).eq('id', next.id)
+  // Atomic claim — only succeeds if task is still 'pending', preventing double-dispatch
+  const { data: claimed } = await db
+    .from('tasks')
+    .update({ status: 'in_progress', started_at: new Date().toISOString() })
+    .eq('id', next.id)
+    .eq('status', 'pending')
+    .select('id')
+    .single()
+
+  if (!claimed) return { dispatched: false, jugnuKey: null, taskId: null }
+
   const { data: proj } = await db.from('projects').select('workspace_id').eq('id', projectId).single()
   if (proj?.workspace_id) {
     await db.from('jugnus').update({ status: 'working' })

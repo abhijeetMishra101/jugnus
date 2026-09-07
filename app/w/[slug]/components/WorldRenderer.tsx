@@ -1,31 +1,37 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { JugnuIllustration } from './JugnuIllustration'
 import { useProjectEvents } from '../hooks/useProjectEvents'
+import { WorldActivityTicker } from './WorldActivityTicker'
+import { FlappyJugnu } from './FlappyJugnu'
+import { GameLeaderboard } from './GameLeaderboard'
+import { createBrowserClient } from '@/lib/supabase/client'
 import type { JugnuKey } from '@/lib/jugnus/registry'
 
 interface Props {
   projectId: string
   jugnus: { key: JugnuKey; display_role: string }[]
+  userId: string
+  workspaceId: string
+  onNavigateToChat: () => void
 }
 
 // ─── Isometric math ───────────────────────────────────────────────────────────
 const VW = 600
-const VH = 370
-const TW = 88     // tile diamond full width
-const TH = 44     // tile diamond height (TW / 2)
-const BH = 38     // crafting-station block height
-const AH = 18     // artifact block height
+const VH = 320
+const TW = 88
+const TH = 44
+const BH = 38
+const AH = 18
 
-const OX = 278    // screen X for world col=0,row=0 (re-centred for wider tiles)
-const OY = 100    // screen Y for world col=0,row=0
+const OX = 278
+const OY = 90
 
 function sx(col: number, row: number): number { return OX + (col - row) * TW / 2 }
 function sy(col: number, row: number): number { return OY + (col + row) * TH / 2 }
 
-// Three-face isometric block — points as SVG polygon strings
 function topPts(col: number, row: number, h: number): string {
   const x = sx(col, row), y = sy(col, row)
   return `${x},${y - TH / 2 - h} ${x + TW / 2},${y - h} ${x},${y + TH / 2 - h} ${x - TW / 2},${y - h}`
@@ -43,12 +49,10 @@ function tilePts(col: number, row: number): string {
   return `${x},${y - TH / 2} ${x + TW / 2},${y} ${x},${y + TH / 2} ${x - TW / 2},${y}`
 }
 
-// Artifact drawn at world-space (0,0) — translated via SVG transform
 const ART_TOP  = `0,${-(TH / 2) - AH} ${TW / 2},${-AH} 0,${TH / 2 - AH} ${-TW / 2},${-AH}`
 const ART_LEFT = `${-TW / 2},${-AH} 0,${TH / 2 - AH} 0,${TH / 2} ${-TW / 2},0`
 const ART_RIGHT= `0,${TH / 2 - AH} ${TW / 2},${-AH} ${TW / 2},0 0,${TH / 2}`
 
-// ─── Station palette ──────────────────────────────────────────────────────────
 const PALETTE: Record<string, {
   idle: { t: string; l: string; r: string }
   working: { t: string; l: string; r: string }
@@ -81,12 +85,11 @@ const PALETTE: Record<string, {
   },
 }
 
-// ─── Station grid positions ───────────────────────────────────────────────────
 const GRID: Record<string, { col: number; row: number }> = {
-  maya: { col: 1, row: 0 },  // top-left in iso  → screen top-center
-  nia:  { col: 4, row: 0 },  // top-right in iso → screen right
-  leo:  { col: 1, row: 3 },  // bottom-left      → screen left
-  tara: { col: 4, row: 3 },  // bottom-right     → screen bottom-center
+  maya: { col: 1, row: 0 },
+  nia:  { col: 4, row: 0 },
+  leo:  { col: 1, row: 3 },
+  tara: { col: 4, row: 3 },
 }
 
 const ART_GRID: Record<string, { col: number; row: number }> = {
@@ -100,7 +103,6 @@ const ART_GRID: Record<string, { col: number; row: number }> = {
 
 const JUGNU_ORDER: JugnuKey[] = ['maya', 'nia', 'leo', 'tara']
 
-// ─── World state derivation ───────────────────────────────────────────────────
 type DeskState = 'idle' | 'working' | 'done'
 type ArtifactPos = keyof typeof ART_GRID
 
@@ -166,20 +168,42 @@ function deriveWorldState(events: ReturnType<typeof useProjectEvents>): WorldSta
   return { deskStates, artifactPos, activeJugnu, isComplete, awaitingApproval }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-// Sort keys back-to-front for the painter's algorithm
 function isoDepth(col: number, row: number) { return col + row }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-export function WorldRenderer({ projectId, jugnus }: Props) {
+// ─── IsometricWorld sub-component ─────────────────────────────────────────────
+function IsometricWorld({ projectId, jugnus }: { projectId: string; jugnus: { key: JugnuKey; display_role: string }[] }) {
   const events = useProjectEvents(projectId)
   const { deskStates, artifactPos, activeJugnu, isComplete, awaitingApproval } =
     useMemo(() => deriveWorldState(events), [events])
 
+  const [tasks, setTasks] = useState<{ status: string }[]>([])
+
+  useEffect(() => {
+    const db = createBrowserClient()
+    db.from('tasks').select('status').eq('project_id', projectId)
+      .then(({ data }) => { if (data) setTasks(data as { status: string }[]) })
+
+    const sub = db.channel(`world-tasks:${projectId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          setTasks((prev) => {
+            const u = payload.new as { id: string; status: string }
+            const exists = prev.find((t: Record<string, unknown>) => (t as Record<string, unknown>).id === u.id)
+            if (exists) return prev.map((t) => (t as Record<string, unknown>).id === u.id ? u : t)
+            return [...prev, u]
+          })
+        }
+      ).subscribe()
+    return () => { void db.removeChannel(sub) }
+  }, [projectId])
+
+  const completedCount = tasks.filter((t) => t.status === 'completed').length
+  const pct = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0
+
   const roleFor = (key: JugnuKey) =>
     jugnus.find((j) => j.key === key)?.display_role ?? key.charAt(0).toUpperCase() + key.slice(1)
 
-  // Floor tile grid (cols 0–5, rows 0–4), sorted back-to-front
   const floorTiles = useMemo(() => {
     const tiles: { col: number; row: number }[] = []
     for (let c = 0; c <= 5; c++) {
@@ -190,20 +214,16 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
     return tiles.sort((a, b) => isoDepth(a.col, a.row) - isoDepth(b.col, b.row))
   }, [])
 
-  // Stations sorted back-to-front
   const sortedKeys = useMemo(() =>
     JUGNU_ORDER.slice().sort(
       (a, b) => isoDepth(GRID[a].col, GRID[a].row) - isoDepth(GRID[b].col, GRID[b].row)
     ), [])
 
-  // Artifact screen position (for the SVG transform)
   const artG = ART_GRID[artifactPos] ?? ART_GRID.center
   const artX = sx(artG.col, artG.row)
   const artY = sy(artG.col, artG.row)
-  // Elevate artifact on top of the station block when it's at a jugnu's desk
   const artElevation = (['maya', 'nia', 'leo', 'tara'] as string[]).includes(artifactPos) ? BH : 0
 
-  // Artifact colors
   const artColors = isComplete
     ? { t: '#10b981', l: '#059669', r: '#047857' }
     : awaitingApproval
@@ -211,270 +231,241 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
       : { t: '#e2e8f0', l: '#94a3b8', r: '#64748b' }
 
   return (
-    <div
-      className="relative w-full h-full overflow-hidden select-none"
-      style={{ background: 'linear-gradient(160deg, #0d1117 0%, #0f172a 60%, #111827 100%)' }}
-    >
-      <style>{`@keyframes w-pulse{0%,100%{r:3px;opacity:.9}50%{r:7px;opacity:.3}}`}</style>
-
-      {/* Scanline texture overlay for pixel-art feel */}
-      <div
-        className="absolute inset-0 pointer-events-none z-10"
-        style={{
-          backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 3px)',
-        }}
-      />
-
-      {/* Main isometric SVG */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox={`0 0 ${VW} ${VH}`}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>{/* no filters — SVG feGaussianBlur + feMerge cause GPU crashes */}</defs>
-
-        {/* ── Floor tiles ── */}
-        {floorTiles.map(({ col, row }) => {
-          // Station tiles get a subtle highlight
-          const isStation = JUGNU_ORDER.some((k) => GRID[k].col === col && GRID[k].row === row)
-          const isEven = (col + row) % 2 === 0
-          return (
-            <polygon
-              key={`t-${col}-${row}`}
-              points={tilePts(col, row)}
-              fill={isStation ? '#1e293b' : isEven ? '#161d2b' : '#131929'}
-              stroke="#0d1117"
-              strokeWidth="0.8"
-            />
-          )
-        })}
-
-        {/* ── Dashed path lines (pipeline flow) ── */}
-        {([
-          [GRID.maya, GRID.nia],
-          [GRID.nia,  GRID.tara],
-          [GRID.tara, GRID.leo],
-          [GRID.leo,  GRID.maya],
-        ] as [typeof GRID[string], typeof GRID[string]][]).map(([from, to], i) => (
-          <line
-            key={`path-${i}`}
-            x1={sx(from.col, from.row)}
-            y1={sy(from.col, from.row) - BH}
-            x2={sx(to.col, to.row)}
-            y2={sy(to.col, to.row) - BH}
-            stroke="#1e3a5f"
-            strokeWidth="1"
-            strokeDasharray="3 5"
-            opacity="0.5"
-          />
-        ))}
-
-        {/* ── Crafting-station blocks (back-to-front) ── */}
-        {sortedKeys.map((key) => {
-          const g = GRID[key]
-          const state = deskStates[key] ?? 'idle'
-          const pal = PALETTE[key][state]
-          const accent = PALETTE[key].accent
-          const isWorking = activeJugnu === key
-          const isDone = state === 'done'
-          const cx = sx(g.col, g.row)
-          const cy = sy(g.col, g.row)
-
-          return (
-            <g key={key}>
-              {/* Block body */}
-              <polygon points={leftPts(g.col, g.row, BH)}  fill={pal.l} />
-              <polygon points={rightPts(g.col, g.row, BH)} fill={pal.r} />
-              <polygon points={topPts(g.col, g.row, BH)}   fill={pal.t} />
-
-              {/* Crafting-table cross on top face */}
-              <line
-                x1={cx} y1={cy - TH / 2 - BH}
-                x2={cx} y2={cy + TH / 2 - BH}
-                stroke="rgba(0,0,0,0.22)" strokeWidth="1"
-              />
-              <line
-                x1={cx - TW / 2} y1={cy - BH}
-                x2={cx + TW / 2} y2={cy - BH}
-                stroke="rgba(0,0,0,0.22)" strokeWidth="1"
-              />
-
-              {/* Pixel dots on top corners (Minecraft crafting table slots) */}
-              {[
-                [cx - TW / 4, cy - BH - TH / 4],
-                [cx + TW / 4, cy - BH - TH / 4],
-                [cx - TW / 4, cy - BH + TH / 4],
-                [cx + TW / 4, cy - BH + TH / 4],
-              ].map(([rx, ry], i) => (
-                <rect key={i} x={rx - 2} y={ry - 2} width={4} height={3}
-                  fill="rgba(0,0,0,0.18)" rx="0.5"
-                />
-              ))}
-
-              {/* Active: pulsing orb (CSS animation, not SMIL — more compatible) */}
-              {isWorking && (
-                <circle cx={cx} cy={cy - BH - 4} r={5} fill={accent} opacity="0.9"
-                  style={{ animation: 'w-pulse 1.4s ease-in-out infinite' }}
-                />
-              )}
-
-              {/* Done: checkmark glyph */}
-              {isDone && (
-                <text x={cx} y={cy - BH - 10} textAnchor="middle"
-                  fontSize="11" fill={accent} fontFamily="monospace" fontWeight="bold"
-                >
-                  ✓
-                </text>
-              )}
-
-              {/* Nameplate below block */}
-              <text
-                x={cx}
-                y={cy + TH / 2 + 13}
-                textAnchor="middle"
-                fontSize="9"
-                fill={isWorking ? accent : isDone ? accent : '#4b5563'}
-                fontFamily="monospace"
-                fontWeight={isWorking ? 'bold' : 'normal'}
-              >
-                {key}
-              </text>
-              <text
-                x={cx}
-                y={cy + TH / 2 + 23}
-                textAnchor="middle"
-                fontSize="7.5"
-                fill={isWorking ? accent : '#374151'}
-                fontFamily="monospace"
-                opacity={isWorking || isDone ? 0.85 : 0.5}
-              >
-                {roleFor(key as JugnuKey)}
-              </text>
-            </g>
-          )
-        })}
-
-        {/* ── Artifact block ──
-            Use CSS transform (with px) not SVG transform attr so the
-            CSS transition actually fires (SVG attr changes are not CSS transitions). */}
-        <g
-          style={{
-            transform: `translate(${artX}px, ${artY - artElevation}px)`,
-            transition: 'transform 0.75s cubic-bezier(0.34, 1.4, 0.64, 1)',
-          }}
+    <div className="flex h-full">
+      {/* ISO world SVG */}
+      <div className="flex-1 relative overflow-hidden">
+        <style>{`@keyframes w-pulse{0%,100%{r:3px;opacity:.9}50%{r:7px;opacity:.3}}`}</style>
+        <div
+          className="absolute inset-0"
+          style={{ background: 'linear-gradient(160deg, #0d1117 0%, #0f172a 60%, #111827 100%)' }}
+        />
+        <div
+          className="absolute inset-0 pointer-events-none z-10"
+          style={{ backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 3px)' }}
+        />
+        <svg
+          className="absolute inset-0 w-full h-full"
+          viewBox={`0 0 ${VW} ${VH}`}
+          preserveAspectRatio="xMidYMid meet"
         >
-          <polygon points={ART_LEFT}  fill={artColors.l} />
-          <polygon points={ART_RIGHT} fill={artColors.r} />
-          <polygon points={ART_TOP}   fill={artColors.t} />
+          {floorTiles.map(({ col, row }) => {
+            const isStation = JUGNU_ORDER.some((k) => GRID[k].col === col && GRID[k].row === row)
+            const isEven = (col + row) % 2 === 0
+            return (
+              <polygon
+                key={`t-${col}-${row}`}
+                points={tilePts(col, row)}
+                fill={isStation ? '#1e293b' : isEven ? '#161d2b' : '#131929'}
+                stroke="#0d1117"
+                strokeWidth="0.8"
+              />
+            )
+          })}
 
-          {/* Artifact label */}
-          <text
-            y={-AH - 8}
-            textAnchor="middle"
-            fontSize="8"
-            fill={artColors.t}
-            fontFamily="monospace"
-          >
-            {isComplete ? 'delivered ✓' : awaitingApproval ? '👀 review' : '◆ artifact'}
-          </text>
-        </g>
-
-        {/* ── Delivered zone (visible only when done) ── */}
-        {isComplete && (
-          <g opacity="0.8">
-            <polygon
-              points={tilePts(2.5, 4.5)}
-              fill="none"
-              stroke="#10b981"
-              strokeWidth="1.5"
-              strokeDasharray="4 3"
+          {([
+            [GRID.maya, GRID.nia],
+            [GRID.nia,  GRID.tara],
+            [GRID.tara, GRID.leo],
+            [GRID.leo,  GRID.maya],
+          ] as [typeof GRID[string], typeof GRID[string]][]).map(([from, to], i) => (
+            <line
+              key={`path-${i}`}
+              x1={sx(from.col, from.row)} y1={sy(from.col, from.row) - BH}
+              x2={sx(to.col, to.row)}   y2={sy(to.col, to.row) - BH}
+              stroke="#1e3a5f" strokeWidth="1" strokeDasharray="3 5" opacity="0.5"
             />
-            <text
-              x={sx(2.5, 4.5)}
-              y={sy(2.5, 4.5) + TH / 2 + 14}
-              textAnchor="middle"
-              fontSize="8"
-              fill="#10b981"
-              fontFamily="monospace"
-            >
-              delivered
+          ))}
+
+          {sortedKeys.map((key) => {
+            const g = GRID[key]
+            const state = deskStates[key] ?? 'idle'
+            const pal = PALETTE[key][state]
+            const accent = PALETTE[key].accent
+            const isWorking = activeJugnu === key
+            const isDone = state === 'done'
+            const cx = sx(g.col, g.row)
+            const cy = sy(g.col, g.row)
+
+            return (
+              <g key={key}>
+                <polygon points={leftPts(g.col, g.row, BH)}  fill={pal.l} />
+                <polygon points={rightPts(g.col, g.row, BH)} fill={pal.r} />
+                <polygon points={topPts(g.col, g.row, BH)}   fill={pal.t} />
+                <line x1={cx} y1={cy - TH / 2 - BH} x2={cx} y2={cy + TH / 2 - BH} stroke="rgba(0,0,0,0.22)" strokeWidth="1" />
+                <line x1={cx - TW / 2} y1={cy - BH} x2={cx + TW / 2} y2={cy - BH} stroke="rgba(0,0,0,0.22)" strokeWidth="1" />
+                {[
+                  [cx - TW / 4, cy - BH - TH / 4],
+                  [cx + TW / 4, cy - BH - TH / 4],
+                  [cx - TW / 4, cy - BH + TH / 4],
+                  [cx + TW / 4, cy - BH + TH / 4],
+                ].map(([rx, ry], i) => (
+                  <rect key={i} x={rx - 2} y={ry - 2} width={4} height={3} fill="rgba(0,0,0,0.18)" rx="0.5" />
+                ))}
+                {isWorking && (
+                  <circle cx={cx} cy={cy - BH - 4} r={5} fill={accent} opacity="0.9"
+                    style={{ animation: 'w-pulse 1.4s ease-in-out infinite', filter: `drop-shadow(0 0 6px ${accent})` }}
+                  />
+                )}
+                {isDone && (
+                  <text x={cx} y={cy - BH - 10} textAnchor="middle" fontSize="11" fill={accent} fontFamily="monospace" fontWeight="bold">✓</text>
+                )}
+                <text x={cx} y={cy + TH / 2 + 13} textAnchor="middle" fontSize="9"
+                  fill={isWorking ? accent : isDone ? accent : '#4b5563'} fontFamily="monospace" fontWeight={isWorking ? 'bold' : 'normal'}
+                >
+                  {key}
+                </text>
+                <text x={cx} y={cy + TH / 2 + 23} textAnchor="middle" fontSize="7.5"
+                  fill={isWorking ? accent : '#374151'} fontFamily="monospace" opacity={isWorking || isDone ? 0.85 : 0.5}
+                >
+                  {roleFor(key as JugnuKey)}
+                </text>
+              </g>
+            )
+          })}
+
+          <g style={{ transform: `translate(${artX}px, ${artY - artElevation}px)`, transition: 'transform 0.75s cubic-bezier(0.34, 1.4, 0.64, 1)' }}>
+            <polygon points={ART_LEFT}  fill={artColors.l} />
+            <polygon points={ART_RIGHT} fill={artColors.r} />
+            <polygon points={ART_TOP}   fill={artColors.t} />
+            <text y={-AH - 8} textAnchor="middle" fontSize="8" fill={artColors.t} fontFamily="monospace">
+              {isComplete ? 'delivered ✓' : awaitingApproval ? '👀 review' : '◆ artifact'}
             </text>
           </g>
-        )}
 
-        {/* ── Jugnu illustrations (inside SVG as foreignObject so they scale
-            with the viewBox — avoids % overlay drift when SVG letterboxes) ── */}
-        {JUGNU_ORDER.map((key) => {
-          const g = GRID[key]
-          const isWorking = activeJugnu === key
-          const jw = 44
-          const jh = Math.round(jw * (248 / 256))
-          const cx = sx(g.col, g.row)
-          const cy = sy(g.col, g.row)
+          {isComplete && (
+            <g opacity="0.8">
+              <polygon points={tilePts(2.5, 4.5)} fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 3" />
+              <text x={sx(2.5, 4.5)} y={sy(2.5, 4.5) + TH / 2 + 14} textAnchor="middle" fontSize="8" fill="#10b981" fontFamily="monospace">delivered</text>
+            </g>
+          )}
 
-          return (
-            <foreignObject
-              key={`fo-${key}`}
-              x={cx - jw / 2}
-              y={cy - BH - 28 - jh / 2}
-              width={jw}
-              height={jh + 8}
-              style={{ overflow: 'visible' }}
-            >
-              <motion.div
-                animate={isWorking ? { y: [0, -6, 0] } : { y: 0 }}
-                transition={
-                  isWorking
-                    ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
-                    : { duration: 0.4 }
-                }
+          {JUGNU_ORDER.map((key) => {
+            const g = GRID[key]
+            const isWorking = activeJugnu === key
+            const jw = 44
+            const jh = Math.round(jw * (248 / 256))
+            const cx = sx(g.col, g.row)
+            const cy = sy(g.col, g.row)
+
+            return (
+              <foreignObject
+                key={`fo-${key}`}
+                x={cx - jw / 2}
+                y={cy - BH - 28 - jh / 2}
+                width={jw}
+                height={jh + 24}
+                style={{ overflow: 'visible' }}
               >
-                <JugnuIllustration jugnuKey={key} size={jw} />
-              </motion.div>
-            </foreignObject>
-          )
-        })}
-      </svg>
+                <motion.div
+                  animate={isWorking ? { y: [0, -6, 0] } : { y: 0 }}
+                  transition={isWorking ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.4 }}
+                  style={{ position: 'relative' }}
+                >
+                  <JugnuIllustration jugnuKey={key} size={jw} />
+                  {/* Wing overlay */}
+                  <div style={{ position: 'absolute', top: '15%', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+                    <svg width="60" height="20" style={{ opacity: isWorking ? 0.7 : 0.35 }}>
+                      <ellipse cx="15" cy="10" rx="14" ry="7" fill="white" opacity="0.7" transform="rotate(-20 15 10)" />
+                      <ellipse cx="45" cy="10" rx="14" ry="7" fill="white" opacity="0.7" transform="rotate(20 45 10)" />
+                    </svg>
+                  </div>
+                  {/* Ambient glow on active jugnu */}
+                  {isWorking && (
+                    <div style={{
+                      position: 'absolute', inset: 0, pointerEvents: 'none',
+                      filter: 'drop-shadow(0 0 6px rgba(250, 200, 50, 0.6))',
+                    }} />
+                  )}
+                </motion.div>
+              </foreignObject>
+            )
+          })}
+        </svg>
 
-      {/* ── Legend ── */}
-      <div className="absolute bottom-3 right-3 z-20 flex flex-col gap-1.5">
-        {([
-          { color: '#4b5563', label: 'idle' },
-          { color: '#d946ef', label: 'working' },
-          { color: '#4ade80', label: 'done'    },
-        ] as { color: string; label: string }[]).map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span
-              className="block w-2.5 h-2.5"
-              style={{
-                background: color,
-                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-              }}
-            />
-            <span className="text-[9px] font-mono text-gray-500">{label}</span>
-          </div>
-        ))}
-      </div>
+        {/* Legend */}
+        <div className="absolute bottom-2 right-2 z-20 flex flex-col gap-1">
+          {([
+            { color: '#4b5563', label: 'idle' },
+            { color: '#d946ef', label: 'working' },
+            { color: '#4ade80', label: 'done' },
+          ] as { color: string; label: string }[]).map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-1">
+              <span className="block w-2 h-2" style={{ background: color, clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
+              <span className="text-[8px] font-mono text-gray-600">{label}</span>
+            </div>
+          ))}
+        </div>
 
-      {/* ── Approval glow ring (pulsing overlay) ── */}
-      {awaitingApproval && (
-        <div className="absolute inset-0 pointer-events-none z-10">
-          <div
-            className="absolute"
-            style={{
-              left: (artX / VW) * 100 + '%',
-              top:  (artY / VH) * 100 + '%',
-              transform: 'translate(-50%, -50%)',
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
+        {awaitingApproval && (
+          <div className="absolute inset-0 pointer-events-none z-10">
+            <div className="absolute" style={{
+              left: (artX / VW) * 100 + '%', top: (artY / VH) * 100 + '%',
+              transform: 'translate(-50%, -50%)', width: 80, height: 80, borderRadius: '50%',
               background: 'radial-gradient(circle, rgba(139,92,246,0.25) 0%, transparent 70%)',
               animation: 'pulse 2s ease-in-out infinite',
-            }}
-          />
-          <style>{`@keyframes pulse { 0%,100%{opacity:0.5;transform:translate(-50%,-50%) scale(1)} 50%{opacity:1;transform:translate(-50%,-50%) scale(1.3)} }`}</style>
+            }} />
+            <style>{`@keyframes pulse { 0%,100%{opacity:0.5;transform:translate(-50%,-50%) scale(1)} 50%{opacity:1;transform:translate(-50%,-50%) scale(1.3)} }`}</style>
+          </div>
+        )}
+      </div>
+
+      {/* Right stats panel */}
+      <div className="w-52 shrink-0 p-3 flex flex-col gap-3 border-l border-white/10 bg-[#0f172a]">
+        {/* Progress */}
+        <div>
+          <div className="flex justify-between text-xs text-gray-400 mb-1">
+            <span>Progress</span>
+            <span>{pct}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-1.5 rounded-full bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          <p className="text-xs text-gray-600 mt-1">{completedCount} of {tasks.length} done</p>
         </div>
-      )}
+        {/* Activity ticker uses the same events hook — pass events from parent */}
+        <WorldActivityTickerWrapper projectId={projectId} />
+      </div>
+    </div>
+  )
+}
+
+function WorldActivityTickerWrapper({ projectId }: { projectId: string }) {
+  const events = useProjectEvents(projectId)
+  return <WorldActivityTicker events={events} />
+}
+
+// ─── Main WorldRenderer ────────────────────────────────────────────────────────
+export function WorldRenderer({ projectId, jugnus, userId, workspaceId, onNavigateToChat }: Props) {
+  const events = useProjectEvents(projectId)
+  const worldState = useMemo(() => deriveWorldState(events), [events])
+
+  return (
+    <div className="flex flex-col h-full bg-[#0f172a] overflow-hidden">
+      {/* TOP — AI workplace (45%) */}
+      <div style={{ height: '45%', minHeight: 0 }} className="flex overflow-hidden">
+        <IsometricWorld projectId={projectId} jugnus={jugnus} />
+      </div>
+
+      {/* DIVIDER */}
+      <div className="h-px bg-white/10 shrink-0" />
+
+      {/* BOTTOM — Play while they work (55%) */}
+      <div style={{ height: '55%', minHeight: 0 }} className="flex overflow-hidden">
+        {/* Game */}
+        <div className="flex-1 min-w-0">
+          <FlappyJugnu
+            projectId={projectId}
+            userId={userId}
+            approvalRequired={worldState.awaitingApproval}
+            projectCompleted={worldState.isComplete}
+            onNavigateToChat={onNavigateToChat}
+          />
+        </div>
+        {/* Leaderboard */}
+        <div className="w-52 shrink-0 border-l border-white/10 bg-[#0f172a]">
+          <GameLeaderboard projectId={projectId} />
+        </div>
+      </div>
     </div>
   )
 }

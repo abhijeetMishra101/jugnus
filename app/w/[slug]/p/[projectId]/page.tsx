@@ -52,9 +52,27 @@ export default async function ProjectPage({ params }: Props) {
       onEscalationReply={async (escalationId: string, answer: string) => {
         'use server'
         const sdb = createServiceClient()
+
+        // Fetch escalation so we know the question text
+        const { data: esc } = await sdb
+          .from('escalations')
+          .select('question')
+          .eq('id', escalationId)
+          .single()
+
         await sdb.from('escalations').update({
           status: 'resolved', resolution: answer, resolved_at: new Date().toISOString(),
         }).eq('id', escalationId)
+
+        // Persist founder decision into projects.constraints.founder_constraints
+        if (esc?.question) {
+          const { data: proj } = await sdb.from('projects').select('constraints').eq('id', projectId).single()
+          const constraints = (proj?.constraints ?? {}) as Record<string, unknown>
+          const existing = (constraints.founder_constraints ?? {}) as Record<string, unknown>
+          const updated = { ...constraints, founder_constraints: { ...existing, [esc.question]: answer } }
+          await sdb.from('projects').update({ constraints: updated }).eq('id', projectId)
+        }
+
         await fetch(new URL('/api/internal/jugnu-respond', process.env.NEXT_PUBLIC_APP_URL!).toString(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}` },
