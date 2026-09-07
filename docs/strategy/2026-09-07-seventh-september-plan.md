@@ -1,9 +1,26 @@
 # The 7th September Plan
 
 **Date:** 2026-09-07  
-**Status:** Approved — not yet started  
+**Status:** Mostly shipped — 2 items pending (Phase 2c live test + Phase 4 exit criteria)  
 **Tag at plan creation:** v0.1.0  
-**Target tag on completion:** v0.2.0
+**Shipped tag:** v0.2.0 (2026-09-07) + v0.2.1 (2026-09-08, world view fixes + forensic doc)  
+**Target tag on full completion:** v0.2.1 ✅ (tag exists; exit criteria tests still unrun)
+
+### Phase status (2026-09-08)
+
+| Phase | Item | Status |
+|---|---|---|
+| 1a | Semantic event vocabulary | ✅ Shipped in v0.2.0 |
+| 1b+1c | Streaming + prompt caching | ✅ Shipped in v0.2.0 |
+| 1d | jugnu_roles + runtime persona injection | ✅ Shipped in v0.2.0 |
+| 2a | Human approval task type + Tara correction loop bound | ✅ Shipped in v0.2.0 |
+| 2b | Maya ask_founder rewire | ✅ Shipped in v0.2.0 |
+| 2c | Pipeline resume after clarification (escalation → re-invoke Maya) | ⚠️ Code shipped; live test not run |
+| 3a+3b | View toggle + isometric 2D world renderer | ✅ Shipped in v0.2.1 (letterboxing + layout fixes) |
+| 3c | `useProjectEvents` shared hook | ✅ Shipped in v0.2.0 |
+| 4 | Exit criteria test 1 — "Build a landing page for my bakery" | 🔲 Not run |
+| 4 | Exit criteria test 2 — "Plan a weekend trip to Lonavala" | 🔲 Not run |
+| 4 | Typecheck + push to origin | 🔲 Not done |
 
 ---
 
