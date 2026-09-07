@@ -374,10 +374,14 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
           )
         })}
 
-        {/* ── Artifact block ── */}
+        {/* ── Artifact block ──
+            Use CSS transform (with px) not SVG transform attr so the
+            CSS transition actually fires (SVG attr changes are not CSS transitions). */}
         <g
-          transform={`translate(${artX}, ${artY})`}
-          style={{ transition: 'transform 0.75s cubic-bezier(0.34, 1.4, 0.64, 1)' }}
+          style={{
+            transform: `translate(${artX}px, ${artY}px)`,
+            transition: 'transform 0.75s cubic-bezier(0.34, 1.4, 0.64, 1)',
+          }}
           filter="url(#w-artifact-glow)"
         >
           <polygon points={ART_LEFT}  fill={artColors.l} />
@@ -421,17 +425,20 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
         )}
       </svg>
 
-      {/* ── Jugnu illustrations (overlay, avoids SVG distortion) ── */}
+      {/* ── Jugnu illustrations (overlay, avoids SVG distortion) ──
+          Outer div: static centering via transform (no framer-motion — avoids
+          the crash where motion parses % units from style.transform as an
+          initial animation value).
+          Inner motion.div: ONLY handles the y-bob, no transform in style. */}
       {JUGNU_ORDER.map((key) => {
         const g = GRID[key]
         const isWorking = activeJugnu === key
 
-        // Center the illustration above the station block's top face
         const screenX = sx(g.col, g.row)
         const screenY = sy(g.col, g.row) - BH - 60
 
         return (
-          <motion.div
+          <div
             key={key}
             className="absolute pointer-events-none z-20"
             style={{
@@ -439,15 +446,18 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
               top:  (screenY / VH) * 100 + '%',
               transform: 'translate(-50%, -50%)',
             }}
-            animate={isWorking ? { y: [0, -6, 0] } : { y: 0 }}
-            transition={
-              isWorking
-                ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
-                : { duration: 0.4 }
-            }
           >
-            <JugnuIllustration jugnuKey={key} size={56} />
-          </motion.div>
+            <motion.div
+              animate={isWorking ? { y: [0, -6, 0] } : { y: 0 }}
+              transition={
+                isWorking
+                  ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
+                  : { duration: 0.4 }
+              }
+            >
+              <JugnuIllustration jugnuKey={key} size={56} />
+            </motion.div>
+          </div>
         )
       })}
 
