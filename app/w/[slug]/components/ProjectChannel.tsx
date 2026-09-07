@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { JugnuIllustration } from './JugnuIllustration'
@@ -350,7 +350,6 @@ interface Props {
 
 export function ProjectChannel({ projectId, userId, initialMessages, activeJugnuKey: initialActive }: Props) {
   const [messages, setMessages]       = useState<Message[]>(initialMessages)
-  const [activeJugnu, setActiveJugnu] = useState<string | null>(initialActive)
   const [activities, setActivities]   = useState<string[]>([])
   const [input, setInput]             = useState('')
   const [sending, setSending]         = useState(false)
@@ -358,8 +357,21 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   // IDs of messages that existed at load time — those sections never play the fly-in
   const initialIds  = useRef(new Set(initialMessages.map((m) => m.id)))
 
-  // Derive approval gate state from event stream — no separate state needed
+  // Derive all event-driven state from the messages event stream (reliable) rather
+  // than the jugnus table (drops Realtime events under pipeline burst load).
   const events = useProjectEvents(projectId)
+
+  // activeJugnu: last TASK_ASSIGNED says who's working; any completion event clears it.
+  // Falls back to the server-rendered snapshot for projects predating event vocabulary.
+  const activeJugnu = useMemo(() => {
+    if (!events.length) return initialActive
+    const last = [...events].reverse().find((e) =>
+      ['TASK_ASSIGNED', 'TASK_COMPLETED', 'PROJECT_COMPLETED', 'REVIEW_PASSED'].includes(e.event_type)
+    )
+    if (!last || last.event_type !== 'TASK_ASSIGNED') return null
+    return last.jugnu_key ?? null
+  }, [events, initialActive])
+
   const lastRelevant = [...events].reverse().find((e) =>
     ['APPROVAL_REQUIRED', 'PROTOTYPE_APPROVED', 'PROTOTYPE_REVISED', 'PROJECT_COMPLETED'].includes(e.event_type)
   )
@@ -399,17 +411,6 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       })
       .subscribe()
 
-    const jugnuSub = db
-      .channel(`project-jugnu-typing-${projectId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jugnus' },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (payload: any) => {
-          const j = payload.new as { key: string; status: string }
-          if (j.status === 'working') setActiveJugnu(j.key)
-          else setActiveJugnu((prev) => prev === j.key ? null : prev)
-        })
-      .subscribe()
-
     db.from('messages')
       .select('id,project_id,author_type,author_key,content,created_at,metadata')
       .eq('project_id', projectId)
@@ -431,10 +432,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         }
       })
 
-    return () => {
-      void db.removeChannel(msgSub)
-      void db.removeChannel(jugnuSub)
-    }
+    return () => { void db.removeChannel(msgSub) }
   }, [projectId])
 
   useEffect(() => {
