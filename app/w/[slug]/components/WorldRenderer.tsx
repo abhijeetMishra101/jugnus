@@ -14,13 +14,13 @@ interface Props {
 // ─── Isometric math ───────────────────────────────────────────────────────────
 const VW = 600
 const VH = 370
-const TW = 68     // tile diamond full width
-const TH = 34     // tile diamond height (TW / 2)
-const BH = 30     // crafting-station block height
-const AH = 14     // artifact block height
+const TW = 88     // tile diamond full width
+const TH = 44     // tile diamond height (TW / 2)
+const BH = 38     // crafting-station block height
+const AH = 18     // artifact block height
 
-const OX = 295    // screen X for world col=0,row=0
-const OY = 162    // screen Y for world col=0,row=0 (bumped down to keep Maya block in frame)
+const OX = 278    // screen X for world col=0,row=0 (re-centred for wider tiles)
+const OY = 100    // screen Y for world col=0,row=0
 
 function sx(col: number, row: number): number { return OX + (col - row) * TW / 2 }
 function sy(col: number, row: number): number { return OY + (col + row) * TH / 2 }
@@ -200,6 +200,8 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
   const artG = ART_GRID[artifactPos] ?? ART_GRID.center
   const artX = sx(artG.col, artG.row)
   const artY = sy(artG.col, artG.row)
+  // Elevate artifact on top of the station block when it's at a jugnu's desk
+  const artElevation = (['maya', 'nia', 'leo', 'tara'] as string[]).includes(artifactPos) ? BH : 0
 
   // Artifact colors
   const artColors = isComplete
@@ -357,7 +359,7 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
             CSS transition actually fires (SVG attr changes are not CSS transitions). */}
         <g
           style={{
-            transform: `translate(${artX}px, ${artY}px)`,
+            transform: `translate(${artX}px, ${artY - artElevation}px)`,
             transition: 'transform 0.75s cubic-bezier(0.34, 1.4, 0.64, 1)',
           }}
         >
@@ -405,7 +407,7 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
         {JUGNU_ORDER.map((key) => {
           const g = GRID[key]
           const isWorking = activeJugnu === key
-          const jw = 56
+          const jw = 44
           const jh = Math.round(jw * (248 / 256))
           const cx = sx(g.col, g.row)
           const cy = sy(g.col, g.row)
@@ -414,7 +416,7 @@ export function WorldRenderer({ projectId, jugnus }: Props) {
             <foreignObject
               key={`fo-${key}`}
               x={cx - jw / 2}
-              y={cy - BH - 60 - jh / 2}
+              y={cy - BH - 28 - jh / 2}
               width={jw}
               height={jh + 8}
               style={{ overflow: 'visible' }}

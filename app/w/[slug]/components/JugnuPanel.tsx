@@ -110,8 +110,11 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
 
         <div className="space-y-3">
           {jugnus.map((j) => {
-            const badge = STATUS_BADGE[j.status] ?? STATUS_BADGE.idle
             const currentTask = tasks.find((t) => t.jugnu_key === j.key && t.status === 'in_progress')
+            const hasDone    = tasks.some((t) => t.jugnu_key === j.key && t.status === 'completed')
+            const hasPending = tasks.some((t) => t.jugnu_key === j.key && (t.status === 'pending' || t.status === 'in_progress'))
+            const derivedStatus = currentTask ? 'working' : hasDone && !hasPending ? 'done' : 'idle'
+            const badge = STATUS_BADGE[derivedStatus] ?? STATUS_BADGE.idle
             return (
               <div key={j.key} className="flex items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
