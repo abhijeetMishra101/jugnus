@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
 
 export interface ProjectEvent {
@@ -29,13 +29,14 @@ function toEvent(msg: Record<string, unknown>): ProjectEvent | null {
 
 export function useProjectEvents(projectId: string): ProjectEvent[] {
   const [events, setEvents] = useState<ProjectEvent[]>([])
+  // useId gives a stable, unique string per component instance so two callers
+  // with the same projectId (ProjectChannel + WorldRenderer) don't share a
+  // Supabase Realtime channel — adding callbacks to an already-subscribed channel throws.
+  const hookId = useId()
 
   useEffect(() => {
     const db = createBrowserClient()
 
-    // Load historical events first, then subscribe to new ones.
-    // Historical load runs before subscribe so we don't miss events
-    // that were inserted before the hook mounted.
     db.from('messages')
       .select('id, task_id, author_type, author_key, content, created_at, metadata')
       .eq('project_id', projectId)
@@ -50,7 +51,7 @@ export function useProjectEvents(projectId: string): ProjectEvent[] {
       })
 
     const sub = db
-      .channel(`project-events:${projectId}`)
+      .channel(`project-events:${projectId}:${hookId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `project_id=eq.${projectId}` },
