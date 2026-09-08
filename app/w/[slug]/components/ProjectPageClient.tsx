@@ -76,6 +76,8 @@ export function ProjectPageClient({
   const [view, setView] = useState<'chat' | 'world'>('chat')
   const [worldEverMounted, setWorldEverMounted] = useState(false)
 
+  const navigateToChat = () => setView('chat')
+
   // Build jugnu info list for WorldRenderer from jugnu_roles + registry keys
   const jugnuInfos: JugnuInfo[] = (['maya', 'nia', 'leo', 'tara'] as JugnuKey[]).map((key) => ({
     key,
@@ -141,7 +143,13 @@ export function ProjectPageClient({
         {worldEverMounted && (
           <div className={`flex-1 min-h-0 ${view === 'chat' ? 'hidden' : ''}`}>
             <WorldErrorBoundary>
-              <WorldRenderer projectId={project.id} jugnus={jugnuInfos} />
+              <WorldRenderer
+                projectId={project.id}
+                jugnus={jugnuInfos}
+                userId={workspace.owner_id}
+                workspaceId={workspace.id}
+                onNavigateToChat={navigateToChat}
+              />
             </WorldErrorBoundary>
           </div>
         )}

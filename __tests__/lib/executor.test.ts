@@ -103,7 +103,15 @@ function makeAdvanceDb(opts: {
         }),
       }
     }),
-    update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }),
+    update: vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: { id: 'task-1' } }),
+          }),
+        }),
+      }),
+    }),
   }
 
   return {

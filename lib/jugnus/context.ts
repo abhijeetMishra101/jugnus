@@ -83,8 +83,13 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
     : 'No current task assigned.'
 
   const constraintLines = Object.entries(ctx.constraints)
-    .filter(([k]) => k !== 'jugnu_roles')
+    .filter(([k]) => k !== 'jugnu_roles' && k !== 'founder_constraints')
     .map(([k, v]) => `  ${k}: ${v}`)
+    .join('\n')
+
+  const founderConstraints = (ctx.constraints.founder_constraints ?? {}) as Record<string, unknown>
+  const founderDecisionLines = Object.entries(founderConstraints)
+    .map(([q, a]) => `  ${q}: ${String(a)}`)
     .join('\n')
 
   // Inject project-specific persona for this jugnu
@@ -103,6 +108,7 @@ Status: ${ctx.status}
 FOUNDER OBJECTIVE:
 ${ctx.objective}
 ${constraintLines ? `\nCONSTRAINTS:\n${constraintLines}` : ''}
+${founderDecisionLines ? `\nFOUNDER DECISIONS (accepted constraints):\n${founderDecisionLines}` : ''}
 ${completed ? `\nCOMPLETED TASKS:\n${completed}` : ''}
 ${pending ? `\nUPCOMING TASKS:\n${pending}` : ''}
 
