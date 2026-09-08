@@ -508,7 +508,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       <div className="flex-1 flex flex-col min-h-0">
         <div
           className="flex-1 overflow-y-auto py-4 relative"
-          style={{ backgroundImage: 'url(/chat-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 55%' }}
+          style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(/chat-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 55%' }}
         >
           {/* ── Animated night-scene overlays ── */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
