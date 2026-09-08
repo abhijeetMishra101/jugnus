@@ -38,8 +38,8 @@ const JUGNU_W = 40
 const JUGNU_H = 40
 const GAP = 150
 const OBSTACLE_W = 40
-const GRAVITY = 0.4
-const JUMP_VY = -8
+const GRAVITY = 0.18
+const JUMP_VY = -7
 
 function drawMountains(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = '#1a1240'
