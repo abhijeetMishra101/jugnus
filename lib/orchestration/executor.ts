@@ -58,13 +58,32 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       .neq('status', 'completed')
 
     if (count === 0) {
-      await db.from('projects').update({ status: 'completed' }).eq('id', projectId)
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+      const previewUrl = appUrl ? `${appUrl}/preview/${projectId}` : null
+
+      await db.from('projects').update({
+        status: 'completed',
+        ...(previewUrl ? { deploy_url: previewUrl } : {}),
+      }).eq('id', projectId)
+
+      const { data: hasFiles } = await db
+        .from('file_snapshots')
+        .select('id')
+        .eq('project_id', projectId)
+        .not('path', 'ilike', 'design/%')
+        .limit(1)
+        .single()
+
+      const deployLine = previewUrl && hasFiles
+        ? `\n\n🌐 Preview: ${previewUrl}`
+        : ''
+
       await db.from('messages').insert({
         project_id: projectId,
         author_type: 'system',
         author_key: 'system',
-        content: '✨ All tasks completed. Your Jugnus finished the project.',
-        metadata: { event_type: 'PROJECT_COMPLETED', project_complete: true },
+        content: `✨ All tasks completed. Your Jugnus finished the project.${deployLine}`,
+        metadata: { event_type: 'PROJECT_COMPLETED', project_complete: true, deploy_url: previewUrl },
       })
       const { data: proj } = await db.from('projects').select('workspace_id').eq('id', projectId).single()
       if (proj?.workspace_id) {
