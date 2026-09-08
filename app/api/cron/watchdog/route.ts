@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
-const STUCK_THRESHOLD_MINUTES = 4
+const STUCK_THRESHOLD_MINUTES = 6
 const MAX_RETRIES = 3
 
 /**
