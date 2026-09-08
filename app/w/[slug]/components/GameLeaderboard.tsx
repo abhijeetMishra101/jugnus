@@ -23,14 +23,18 @@ export function GameLeaderboard({ projectId: _projectId }: Props) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
-    fetch(`/api/game-scores?period=${period}`)
-      .then((r) => r.json())
-      .then((data: { scores: ScoreEntry[] }) => {
+    let cancelled = false
+    async function load() {
+      const data: { scores: ScoreEntry[] } = await fetch(`/api/game-scores?period=${period}`)
+        .then((r) => r.json())
+        .catch(() => ({ scores: [] }))
+      if (!cancelled) {
         setScores((data.scores ?? []).slice(0, 5))
-      })
-      .catch(() => setScores([]))
-      .finally(() => setLoading(false))
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [period])
 
   const periodLabels: Record<Period, string> = { today: 'Today', week: 'Week', all: 'All Time' }

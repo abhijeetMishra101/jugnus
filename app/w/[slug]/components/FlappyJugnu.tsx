@@ -111,14 +111,11 @@ export function FlappyJugnu({ projectId, userId, approvalRequired, projectComple
   const scoreRef = useRef(0)
 
   const [displayScore, setDisplayScore] = useState(0)
-  const [best, setBest] = useState(0)
+  const [best, setBest] = useState(() => {
+    if (typeof window === 'undefined') return 0
+    return parseInt(localStorage.getItem('jugnu_best_score') ?? '0', 10)
+  })
   const [phase, setPhase] = useState<'idle' | 'playing' | 'dead'>('idle')
-
-  // Load best from localStorage after mount
-  useEffect(() => {
-    const stored = localStorage.getItem('jugnu_best_score')
-    if (stored) setBest(parseInt(stored, 10))
-  }, [])
 
   // Load jugnu image once
   useEffect(() => {
