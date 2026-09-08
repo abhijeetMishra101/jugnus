@@ -231,7 +231,7 @@ function IsometricWorld({ projectId, jugnus }: { projectId: string; jugnus: { ke
       : { t: '#e2e8f0', l: '#94a3b8', r: '#64748b' }
 
   return (
-    <div className="flex h-full">
+    <div className="flex w-full h-full">
       {/* ISO world SVG */}
       <div className="flex-1 relative overflow-hidden">
         <style>{`@keyframes w-pulse{0%,100%{r:3px;opacity:.9}50%{r:7px;opacity:.3}}`}</style>
