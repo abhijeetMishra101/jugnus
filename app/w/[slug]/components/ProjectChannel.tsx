@@ -17,10 +17,10 @@ interface Message {
 }
 
 const JUGNU: Record<string, { name: string; color: string; bg: string; role: string; icon: string }> = {
-  maya: { name: 'Maya', color: '#f472b6', bg: '#fdf2f8', role: 'Planner',  icon: '🎯' },
-  nia:  { name: 'Nia',  color: '#60a5fa', bg: '#eff6ff', role: 'Designer', icon: '🎨' },
-  leo:  { name: 'Leo',  color: '#4ade80', bg: '#f0fdf4', role: 'Builder',  icon: '</>' },
-  tara: { name: 'Tara', color: '#fb923c', bg: '#fff7ed', role: 'Reviewer', icon: '✓'  },
+  maya: { name: 'Maya', color: '#f9a8d4', bg: 'rgba(35, 12, 45, 0.82)', role: 'Planner',  icon: '🎯' },
+  nia:  { name: 'Nia',  color: '#93c5fd', bg: 'rgba(10, 22, 50, 0.82)', role: 'Designer', icon: '🎨' },
+  leo:  { name: 'Leo',  color: '#86efac', bg: 'rgba(8,  28, 18, 0.82)', role: 'Builder',  icon: '</>' },
+  tara: { name: 'Tara', color: '#fdba74', bg: 'rgba(30, 14, 6,  0.82)', role: 'Reviewer', icon: '✓'  },
 }
 
 // Stagger each jugnu's float phase so they never oscillate in lockstep
@@ -75,7 +75,7 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
           </span>
           <span className="text-xs" style={{ color: j.color }}>{j.icon}</span>
         </div>
-        <div className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm" style={{ backgroundColor: j.bg }}>
+        <div className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm" style={{ backgroundColor: j.bg, backdropFilter: 'blur(8px)', border: `1px solid ${j.color}22` }}>
           {activities.length > 0 && (
             <div className="mb-2.5 max-h-28 overflow-y-auto space-y-1.5">
               {activities.map((a, i) => (
@@ -114,7 +114,7 @@ function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: s
             <ReactMarkdown>{msg.content}</ReactMarkdown>
           </div>
         </div>
-        <span className="text-[10px] text-gray-400 mt-1 ml-1">
+        <span className="text-[10px] text-white/40 mt-1 ml-1">
           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       </div>
@@ -165,15 +165,15 @@ function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messa
           {messages.map((msg, i) => (
             <div key={msg.id}>
               <div
-                className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm overflow-y-auto"
-                style={{ backgroundColor: j.bg, maxHeight: 360 }}
+                className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm overflow-y-auto jugnu-dark-bubble"
+                style={{ backgroundColor: j.bg, maxHeight: 360, backdropFilter: 'blur(8px)', border: `1px solid ${j.color}22` }}
               >
-                <div className="jugnu-markdown">
+                <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               </div>
               {i > 0 && (
-                <span className="block text-[10px] text-gray-400 mt-0.5 ml-1">
+                <span className="block text-[10px] text-white/40 mt-0.5 ml-1">
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
@@ -190,7 +190,7 @@ function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messa
 function SystemItem({ msg }: { msg: Message }) {
   return (
     <div className="flex justify-center my-3 px-4">
-      <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-4 py-1.5">{msg.content}</span>
+      <span className="text-xs text-white/70 rounded-full px-4 py-1.5" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}>{msg.content}</span>
     </div>
   )
 }
@@ -474,6 +474,26 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         /* Bee flies in from the right (where the send button lives).
            Keeps Y movement small so the path is correct whether the
            section appears near the top or bottom of the chat. */
+        /* ── Night scene animations ───────────────────────────── */
+        @keyframes lantern-flicker {
+          0%,100% { opacity: 0.65; transform: scale(1);    }
+          18%     { opacity: 1;    transform: scale(1.12); }
+          35%     { opacity: 0.55; transform: scale(0.92); }
+          55%     { opacity: 0.9;  transform: scale(1.06); }
+          78%     { opacity: 0.7;  transform: scale(0.98); }
+        }
+        @keyframes firefly-wander {
+          0%   { transform: translate(0px,   0px);  opacity: 0.5; }
+          20%  { transform: translate(14px,  -9px); opacity: 1;   }
+          45%  { transform: translate(-7px, -16px); opacity: 0.7; }
+          65%  { transform: translate(10px,  -5px); opacity: 1;   }
+          85%  { transform: translate(-4px,  -2px); opacity: 0.6; }
+          100% { transform: translate(0px,   0px);  opacity: 0.5; }
+        }
+        @keyframes water-drift {
+          0%,100% { transform: translateX(0);    opacity: 0.28; }
+          50%     { transform: translateX(-18px); opacity: 0.42; }
+        }
         @keyframes jugnu-fly-in {
           0%   { transform: translate(280px, 30px) scale(0.5) rotate(18deg);  opacity: 0; }
           8%   { opacity: 1; }
@@ -486,7 +506,43 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       `}</style>
 
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex-1 overflow-y-auto py-4">
+        <div
+          className="flex-1 overflow-y-auto py-4 relative"
+          style={{ backgroundImage: 'url(/chat-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 55%' }}
+        >
+          {/* ── Animated night-scene overlays ── */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {/* Lantern glows — positions approximate the lanterns in the illustration */}
+            {[
+              { left: '17%', top: '20%', delay: '0s',    dur: '3.1s', size: 100 },
+              { left: '11%', top: '52%', delay: '1.3s',  dur: '4.0s', size:  80 },
+              { left: '26%', top: '72%', delay: '0.7s',  dur: '2.8s', size:  70 },
+              { left: '78%', top: '38%', delay: '1.9s',  dur: '3.6s', size:  90 },
+            ].map((g, i) => (
+              <div key={i} className="absolute" style={{ left: g.left, top: g.top, animation: `lantern-flicker ${g.dur} ease-in-out ${g.delay} infinite` }}>
+                <div style={{ width: g.size, height: g.size, borderRadius: '50%', background: `radial-gradient(circle, rgba(255,185,60,0.38) 0%, rgba(255,140,20,0.12) 50%, transparent 72%)` }} />
+              </div>
+            ))}
+            {/* Fireflies */}
+            {[
+              { left: '38%', top: '30%', delay: '0s',   dur: '5.2s' },
+              { left: '55%', top: '18%', delay: '1.1s', dur: '6.8s' },
+              { left: '22%', top: '44%', delay: '2.4s', dur: '4.6s' },
+              { left: '70%', top: '55%', delay: '0.6s', dur: '7.1s' },
+              { left: '45%', top: '68%', delay: '3.2s', dur: '5.8s' },
+              { left: '62%', top: '25%', delay: '1.8s', dur: '6.3s' },
+            ].map((f, i) => (
+              <div key={i} className="absolute" style={{ left: f.left, top: f.top, animation: `firefly-wander ${f.dur} ease-in-out ${f.delay} infinite` }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(255,230,100,0.9)', boxShadow: '0 0 6px 3px rgba(255,210,50,0.5)' }} />
+              </div>
+            ))}
+            {/* Water shimmer — bottom 32% */}
+            <div className="absolute bottom-0 left-0 right-0" style={{ height: '32%' }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, rgba(15,30,80,0.22) 100%)', animation: `water-drift 5.5s ease-in-out infinite` }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, rgba(15,30,80,0.22) 100%)', animation: `water-drift 7.2s ease-in-out 1.5s infinite reverse` }} />
+            </div>
+          </div>
+
           {feed.map((item, i) => {
             const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
             const inner = (() => {
@@ -517,22 +573,22 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         )}
 
         {/* Input bar */}
-        <div className="shrink-0 border-t border-gray-100 px-6 py-4">
-          <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:border-indigo-400 focus-within:bg-white transition-all shadow-sm">
+        <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
+          <div className="flex items-center gap-3 rounded-2xl px-5 py-3 transition-all" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)' }}>
             <textarea
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
               placeholder={`Message #${projectId.slice(0, 6)}…`}
-              className="flex-1 resize-none text-sm text-gray-900 placeholder-gray-400 bg-transparent outline-none leading-5"
+              className="flex-1 resize-none text-sm text-white/90 placeholder-white/35 bg-transparent outline-none leading-5"
               style={{ maxHeight: '120px' }}
               disabled={sending}
             />
-            <div className="flex items-center gap-3 text-gray-400">
-              <span className="text-base cursor-pointer hover:text-gray-600 select-none">📎</span>
-              <span className="text-base cursor-pointer hover:text-gray-600 select-none">😊</span>
-              <span className="text-sm cursor-pointer hover:text-gray-600 select-none font-medium">@</span>
+            <div className="flex items-center gap-3 text-white/40">
+              <span className="text-base cursor-pointer hover:text-white/70 select-none">📎</span>
+              <span className="text-base cursor-pointer hover:text-white/70 select-none">😊</span>
+              <span className="text-sm cursor-pointer hover:text-white/70 select-none font-medium">@</span>
             </div>
             <button
               onClick={() => void send()}

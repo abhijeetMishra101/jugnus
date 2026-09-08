@@ -37,8 +37,28 @@ export default async function WorkspaceLayout({ children, params }: Props) {
 
         {/* Logo */}
         <div className="px-5 py-5 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)' }}>
-            <span className="text-white text-lg">✦</span>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg overflow-hidden" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+            <svg viewBox="0 0 36 36" width="28" height="28" fill="none">
+              {/* Body */}
+              <ellipse cx="18" cy="20" rx="7" ry="8" fill="#1a1a1a"/>
+              <rect x="12" y="16" width="12" height="3" rx="1.5" fill="#f59e0b" opacity="0.9"/>
+              <rect x="12" y="20" width="12" height="3" rx="1.5" fill="#f59e0b" opacity="0.7"/>
+              <rect x="12" y="24" width="12" height="2" rx="1" fill="#f59e0b" opacity="0.5"/>
+              {/* Head */}
+              <circle cx="18" cy="13" r="5" fill="#1a1a1a"/>
+              <circle cx="16" cy="12" r="1.5" fill="#fde68a"/>
+              <circle cx="20" cy="12" r="1.5" fill="#fde68a"/>
+              {/* Wings */}
+              <ellipse cx="10" cy="16" rx="5" ry="3" fill="white" opacity="0.55" transform="rotate(-20 10 16)"/>
+              <ellipse cx="26" cy="16" rx="5" ry="3" fill="white" opacity="0.55" transform="rotate(20 26 16)"/>
+              {/* Stinger */}
+              <ellipse cx="18" cy="28" rx="1.5" ry="2" fill="#f59e0b"/>
+              {/* Antennae */}
+              <line x1="15" y1="8" x2="12" y2="5" stroke="#1a1a1a" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="11.5" cy="4.5" r="1" fill="#fde68a"/>
+              <line x1="21" y1="8" x2="24" y2="5" stroke="#1a1a1a" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="24.5" cy="4.5" r="1" fill="#fde68a"/>
+            </svg>
           </div>
           <span className="text-white font-bold text-lg tracking-tight">jugnus</span>
         </div>
