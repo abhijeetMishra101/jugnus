@@ -94,9 +94,27 @@ function buildFeed(messages: Message[], initialIds: Set<string>): FeedItem[] {
 
 // ─── TypingBubble ─────────────────────────────────────────────────────────────
 
+function useElapsed() {
+  const startRef = useRef(Date.now())
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    startRef.current = Date.now()
+    setElapsed(0)
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const m = Math.floor(elapsed / 60)
+  const s = elapsed % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
 function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: string[] }) {
   const j = JUGNU[jugnuKey]
+  const elapsed = useElapsed()
   if (!j) return null
+
+  const lastActivity = activities[activities.length - 1] ?? ''
+  const statusLabel = activities.length === 0 ? 'thinking' : 'working'
 
   return (
     <div className="flex items-end gap-1 px-3 py-1.5">
@@ -111,23 +129,18 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
           </span>
           <span className="text-xs" style={{ color: j.color }}>{j.icon}</span>
         </div>
-        <div className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm" style={{ backgroundColor: j.bg, backdropFilter: 'blur(8px)', border: `1px solid ${j.color}22` }}>
-          {activities.length > 0 && (
-            <div className="mb-2.5 max-h-28 overflow-y-auto space-y-1.5">
-              {activities.map((a, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span className="shrink-0 block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: j.color, opacity: i === activities.length - 1 ? 1 : 0.35 }} />
-                  <span className="text-xs font-mono" style={{ color: j.color, opacity: i === activities.length - 1 ? 0.9 : 0.45 }}>{a}</span>
-                </div>
-              ))}
-            </div>
+        <div className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm" style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}>
+          {/* Last activity line */}
+          {lastActivity && (
+            <p className="text-xs font-mono mb-2.5" style={{ color: j.color, opacity: 0.85 }}>{lastActivity}</p>
           )}
+          {/* Animated dots + elapsed */}
           <div className="flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
               <span key={i} className="block w-2 h-2 rounded-full" style={{ backgroundColor: j.color, animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
             ))}
-            <span className="text-xs ml-1" style={{ color: j.color, opacity: 0.6 }}>
-              {activities.length === 0 ? 'thinking…' : 'working…'}
+            <span className="text-xs ml-1.5 tabular-nums" style={{ color: j.color, opacity: 0.55 }}>
+              {statusLabel} · {elapsed}
             </span>
           </div>
         </div>
