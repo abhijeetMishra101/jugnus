@@ -107,8 +107,8 @@ function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: s
     <div className="flex items-start gap-3 py-0.5">
       <div className="flex-1 min-w-0 max-w-lg">
         <div
-          className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm overflow-y-auto"
-          style={{ backgroundColor: bg, maxHeight: 360 }}
+          className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm"
+          style={{ backgroundColor: bg }}
         >
           <div className="jugnu-markdown">
             <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -165,8 +165,8 @@ function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messa
           {messages.map((msg, i) => (
             <div key={msg.id}>
               <div
-                className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm overflow-y-auto jugnu-dark-bubble"
-                style={{ backgroundColor: j.bg, maxHeight: 360, backdropFilter: 'blur(8px)', border: `1px solid ${j.color}22` }}
+                className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble"
+                style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}
               >
                 <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -602,7 +602,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
-              placeholder={`Message #${projectId.slice(0, 6)}…`}
+              placeholder="Message your team…"
               className="flex-1 resize-none text-sm text-white/90 placeholder-white/35 bg-transparent outline-none leading-5"
               style={{ maxHeight: '120px' }}
               disabled={sending}

@@ -35,11 +35,11 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  working:   { label: 'Working',   cls: 'bg-indigo-100 text-indigo-700 animate-pulse' },
-  reviewing: { label: 'Reviewing', cls: 'bg-amber-100  text-amber-700  animate-pulse' },
-  done:      { label: 'Done',      cls: 'bg-emerald-100 text-emerald-700' },
-  idle:      { label: 'Idle',      cls: 'bg-gray-100   text-gray-500' },
-  blocked:   { label: 'Blocked',   cls: 'bg-red-100    text-red-600' },
+  working:   { label: 'Working',   cls: 'bg-indigo-500/20 text-indigo-300 animate-pulse' },
+  reviewing: { label: 'Reviewing', cls: 'bg-amber-500/20  text-amber-300  animate-pulse' },
+  done:      { label: 'Done',      cls: 'bg-emerald-500/20 text-emerald-300' },
+  idle:      { label: 'Idle',      cls: 'bg-white/10      text-white/40' },
+  blocked:   { label: 'Blocked',   cls: 'bg-red-500/20    text-red-300' },
 }
 
 const TASK_ICON: Record<string, { icon: string; cls: string }> = {
@@ -99,13 +99,13 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
   const circumference = 2 * Math.PI * 20 // r=20
 
   return (
-    <aside className="w-72 shrink-0 border-l border-gray-100 bg-gray-50/80 flex flex-col h-full overflow-y-auto">
+    <aside className="w-72 shrink-0 border-l border-white/10 flex flex-col h-full overflow-y-auto" style={{ background: 'rgba(8, 14, 35, 0.88)', backdropFilter: 'blur(12px)' }}>
 
       {/* Agents in action */}
-      <div className="p-5 border-b border-gray-100">
+      <div className="p-5 border-b border-white/10">
         <div className="flex items-center gap-2 mb-4">
           <span className="text-base">✦</span>
-          <h3 className="text-sm font-semibold text-gray-900">Agents in action</h3>
+          <h3 className="text-sm font-semibold text-white/90">Agents in action</h3>
         </div>
 
         <div className="space-y-3">
@@ -126,12 +126,12 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
-                    <p className="text-sm font-semibold text-gray-900">{j.name}</p>
+                    <p className="text-sm font-semibold text-white/90">{j.name}</p>
                     <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
                       {badge.label}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 truncate">
+                  <p className="text-xs text-white/40 truncate">
                     {currentTask
                       ? currentTask.title
                       : jugnuRoles?.[j.key]?.display_role ?? JUGNU_ROLE[j.key] ?? j.role}
@@ -145,13 +145,13 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
 
       {/* Task progress */}
       {tasks.length > 0 && (
-        <div className="p-5 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Task Progress</h3>
+        <div className="p-5 border-b border-white/10">
+          <h3 className="text-sm font-semibold text-white/90 mb-4">Task Progress</h3>
 
           {/* Circular progress */}
           <div className="flex items-center gap-4 mb-4">
             <svg width="56" height="56" className="-rotate-90">
-              <circle cx="28" cy="28" r="20" fill="none" stroke="#e5e7eb" strokeWidth="5" />
+              <circle cx="28" cy="28" r="20" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="5" />
               <circle
                 cx="28" cy="28" r="20" fill="none" stroke="#6366f1" strokeWidth="5"
                 strokeDasharray={circumference}
@@ -161,8 +161,8 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
               />
             </svg>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{pct}%</p>
-              <p className="text-xs text-gray-400">{completedCount} of {tasks.length} done</p>
+              <p className="text-2xl font-bold text-white/90">{pct}%</p>
+              <p className="text-xs text-white/40">{completedCount} of {tasks.length} done</p>
             </div>
           </div>
 
@@ -175,17 +175,17 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
                   <span className={`shrink-0 text-sm font-mono mt-0.5 ${icon.cls}`}>{icon.icon}</span>
                   <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                     <span className={`text-xs leading-snug ${
-                      t.status === 'completed'   ? 'text-gray-400 line-through' :
-                      t.status === 'in_progress' ? 'text-gray-900 font-medium'  : 'text-gray-500'
+                      t.status === 'completed'   ? 'text-white/30 line-through' :
+                      t.status === 'in_progress' ? 'text-white/90 font-medium'  : 'text-white/50'
                     }`}>{t.title}</span>
                     {t.status === 'in_progress' && (
-                      <span className="shrink-0 text-xs text-indigo-500 font-medium">In progress</span>
+                      <span className="shrink-0 text-xs text-indigo-300 font-medium">In progress</span>
                     )}
                     {t.status === 'completed' && (
-                      <span className="shrink-0 text-xs text-emerald-500 font-medium">Done</span>
+                      <span className="shrink-0 text-xs text-emerald-300 font-medium">Done</span>
                     )}
                     {t.status === 'pending' && (
-                      <span className="shrink-0 text-xs text-gray-300">Pending</span>
+                      <span className="shrink-0 text-xs text-white/25">Pending</span>
                     )}
                   </div>
                 </div>
@@ -198,15 +198,16 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
       {/* Escalations */}
       {escalations.length > 0 && (
         <div className="p-5">
-          <h3 className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-3">⚠️ Your input needed</h3>
+          <h3 className="text-xs font-semibold text-amber-300 uppercase tracking-wider mb-3">⚠️ Your input needed</h3>
           {escalations.map((e) => (
-            <div key={e.id} className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-              <p className="text-sm text-gray-800">{e.question}</p>
+            <div key={e.id} className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
+              <p className="text-sm text-white/80">{e.question}</p>
               {e.options?.map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => onEscalationReply(e.id, opt.value)}
-                  className="w-full text-left text-sm px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 transition-colors"
+                  className="w-full text-left text-sm px-3 py-1.5 rounded-lg text-white/80 hover:text-white transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
                 >
                   {opt.label}
                 </button>
@@ -217,9 +218,9 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
       )}
 
       {/* Footer tagline */}
-      <div className="mt-auto p-5 border-t border-gray-100">
-        <p className="text-xs font-semibold text-gray-700">The jugnus are on it!</p>
-        <p className="text-xs text-gray-400">Your ideas. Their action.</p>
+      <div className="mt-auto p-5 border-t border-white/10">
+        <p className="text-xs font-semibold text-white/70">The jugnus are on it!</p>
+        <p className="text-xs text-white/35">Your ideas. Their action.</p>
       </div>
     </aside>
   )

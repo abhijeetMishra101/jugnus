@@ -8,13 +8,6 @@ interface Props {
   params: Promise<{ slug: string }>
 }
 
-const NAV = [
-  { icon: '⌂', label: 'Home' },
-  { icon: '⊟', label: 'Threads' },
-  { icon: '@', label: 'Mentions' },
-  { icon: '☆', label: 'Starred' },
-  { icon: '✉', label: 'Direct Messages' },
-]
 
 
 export default async function WorkspaceLayout({ children, params }: Props) {
@@ -61,16 +54,6 @@ export default async function WorkspaceLayout({ children, params }: Props) {
             </svg>
           </div>
           <span className="text-white font-bold text-lg tracking-tight">jugnus</span>
-        </div>
-
-        {/* Nav items */}
-        <div className="px-3 space-y-0.5">
-          {NAV.map((item) => (
-            <button key={item.label} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/60 hover:bg-white/10 hover:text-white transition-colors text-left">
-              <span className="text-base w-5 text-center">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
         </div>
 
         {/* Channels / Projects */}
