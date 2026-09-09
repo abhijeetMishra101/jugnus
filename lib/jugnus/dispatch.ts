@@ -40,20 +40,36 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
   const { data: recentMessages } = await db
     .from('messages')
-    .select('author_type, author_key, content')
+    .select('author_type, author_key, content, metadata')
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
     .limit(30)
 
-  const rawHistory = ((recentMessages ?? []) as { author_type: string; author_key: string; content: string }[])
+  type RawMsg = { author_type: string; author_key: string; content: string; metadata?: Record<string, unknown> }
+  type Att = { url: string; name: string; isImage: boolean; textContent?: string | null }
+
+  const rawHistory = ((recentMessages ?? []) as RawMsg[])
     .reverse()
     .filter((m) => m.author_type === 'user' || m.author_type === 'jugnu')
-    .map((m) => ({
-      role: (m.author_type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: m.author_type === 'jugnu'
+    .map((m) => {
+      let text = m.author_type === 'jugnu'
         ? `[${m.author_key.toUpperCase()}]: ${m.content}`
-        : m.content,
-    }))
+        : m.content
+
+      // Append text attachment content so jugnus can read uploaded files
+      if (m.author_type === 'user' && m.metadata?.attachments) {
+        const atts = (m.metadata.attachments as Att[])
+        const textParts = atts
+          .filter((a) => !a.isImage && a.textContent)
+          .map((a) => `\n\n[Attached file: ${a.name}]\n\`\`\`\n${a.textContent}\n\`\`\``)
+        if (textParts.length) text += textParts.join('')
+      }
+
+      return {
+        role: (m.author_type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: text,
+      }
+    })
 
   let endIdx = rawHistory.length - 1
   while (endIdx >= 0 && rawHistory[endIdx].role === 'assistant') endIdx--

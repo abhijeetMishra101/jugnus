@@ -1,10 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { JugnuIllustration } from './JugnuIllustration'
 import { useProjectEvents } from '../hooks/useProjectEvents'
+
+interface Attachment {
+  url: string
+  name: string
+  type: string
+  size: number
+  isImage: boolean
+  textContent?: string | null
+}
 
 interface Message {
   id: string
@@ -14,6 +23,33 @@ interface Message {
   content: string
   created_at: string
   metadata: Record<string, unknown>
+}
+
+function AttachmentChip({ att, onRemove }: { att: Attachment; onRemove?: () => void }) {
+  if (att.isImage) {
+    return (
+      <div className="relative inline-block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={att.url} alt={att.name} className="h-20 w-20 object-cover rounded-xl border border-white/20 shadow" />
+        {onRemove && (
+          <button onClick={onRemove} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/70 text-white/80 flex items-center justify-center text-xs hover:bg-black transition-colors">×</button>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-white/80" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+      <svg className="w-4 h-4 shrink-0 text-white/50" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9 2v4h4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <a href={att.url} target="_blank" rel="noopener noreferrer" className="truncate max-w-[120px] hover:text-white">{att.name}</a>
+      <span className="text-white/30">{(att.size / 1024).toFixed(0)}KB</span>
+      {onRemove && (
+        <button onClick={onRemove} className="ml-1 text-white/40 hover:text-white/80 transition-colors">×</button>
+      )}
+    </div>
+  )
 }
 
 const JUGNU: Record<string, { name: string; color: string; bg: string; role: string; icon: string }> = {
@@ -218,10 +254,20 @@ function SystemItem({ msg }: { msg: Message }) {
 }
 
 function UserItem({ msg }: { msg: Message }) {
+  const attachments = (msg.metadata?.attachments ?? []) as Attachment[]
   return (
     <div className="flex items-end gap-3 justify-end px-8 py-1">
-      <div className="max-w-md bg-indigo-600 text-white rounded-2xl rounded-br-sm px-5 py-3 text-sm leading-relaxed shadow-sm">
-        {msg.content}
+      <div className="flex flex-col items-end gap-2 max-w-md">
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 justify-end">
+            {attachments.map((att, i) => <AttachmentChip key={i} att={att} />)}
+          </div>
+        )}
+        {msg.content && (
+          <div className="bg-indigo-600 text-white rounded-2xl rounded-br-sm px-5 py-3 text-sm leading-relaxed shadow-sm">
+            {msg.content}
+          </div>
+        )}
       </div>
       <div className="shrink-0 w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600 shadow-sm">
         You
@@ -371,13 +417,16 @@ interface Props {
 }
 
 export function ProjectChannel({ projectId, userId, initialMessages, activeJugnuKey: initialActive }: Props) {
-  const [messages, setMessages]       = useState<Message[]>(initialMessages)
-  const [activities, setActivities]   = useState<string[]>([])
-  const [input, setInput]             = useState('')
-  const [sending, setSending]         = useState(false)
-  const bottomRef   = useRef<HTMLDivElement>(null)
+  const [messages, setMessages]         = useState<Message[]>(initialMessages)
+  const [activities, setActivities]     = useState<string[]>([])
+  const [input, setInput]               = useState('')
+  const [sending, setSending]           = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<Attachment[]>([])
+  const [uploading, setUploading]       = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const bottomRef    = useRef<HTMLDivElement>(null)
   // IDs of messages that existed at load time — those sections never play the fly-in
-  const initialIds  = useRef(new Set(initialMessages.map((m) => m.id)))
+  const initialIds   = useRef(new Set(initialMessages.map((m) => m.id)))
 
   // Derive all event-driven state from the messages event stream (reliable) rather
   // than the jugnus table (drops Realtime events under pipeline burst load).
@@ -461,15 +510,35 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, activeJugnu])
 
+  const handleFiles = useCallback(async (files: FileList | null) => {
+    if (!files?.length) return
+    setUploading(true)
+    const uploads = await Promise.all(
+      Array.from(files).map(async (file) => {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('projectId', projectId)
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        if (!res.ok) return null
+        return res.json() as Promise<Attachment>
+      })
+    )
+    setPendingFiles((prev) => [...prev, ...(uploads.filter(Boolean) as Attachment[])])
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [projectId])
+
   const send = async () => {
     const content = input.trim()
-    if (!content || sending) return
+    if ((!content && !pendingFiles.length) || sending) return
     setSending(true)
     setInput('')
+    const attachments = pendingFiles.length ? pendingFiles : undefined
+    setPendingFiles([])
     await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, content, userId }),
+      body: JSON.stringify({ projectId, content: content || '(attachment)', userId, attachments }),
     })
     setSending(false)
   }
@@ -596,6 +665,25 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
 
         {/* Input bar */}
         <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,text/*,application/json,.ts,.tsx,.js,.jsx,.md,.sql,.py"
+            className="hidden"
+            onChange={(e) => void handleFiles(e.target.files)}
+          />
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {pendingFiles.map((att, i) => (
+                <AttachmentChip
+                  key={i}
+                  att={att}
+                  onRemove={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+                />
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-3 rounded-2xl px-5 py-3 transition-all" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)' }}>
             <textarea
               rows={1}
@@ -607,14 +695,20 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
               style={{ maxHeight: '120px' }}
               disabled={sending}
             />
-            <div className="flex items-center gap-3 text-white/40">
-              <span className="text-base cursor-pointer hover:text-white/70 select-none">📎</span>
-              <span className="text-base cursor-pointer hover:text-white/70 select-none">😊</span>
-              <span className="text-sm cursor-pointer hover:text-white/70 select-none font-medium">@</span>
-            </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="text-white/40 hover:text-white/70 transition-colors disabled:opacity-30"
+              title="Attach file"
+            >
+              {uploading
+                ? <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/></svg>
+                : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              }
+            </button>
             <button
               onClick={() => void send()}
-              disabled={!input.trim() || sending}
+              disabled={(!input.trim() && !pendingFiles.length) || sending}
               className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow"
             >
               <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">

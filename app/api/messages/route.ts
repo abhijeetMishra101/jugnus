@@ -8,10 +8,11 @@ import { createServiceClient } from '@/lib/supabase/server'
  * If there's a pending escalation, resolves it and re-dispatches Maya.
  */
 export async function POST(request: Request) {
-  const { projectId, content, userId } = await request.json() as {
+  const { projectId, content, userId, attachments } = await request.json() as {
     projectId: string
     content: string
     userId: string
+    attachments?: Array<{ url: string; name: string; type: string; size: number; isImage: boolean; textContent?: string | null }>
   }
 
   if (!projectId || !content?.trim() || !userId) {
@@ -20,10 +21,13 @@ export async function POST(request: Request) {
 
   const db = createServiceClient()
 
+  const metadata: Record<string, unknown> = { event_type: 'USER_MESSAGE' }
+  if (attachments?.length) metadata.attachments = attachments
+
   // Insert founder message
   const { data: msg, error } = await db
     .from('messages')
-    .insert({ project_id: projectId, author_type: 'user', author_key: userId, content: content.trim() })
+    .insert({ project_id: projectId, author_type: 'user', author_key: userId, content: content.trim(), metadata })
     .select('id')
     .single()
 
