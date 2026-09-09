@@ -148,7 +148,31 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
     let textBuffer = ''
     let lastFlushedLen = 0
 
+    const earlyActivityLabel: Record<string, string> = {
+      write_file:        `📝 Writing file…`,
+      read_file:         `👁️ Reading file…`,
+      create_task_plan:  `📋 Building task plan…`,
+      complete_task:     `✅ Wrapping up…`,
+      submit_for_review: `🔍 Preparing review…`,
+      approve:           `✅ Reviewing output…`,
+      request_changes:   `✏️ Preparing feedback…`,
+      ask_founder:       `💬 Composing question…`,
+    }
+
     for await (const event of stream) {
+      // Emit activity the moment Claude begins generating a tool call — not after it finishes.
+      // This closes the silent gap where Nia generates a large HTML file for several minutes.
+      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+        const toolName = event.content_block.name
+        void db.from('messages').insert({
+          project_id: projectId,
+          author_type: 'activity',
+          author_key: jugnuKey,
+          content: earlyActivityLabel[toolName] ?? `🔧 ${toolName}…`,
+          metadata: { event_type: 'JUGNU_THINKING', tool: toolName, jugnu_key: jugnuKey },
+        })
+      }
+
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
         textBuffer += event.delta.text
 
