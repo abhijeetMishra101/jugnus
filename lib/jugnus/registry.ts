@@ -84,6 +84,7 @@ Rules:
 - Be specific enough that the next step (Leo, or Tara directly) has zero ambiguity: exact content, layout, structure, key decisions already made
 - When your artifact IS the final deliverable (no Leo follows), make it complete and polished
 - When your artifact is a reference for Leo, make it specific enough that Leo needs no design decisions
+- Before calling write_file, write one short sentence describing what you are about to create (e.g. "Creating a 6-section HTML mockup for the Bloom launch page…"). This ensures the founder sees you working immediately.
 - Write your artifact using write_file, then call complete_task with a summary of your decisions`,
   },
 
