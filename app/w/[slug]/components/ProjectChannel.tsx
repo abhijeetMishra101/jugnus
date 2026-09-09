@@ -610,44 +610,44 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         }
       `}</style>
 
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        {/* ── Background + animated overlays — outside scroll container so they never scroll away ── */}
         <div
-          className="flex-1 overflow-y-auto py-4 relative"
+          className="absolute inset-0 pointer-events-none overflow-hidden"
           style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(/chat-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 55%' }}
         >
-          {/* ── Animated night-scene overlays ── */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            {/* Lantern glows — positions approximate the lanterns in the illustration */}
-            {[
-              { left: '17%', top: '20%', delay: '0s',    dur: '3.1s', size: 100 },
-              { left: '11%', top: '52%', delay: '1.3s',  dur: '4.0s', size:  80 },
-              { left: '26%', top: '72%', delay: '0.7s',  dur: '2.8s', size:  70 },
-              { left: '78%', top: '38%', delay: '1.9s',  dur: '3.6s', size:  90 },
-            ].map((g, i) => (
-              <div key={i} className="absolute" style={{ left: g.left, top: g.top, animation: `lantern-flicker ${g.dur} ease-in-out ${g.delay} infinite` }}>
-                <div style={{ width: g.size, height: g.size, borderRadius: '50%', background: `radial-gradient(circle, rgba(255,185,60,0.38) 0%, rgba(255,140,20,0.12) 50%, transparent 72%)` }} />
-              </div>
-            ))}
-            {/* Fireflies */}
-            {[
-              { left: '38%', top: '30%', delay: '0s',   dur: '5.2s' },
-              { left: '55%', top: '18%', delay: '1.1s', dur: '6.8s' },
-              { left: '22%', top: '44%', delay: '2.4s', dur: '4.6s' },
-              { left: '70%', top: '55%', delay: '0.6s', dur: '7.1s' },
-              { left: '45%', top: '68%', delay: '3.2s', dur: '5.8s' },
-              { left: '62%', top: '25%', delay: '1.8s', dur: '6.3s' },
-            ].map((f, i) => (
-              <div key={i} className="absolute" style={{ left: f.left, top: f.top, animation: `firefly-wander ${f.dur} ease-in-out ${f.delay} infinite` }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(255,230,100,0.9)', boxShadow: '0 0 6px 3px rgba(255,210,50,0.5)' }} />
-              </div>
-            ))}
-            {/* Water shimmer — bottom 32% */}
-            <div className="absolute bottom-0 left-0 right-0" style={{ height: '32%' }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, rgba(15,30,80,0.22) 100%)', animation: `water-drift 5.5s ease-in-out infinite` }} />
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, rgba(15,30,80,0.22) 100%)', animation: `water-drift 7.2s ease-in-out 1.5s infinite reverse` }} />
+          {/* Lantern glows */}
+          {[
+            { left: '17%', top: '20%', delay: '0s',    dur: '3.1s', size: 100 },
+            { left: '11%', top: '52%', delay: '1.3s',  dur: '4.0s', size:  80 },
+            { left: '26%', top: '72%', delay: '0.7s',  dur: '2.8s', size:  70 },
+            { left: '78%', top: '38%', delay: '1.9s',  dur: '3.6s', size:  90 },
+          ].map((g, i) => (
+            <div key={i} className="absolute" style={{ left: g.left, top: g.top, animation: `lantern-flicker ${g.dur} ease-in-out ${g.delay} infinite` }}>
+              <div style={{ width: g.size, height: g.size, borderRadius: '50%', background: `radial-gradient(circle, rgba(255,185,60,0.38) 0%, rgba(255,140,20,0.12) 50%, transparent 72%)` }} />
             </div>
+          ))}
+          {/* Fireflies */}
+          {[
+            { left: '38%', top: '30%', delay: '0s',   dur: '5.2s' },
+            { left: '55%', top: '18%', delay: '1.1s', dur: '6.8s' },
+            { left: '22%', top: '44%', delay: '2.4s', dur: '4.6s' },
+            { left: '70%', top: '55%', delay: '0.6s', dur: '7.1s' },
+            { left: '45%', top: '68%', delay: '3.2s', dur: '5.8s' },
+            { left: '62%', top: '25%', delay: '1.8s', dur: '6.3s' },
+          ].map((f, i) => (
+            <div key={i} className="absolute" style={{ left: f.left, top: f.top, animation: `firefly-wander ${f.dur} ease-in-out ${f.delay} infinite` }}>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(255,230,100,0.9)', boxShadow: '0 0 6px 3px rgba(255,210,50,0.5)' }} />
+            </div>
+          ))}
+          {/* Water shimmer — bottom 32% */}
+          <div className="absolute bottom-0 left-0 right-0" style={{ height: '32%' }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, rgba(15,30,80,0.22) 100%)', animation: `water-drift 5.5s ease-in-out infinite` }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, rgba(15,30,80,0.22) 100%)', animation: `water-drift 7.2s ease-in-out 1.5s infinite reverse` }} />
           </div>
+        </div>
 
+        <div className="flex-1 overflow-y-auto py-4 relative">
           {feed.map((item, i) => {
             const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
             const inner = (() => {
