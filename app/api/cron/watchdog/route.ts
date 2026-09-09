@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
-const STUCK_THRESHOLD_MINUTES = 6
+export const maxDuration = 800
+
+const STUCK_THRESHOLD_MINUTES = 15
 const MAX_RETRIES = 3
 
 /**
  * Watchdog cron — runs every 5 minutes via Vercel Crons.
- * Finds tasks in_progress > STUCK_THRESHOLD_MINUTES.
+ * Finds tasks in_progress > STUCK_THRESHOLD_MINUTES (15 min > jugnu-respond's 800s cap).
  * Restarts them up to MAX_RETRIES times, then marks as failed to stop credit drain.
  */
 export async function GET(request: Request): Promise<Response> {
