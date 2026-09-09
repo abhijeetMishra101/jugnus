@@ -64,6 +64,17 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
   useEffect(() => {
     const db = createBrowserClient()
 
+    // Fresh snapshot on mount so we never miss tasks created before the subscription fires
+    void db.from('tasks')
+      .select('id,title,status,jugnu_key,sort_order')
+      .eq('project_id', projectId)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (data?.length) {
+          setTasks(data as Task[])
+        }
+      })
+
     const jugnuSub = db
       .channel(`jugnu-panel-jugnus:${projectId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jugnus' },
