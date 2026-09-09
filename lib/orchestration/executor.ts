@@ -22,7 +22,7 @@ export async function getNextReadyTask(
   if (!tasks?.length) return null
 
   const completedIds = new Set(
-    tasks.filter((t) => t.status === 'completed').map((t) => t.id)
+    tasks.filter((t) => t.status === 'completed' || t.status === 'skipped').map((t) => t.id)
   )
 
   return tasks.find((t) => {
@@ -55,7 +55,7 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       .from('tasks')
       .select('id', { count: 'exact', head: true })
       .eq('project_id', projectId)
-      .neq('status', 'completed')
+      .not('status', 'in', '("completed","skipped","failed")')
 
     if (count === 0) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
