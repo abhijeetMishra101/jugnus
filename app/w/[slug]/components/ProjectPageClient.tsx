@@ -89,24 +89,25 @@ export function ProjectPageClient({
       {/* Main area (chat + world stacked, one visible at a time) */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header with view toggle */}
-        <header className="shrink-0 px-6 py-3 border-b border-gray-100 bg-white flex items-center gap-3">
+        <header className="shrink-0 px-6 py-3 border-b border-white/10 flex items-center gap-3" style={{ background: 'rgba(8, 14, 35, 0.88)', backdropFilter: 'blur(12px)' }}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-sm font-medium">#</span>
-              <h1 className="text-sm font-semibold text-gray-900 truncate">{project.title}</h1>
+              <span className="text-white/40 text-sm font-medium">#</span>
+              <h1 className="text-sm font-semibold text-white/90 truncate">{project.title}</h1>
             </div>
-            <p className="text-xs text-gray-400 truncate mt-0.5 pl-4">{project.objective}</p>
+            <p className="text-xs text-white/40 truncate mt-0.5 pl-4">{project.objective}</p>
           </div>
 
           {/* Toggle */}
-          <div className="shrink-0 flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
+          <div className="shrink-0 flex items-center rounded-xl p-1 gap-0.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
             <button
               onClick={() => setView('chat')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 view === 'chat'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-white shadow-sm'
+                  : 'text-white/40 hover:text-white/70'
               }`}
+              style={view === 'chat' ? { background: 'rgba(255,255,255,0.15)' } : {}}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M2 2h12a1 1 0 011 1v7a1 1 0 01-1 1H9l-3 3v-3H2a1 1 0 01-1-1V3a1 1 0 011-1z"/>
@@ -117,9 +118,10 @@ export function ProjectPageClient({
               onClick={() => { setWorldEverMounted(true); setView('world') }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 view === 'world'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-white shadow-sm'
+                  : 'text-white/40 hover:text-white/70'
               }`}
+              style={view === 'world' ? { background: 'rgba(255,255,255,0.15)' } : {}}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM6 6h4v1H9v3H7V7H6V6z"/>

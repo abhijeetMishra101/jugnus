@@ -188,9 +188,31 @@ function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messa
 // ─── System / User standalone items ──────────────────────────────────────────
 
 function SystemItem({ msg }: { msg: Message }) {
+  const meta = (msg.metadata ?? {}) as Record<string, unknown>
+  const deployUrl = meta.deploy_url as string | null | undefined
+  const isCompleted = meta.event_type === 'PROJECT_COMPLETED' && deployUrl
+
+  const label = isCompleted
+    ? '✨ All tasks completed. Your Jugnus finished the project.'
+    : msg.content
+
   return (
-    <div className="flex justify-center my-3 px-4">
-      <span className="text-xs text-white/70 rounded-full px-4 py-1.5" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}>{msg.content}</span>
+    <div className="flex flex-col items-center gap-2 my-3 px-4">
+      <span className="text-xs text-white/70 rounded-full px-4 py-1.5" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}>{label}</span>
+      {isCompleted && (
+        <a
+          href={deployUrl!}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs font-medium px-4 py-1.5 rounded-full transition-opacity hover:opacity-80"
+          style={{ background: 'rgba(99,102,241,0.55)', color: '#c7d2fe', backdropFilter: 'blur(6px)', border: '1px solid rgba(99,102,241,0.4)' }}
+        >
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M6 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3M10 2h4m0 0v4m0-4L7 9" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          View Preview
+        </a>
+      )}
     </div>
   )
 }

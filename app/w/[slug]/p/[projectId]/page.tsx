@@ -21,7 +21,7 @@ export default async function ProjectPage({ params }: Props) {
 
   const [messagesRes, tasksRes, jugnusRes, escalationsRes, filesRes] = await Promise.all([
     db.from('messages').select('id,project_id,author_type,author_key,content,created_at,metadata')
-      .eq('project_id', projectId).order('created_at', { ascending: true }).limit(100),
+      .eq('project_id', projectId).neq('author_type', 'activity').order('created_at', { ascending: true }).limit(300),
     db.from('tasks').select('id,title,status,jugnu_key,sort_order')
       .eq('project_id', projectId).order('sort_order', { ascending: true }),
     db.from('jugnus').select('key,name,role,color,status')
