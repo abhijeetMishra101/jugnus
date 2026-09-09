@@ -102,6 +102,7 @@ function makeAdvanceDb(opts: {
       return {
         eq: vi.fn().mockReturnValue({
           neq: vi.fn().mockResolvedValue({ count: nonCompletedCount }),
+          not: vi.fn().mockResolvedValue({ count: nonCompletedCount }),
         }),
       }
     }),
