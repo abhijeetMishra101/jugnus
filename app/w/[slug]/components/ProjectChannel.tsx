@@ -94,27 +94,28 @@ function buildFeed(messages: Message[], initialIds: Set<string>): FeedItem[] {
 
 // ─── TypingBubble ─────────────────────────────────────────────────────────────
 
-function useElapsed() {
-  const startRef = useRef(Date.now())
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    startRef.current = Date.now()
-    setElapsed(0)
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
-    return () => clearInterval(id)
-  }, [])
-  const m = Math.floor(elapsed / 60)
-  const s = elapsed % 60
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
-}
+const THINKING_PHRASES = [
+  'Reading the brief…',
+  'Thinking it through…',
+  'Considering options…',
+  'Almost there…',
+  'Crafting a response…',
+  'Putting it together…',
+]
 
 function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: string[] }) {
   const j = JUGNU[jugnuKey]
-  const elapsed = useElapsed()
+  const [phraseIdx, setPhraseIdx] = useState(0)
+
+  useEffect(() => {
+    setPhraseIdx(0)
+    const id = setInterval(() => setPhraseIdx((p) => (p + 1) % THINKING_PHRASES.length), 3000)
+    return () => clearInterval(id)
+  }, [])
+
   if (!j) return null
 
-  const lastActivity = activities[activities.length - 1] ?? ''
-  const statusLabel = activities.length === 0 ? 'thinking' : 'working'
+  const lastActivity = activities[activities.length - 1]
 
   return (
     <div className="flex items-end gap-1 px-3 py-1.5">
@@ -130,18 +131,18 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
           <span className="text-xs" style={{ color: j.color }}>{j.icon}</span>
         </div>
         <div className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm" style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}>
-          {/* Last activity line */}
           {lastActivity && (
-            <p className="text-xs font-mono mb-2.5" style={{ color: j.color, opacity: 0.85 }}>{lastActivity}</p>
+            <p className="text-xs font-mono mb-2.5" style={{ color: j.color, opacity: 0.8 }}>{lastActivity}</p>
           )}
-          {/* Animated dots + elapsed */}
           <div className="flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
               <span key={i} className="block w-2 h-2 rounded-full" style={{ backgroundColor: j.color, animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
             ))}
-            <span className="text-xs ml-1.5 tabular-nums" style={{ color: j.color, opacity: 0.55 }}>
-              {statusLabel} · {elapsed}
-            </span>
+            {!lastActivity && (
+              <span className="text-xs ml-1.5" style={{ color: j.color, opacity: 0.5 }}>
+                {THINKING_PHRASES[phraseIdx]}
+              </span>
+            )}
           </div>
         </div>
       </div>
