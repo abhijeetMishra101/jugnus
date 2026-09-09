@@ -86,7 +86,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
   let totalModelCalls = 0
   let totalCost = 0
 
-  for (let turn = 0; turn < 10 && !done; turn++) {
+  for (let turn = 0; turn < 25 && !done; turn++) {
     // Budget ceiling check before each model call
     if (taskId) {
       const { data: budgetProj } = await db
