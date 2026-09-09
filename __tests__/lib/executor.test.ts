@@ -72,8 +72,10 @@ function makeAdvanceDb(opts: {
   inProgressTask?: { id: string } | null
   tasks?: AdvanceTask[]
   nonCompletedCount?: number
+  hasFiles?: boolean
+  humanClaimFails?: boolean
 }) {
-  const { inProgressTask = null, tasks = [], nonCompletedCount = 0 } = opts
+  const { inProgressTask = null, tasks = [], nonCompletedCount = 0, hasFiles = false, humanClaimFails = false } = opts
   let tasksSelectCalls = 0
 
   const tasksFrom = {
@@ -107,7 +109,7 @@ function makeAdvanceDb(opts: {
       eq: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { id: 'task-1' } }),
+            single: vi.fn().mockResolvedValue({ data: humanClaimFails ? null : { id: 'task-1' } }),
           }),
         }),
       }),
@@ -130,7 +132,7 @@ function makeAdvanceDb(opts: {
           eq: vi.fn().mockReturnValue({
             not: vi.fn().mockReturnValue({
               limit: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({ data: null }),
+                single: vi.fn().mockResolvedValue({ data: hasFiles ? { id: 'file-1' } : null }),
               }),
             }),
           }),
@@ -182,5 +184,40 @@ describe('advanceProject', () => {
     const fromCalls = (db.from as ReturnType<typeof vi.fn>).mock.calls.map((c: string[]) => c[0])
     expect(fromCalls).toContain('projects')
     expect(fromCalls).toContain('messages')
+  })
+
+  it('includes preview URL in completion message when project has files', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'a', title: 'Done', jugnu_key: 'nia', depends_on: [], status: 'completed' }],
+      nonCompletedCount: 0,
+      hasFiles: true,
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(false)
+    const fromCalls = (db.from as ReturnType<typeof vi.fn>).mock.calls.map((c: string[]) => c[0])
+    expect(fromCalls).toContain('file_snapshots')
+  })
+
+  it('pauses pipeline and posts APPROVAL_REQUIRED when next task is human', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'human-1', title: 'Review', jugnu_key: 'human', depends_on: [], status: 'pending' }],
+      nonCompletedCount: 1,
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(false)
+    expect(result.taskId).toBe('human-1')
+    const fromCalls = (db.from as ReturnType<typeof vi.fn>).mock.calls.map((c: string[]) => c[0])
+    expect(fromCalls).toContain('messages')
+  })
+
+  it('returns dispatched:false without message when human task claim fails', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'human-2', title: 'Review', jugnu_key: 'human', depends_on: [], status: 'pending' }],
+      nonCompletedCount: 1,
+      humanClaimFails: true,
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(false)
+    expect(result.taskId).toBe('human-2')
   })
 })
