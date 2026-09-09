@@ -125,6 +125,17 @@ function makeAdvanceDb(opts: {
         update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) }),
       }
       if (table === 'messages') return { insert: vi.fn().mockResolvedValue({ error: null }) }
+      if (table === 'file_snapshots') return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            not: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({ data: null }),
+              }),
+            }),
+          }),
+        }),
+      }
       return {}
     }),
   } as unknown as SupabaseClient
