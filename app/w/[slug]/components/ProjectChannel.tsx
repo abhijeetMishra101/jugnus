@@ -108,7 +108,6 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
   const [phraseIdx, setPhraseIdx] = useState(0)
 
   useEffect(() => {
-    setPhraseIdx(0)
     const id = setInterval(() => setPhraseIdx((p) => (p + 1) % THINKING_PHRASES.length), 3000)
     return () => clearInterval(id)
   }, [])
