@@ -173,7 +173,10 @@ function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: s
 
 // ─── Jugnu section — illustration sticky on the left ─────────────────────────
 
-function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messages: Message[]; isNew: boolean }) {
+function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, userId }: {
+  authorKey: string; messages: Message[]; isNew: boolean
+  pendingMsgId: string | null; projectId: string; userId: string
+}) {
   const j = JUGNU[authorKey]
   if (!j) return null
 
@@ -211,23 +214,38 @@ function JugnuSection({ authorKey, messages, isNew }: { authorKey: string; messa
         </div>
 
         <div className="space-y-3">
-          {messages.map((msg, i) => (
-            <div key={msg.id}>
-              <div
-                className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble"
-                style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}
-              >
-                <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+          {messages.map((msg, i) => {
+            const meta = (msg.metadata ?? {}) as Record<string, unknown>
+            const isClarification = msg.id === pendingMsgId && meta.event_type === 'CLARIFICATION_REQUIRED'
+            const questions = isClarification
+              ? (meta.questions as ClarificationQuestion[] | undefined) ?? []
+              : []
+            return (
+              <div key={msg.id}>
+                <div
+                  className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble"
+                  style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}
+                >
+                  <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                  {isClarification && questions.length > 0 && (
+                    <InlineClarification
+                      questions={questions}
+                      projectId={projectId}
+                      userId={userId}
+                      accentColor={j.color}
+                    />
+                  )}
                 </div>
+                {i > 0 && (
+                  <span className="block text-[10px] text-white/40 mt-0.5 ml-1">
+                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
               </div>
-              {i > 0 && (
-                <span className="block text-[10px] text-white/40 mt-0.5 ml-1">
-                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
@@ -420,13 +438,13 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
   )
 }
 
-// ─── ClarificationWidget ─────────────────────────────────────────────────────
+// ─── Inline clarification form — rendered inside Maya's bubble ────────────────
 
 interface ClarificationQuestion { text: string; options: string[] }
 
-function ClarificationWidget({
-  questions, projectId, userId,
-}: { questions: ClarificationQuestion[]; projectId: string; userId: string }) {
+function InlineClarification({
+  questions, projectId, userId, accentColor,
+}: { questions: ClarificationQuestion[]; projectId: string; userId: string; accentColor: string }) {
   const [selected, setSelected] = useState<Record<number, Set<string>>>({})
   const [custom, setCustom]     = useState<Record<number, string>>({})
   const [sending, setSending]   = useState(false)
@@ -469,48 +487,49 @@ function ClarificationWidget({
   }
 
   return (
-    <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.85)', backdropFilter: 'blur(10px)' }}>
-      <div className="space-y-5 mb-4">
-        {questions.map((q, qi) => (
-          <div key={qi}>
-            <p className="text-xs font-semibold text-white/60 mb-2">{q.text}</p>
-            <div className="space-y-1.5">
-              {q.options.map((opt) => {
-                const checked = selected[qi]?.has(opt) ?? false
-                return (
-                  <div key={opt}>
-                    <label className="flex items-center gap-2.5 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggle(qi, opt)}
-                        className="w-4 h-4 rounded border-white/30 bg-white/10 accent-indigo-500 cursor-pointer"
-                      />
-                      <span className="text-sm text-white/75 group-hover:text-white transition-colors">
-                        {isOther(opt) ? 'Something else…' : opt}
-                      </span>
-                    </label>
-                    {isOther(opt) && checked && (
-                      <input
-                        type="text"
-                        autoFocus
-                        value={custom[qi] ?? ''}
-                        onChange={(e) => setCustom((prev) => ({ ...prev, [qi]: e.target.value }))}
-                        placeholder="Type your answer…"
-                        className="mt-1.5 ml-6 w-[calc(100%-1.5rem)] text-sm bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white placeholder-white/35 outline-none focus:border-indigo-400"
-                      />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+    <div className="mt-3 space-y-4">
+      {questions.map((q, qi) => (
+        <div key={qi}>
+          <p className="text-xs font-semibold mb-2" style={{ color: accentColor }}>{q.text}</p>
+          <div className="space-y-1.5">
+            {q.options.map((opt) => {
+              const checked = selected[qi]?.has(opt) ?? false
+              return (
+                <div key={opt}>
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(qi, opt)}
+                      className="w-4 h-4 rounded cursor-pointer shrink-0"
+                      style={{ accentColor }}
+                    />
+                    <span className="text-sm leading-snug" style={{ color: checked ? 'rgba(240,240,255,1)' : 'rgba(240,240,255,0.65)' }}>
+                      {isOther(opt) ? 'Something else…' : opt}
+                    </span>
+                  </label>
+                  {isOther(opt) && checked && (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={custom[qi] ?? ''}
+                      onChange={(e) => setCustom((prev) => ({ ...prev, [qi]: e.target.value }))}
+                      placeholder="Type your answer…"
+                      className="mt-1.5 ml-6 w-[calc(100%-1.5rem)] text-sm rounded-lg px-3 py-1.5 text-white placeholder-white/35 outline-none"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${accentColor}55` }}
+                    />
+                  )}
+                </div>
+              )
+            })}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
       <button
         onClick={() => void submit()}
         disabled={!canSubmit || sending}
-        className="w-full py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow"
+        className="w-full mt-1 py-2 rounded-xl text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        style={{ background: accentColor + '33', color: accentColor, border: `1px solid ${accentColor}55` }}
       >
         {sending ? 'Sending…' : 'Send answers →'}
       </button>
@@ -568,18 +587,15 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     ) ?? null
   , [messages])
 
-  const pendingClarification = useMemo(() => {
-    if (!lastClarification) return false
-    return !messages.some(
+  // pendingMsgId: the CLARIFICATION_REQUIRED message ID that still has no user reply after it
+  // (used by JugnuSection to render the inline MCQ form inside the bubble)
+  const pendingMsgId = useMemo((): string | null => {
+    if (!lastClarification) return null
+    const answered = messages.some(
       (m) => m.author_type === 'user' && new Date(m.created_at) > new Date(lastClarification.created_at)
     )
+    return answered ? null : lastClarification.id
   }, [lastClarification, messages])
-
-  const clarificationQuestions = useMemo((): ClarificationQuestion[] => {
-    if (!lastClarification) return []
-    const meta = lastClarification.metadata as Record<string, unknown>
-    return (meta.questions as ClarificationQuestion[]) ?? []
-  }, [lastClarification])
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -769,7 +785,11 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
             const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
             const inner = (() => {
               if (item.type === 'jugnu') {
-                return <JugnuSection authorKey={item.authorKey} messages={item.messages} isNew={item.isNew} />
+                return <JugnuSection
+                  authorKey={item.authorKey} messages={item.messages} isNew={item.isNew}
+                  pendingMsgId={pendingMsgId}
+                  projectId={projectId} userId={userId}
+                />
               }
               if (item.type === 'system') return <SystemItem msg={item.message} />
               return <UserItem msg={item.message} />
@@ -794,65 +814,60 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           <ApprovalCard projectId={projectId} taskId={approvalTask.taskId} />
         )}
 
-        {/* MCQ clarification widget replaces input bar when Maya is waiting for an answer */}
-        {pendingClarification && clarificationQuestions.length > 0 ? (
-          <ClarificationWidget questions={clarificationQuestions} projectId={projectId} userId={userId} />
-        ) : (
-          /* Input bar */
-          <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,text/*,application/json,.ts,.tsx,.js,.jsx,.md,.sql,.py"
-              className="hidden"
-              onChange={(e) => void handleFiles(e.target.files)}
-            />
-            {pendingFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {pendingFiles.map((att, i) => (
-                  <AttachmentChip
-                    key={i}
-                    att={att}
-                    onRemove={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
-                  />
-                ))}
-              </div>
-            )}
-            <div className="flex items-center gap-3 rounded-2xl px-5 py-3 transition-all" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)' }}>
-              <textarea
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
-                placeholder="Message your team…"
-                className="flex-1 resize-none text-sm text-white/90 placeholder-white/35 bg-transparent outline-none leading-5"
-                style={{ maxHeight: '120px' }}
-                disabled={sending}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="text-white/40 hover:text-white/70 transition-colors disabled:opacity-30"
-                title="Attach file"
-              >
-                {uploading
-                  ? <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/></svg>
-                  : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                }
-              </button>
-              <button
-                onClick={() => void send()}
-                disabled={(!input.trim() && !pendingFiles.length) || sending}
-                className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow"
-              >
-                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                </svg>
-              </button>
+        {/* Input bar — always visible; MCQ appears inline inside Maya's bubble */}
+        <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,text/*,application/json,.ts,.tsx,.js,.jsx,.md,.sql,.py"
+            className="hidden"
+            onChange={(e) => void handleFiles(e.target.files)}
+          />
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {pendingFiles.map((att, i) => (
+                <AttachmentChip
+                  key={i}
+                  att={att}
+                  onRemove={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+                />
+              ))}
             </div>
+          )}
+          <div className="flex items-center gap-3 rounded-2xl px-5 py-3 transition-all" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)' }}>
+            <textarea
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
+              placeholder="Message your team…"
+              className="flex-1 resize-none text-sm text-white/90 placeholder-white/35 bg-transparent outline-none leading-5"
+              style={{ maxHeight: '120px' }}
+              disabled={sending}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="text-white/40 hover:text-white/70 transition-colors disabled:opacity-30"
+              title="Attach file"
+            >
+              {uploading
+                ? <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/></svg>
+                : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              }
+            </button>
+            <button
+              onClick={() => void send()}
+              disabled={(!input.trim() && !pendingFiles.length) || sending}
+              className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow"
+            >
+              <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </>
   )
