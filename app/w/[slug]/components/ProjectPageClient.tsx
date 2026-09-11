@@ -55,9 +55,7 @@ interface Props {
   initialFiles: { path: string; content: string; updated_at: string }[]
   jugnus: Parameters<typeof JugnuPanel>[0]['jugnus']
   tasks: Parameters<typeof JugnuPanel>[0]['tasks']
-  escalations: Parameters<typeof JugnuPanel>[0]['escalations']
   activeJugnuKey: string | null
-  onEscalationReply: (escalationId: string, answer: string) => Promise<void>
   jugnuRoles: Record<string, { display_role: string; focus: string }>
 }
 
@@ -68,9 +66,7 @@ export function ProjectPageClient({
   initialFiles,
   jugnus,
   tasks,
-  escalations,
   activeJugnuKey,
-  onEscalationReply,
   jugnuRoles,
 }: Props) {
   const [view, setView] = useState<'chat' | 'world'>('chat')
@@ -165,8 +161,6 @@ export function ProjectPageClient({
         projectId={project.id}
         jugnus={jugnus}
         tasks={tasks}
-        escalations={escalations}
-        onEscalationReply={onEscalationReply}
         jugnuRoles={jugnuRoles}
       />
     </div>

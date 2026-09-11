@@ -19,18 +19,10 @@ interface Jugnu {
   status: string
 }
 
-interface Escalation {
-  id: string
-  question: string
-  options?: Array<{ label: string; value: string }>
-}
-
 interface Props {
   jugnus: Jugnu[]
   tasks: Task[]
-  escalations: Escalation[]
   projectId: string
-  onEscalationReply: (escalationId: string, answer: string) => void
   jugnuRoles?: Record<string, { display_role: string; focus: string }>
 }
 
@@ -56,10 +48,9 @@ const JUGNU_ROLE: Record<string, string> = {
   tara: 'Reviewer',
 }
 
-export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalations: initialEscalations, projectId, onEscalationReply, jugnuRoles }: Props) {
-  const [jugnus, setJugnus]           = useState<Jugnu[]>(initialJugnus)
-  const [tasks, setTasks]             = useState<Task[]>(initialTasks)
-  const [escalations, setEscalations] = useState<Escalation[]>(initialEscalations)
+export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, projectId, jugnuRoles }: Props) {
+  const [jugnus, setJugnus] = useState<Jugnu[]>(initialJugnus)
+  const [tasks, setTasks]   = useState<Task[]>(initialTasks)
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -203,28 +194,6 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, escalat
               )
             })}
           </div>
-        </div>
-      )}
-
-      {/* Escalations */}
-      {escalations.length > 0 && (
-        <div className="p-5">
-          <h3 className="text-xs font-semibold text-amber-300 uppercase tracking-wider mb-3">⚠️ Your input needed</h3>
-          {escalations.map((e) => (
-            <div key={e.id} className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
-              <p className="text-sm text-white/80">{e.question}</p>
-              {e.options?.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => onEscalationReply(e.id, opt.value)}
-                  className="w-full text-left text-sm px-3 py-1.5 rounded-lg text-white/80 hover:text-white transition-colors"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          ))}
         </div>
       )}
 

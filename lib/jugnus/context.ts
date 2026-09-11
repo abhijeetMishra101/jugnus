@@ -16,6 +16,7 @@ export interface ProjectContext {
   currentTask: TaskContext | null
   completedTasks: TaskContext[]
   pendingTasks: TaskContext[]
+  existingFiles: string[]
 }
 
 export interface TaskContext {
@@ -42,13 +43,19 @@ export async function buildProjectContext(
 
   if (!project) return null
 
-  const { data: tasks } = await db
-    .from('tasks')
-    .select('id, title, description, capability, jugnu_key, status, result, artifact')
-    .eq('project_id', projectId)
-    .order('sort_order', { ascending: true })
+  const [tasksRes, filesRes] = await Promise.all([
+    db.from('tasks')
+      .select('id, title, description, capability, jugnu_key, status, result, artifact')
+      .eq('project_id', projectId)
+      .order('sort_order', { ascending: true }),
+    db.from('file_snapshots')
+      .select('path')
+      .eq('project_id', projectId)
+      .order('path', { ascending: true }),
+  ])
 
-  const allTasks = (tasks ?? []) as TaskContext[]
+  const allTasks = (tasksRes.data ?? []) as TaskContext[]
+  const existingFiles = (filesRes.data ?? []).map((f: { path: string }) => f.path)
   const currentTask = currentTaskId
     ? allTasks.find((t) => t.id === currentTaskId) ?? null
     : allTasks.find((t) => t.status === 'in_progress') ?? null
@@ -66,6 +73,7 @@ export async function buildProjectContext(
     currentTask,
     completedTasks: allTasks.filter((t) => t.status === 'completed'),
     pendingTasks: allTasks.filter((t) => t.status === 'pending'),
+    existingFiles,
   }
 }
 
@@ -126,6 +134,10 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
     ? `\nYOUR ROLE ON THIS PROJECT:\n  ${role.display_role}\n  Focus: ${role.focus}`
     : ''
 
+  const filesBlock = ctx.existingFiles.length > 0
+    ? `\nFILES ALREADY WRITTEN (skip these — do NOT overwrite unless fixing a specific issue):\n${ctx.existingFiles.map((f) => `  ${f}`).join('\n')}`
+    : ''
+
   return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 JUGNUS PROJECT BRIEF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -139,6 +151,7 @@ ${constraintLines ? `\nCONSTRAINTS:\n${constraintLines}` : ''}
 ${founderDecisionLines ? `\nFOUNDER DECISIONS (from clarification — apply these to your work):\n${founderDecisionLines}` : ''}
 ${completed ? `\nCOMPLETED TASKS:\n${completed}` : ''}
 ${pending ? `\nUPCOMING TASKS:\n${pending}` : ''}
+${filesBlock}
 ${buildEvidenceBlock}
 
 ${current}

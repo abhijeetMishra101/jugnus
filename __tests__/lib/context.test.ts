@@ -57,6 +57,7 @@ const BASE_CTX: ProjectContext = {
   constraints: { timeline: '2 days' },
   jugnu_roles: {},
   status: 'building',
+  existingFiles: [],
   currentTask: {
     id: 'task-1',
     title: 'Design the toggle UI',
