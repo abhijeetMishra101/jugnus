@@ -49,6 +49,16 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
     return { dispatched: false, jugnuKey: null, taskId: inProgress.id }
   }
 
+  // Don't advance while a founder question is pending — pipeline resumes when they reply
+  const { count: pendingEscalations } = await db
+    .from('escalations')
+    .select('id', { count: 'exact', head: true })
+    .eq('project_id', projectId)
+    .eq('status', 'pending')
+  if ((pendingEscalations ?? 0) > 0) {
+    return { dispatched: false, jugnuKey: null, taskId: null }
+  }
+
   const next = await getNextReadyTask(projectId, db)
   if (!next) {
     const { count } = await db

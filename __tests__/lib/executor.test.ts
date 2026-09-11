@@ -74,8 +74,9 @@ function makeAdvanceDb(opts: {
   nonCompletedCount?: number
   hasFiles?: boolean
   humanClaimFails?: boolean
+  pendingEscalations?: number
 }) {
-  const { inProgressTask = null, tasks = [], nonCompletedCount = 0, hasFiles = false, humanClaimFails = false } = opts
+  const { inProgressTask = null, tasks = [], nonCompletedCount = 0, hasFiles = false, humanClaimFails = false, pendingEscalations = 0 } = opts
   let tasksSelectCalls = 0
 
   const tasksFrom = {
@@ -128,6 +129,13 @@ function makeAdvanceDb(opts: {
         update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) }),
       }
       if (table === 'messages') return { insert: vi.fn().mockResolvedValue({ error: null }) }
+      if (table === 'escalations') return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ count: pendingEscalations }),
+          }),
+        }),
+      }
       if (table === 'file_snapshots') return {
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
@@ -145,6 +153,16 @@ function makeAdvanceDb(opts: {
 }
 
 describe('advanceProject', () => {
+  it('returns dispatched:false when a pending escalation exists (founder has not yet replied)', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'task-1', title: 'Design mockup', jugnu_key: 'nia', depends_on: [], status: 'pending' }],
+      pendingEscalations: 1,
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(false)
+    expect(result.taskId).toBeNull()
+  })
+
   it('returns dispatched:false when an in-progress task already exists', async () => {
     const db = makeAdvanceDb({ inProgressTask: { id: 'task-ip' } })
     const result = await advanceProject('proj-1', db)

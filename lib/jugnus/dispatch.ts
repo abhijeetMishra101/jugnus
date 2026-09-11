@@ -269,9 +269,10 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         const result = await handler(toolUse.input as Record<string, unknown>)
         toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) })
 
-        // Terminal tools — stop the agentic loop after this turn
+        // Terminal tools — stop the agentic loop and skip any remaining tools in this response
         if (['complete_task', 'submit_for_review', 'approve', 'request_changes', 'ask_founder'].includes(toolUse.name)) {
           done = true
+          break
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
