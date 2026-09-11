@@ -420,6 +420,104 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
   )
 }
 
+// ─── ClarificationWidget ─────────────────────────────────────────────────────
+
+interface ClarificationQuestion { text: string; options: string[] }
+
+function ClarificationWidget({
+  questions, projectId, userId,
+}: { questions: ClarificationQuestion[]; projectId: string; userId: string }) {
+  const [selected, setSelected] = useState<Record<number, Set<string>>>({})
+  const [custom, setCustom]     = useState<Record<number, string>>({})
+  const [sending, setSending]   = useState(false)
+
+  const isOther = (opt: string) =>
+    opt.toLowerCase().includes('other') || opt.toLowerCase().includes('something else')
+
+  const toggle = (qi: number, opt: string) => {
+    setSelected((prev) => {
+      const s = new Set(prev[qi] ?? [])
+      if (s.has(opt)) s.delete(opt); else s.add(opt)
+      return { ...prev, [qi]: s }
+    })
+  }
+
+  const canSubmit = questions.every((_, qi) => {
+    const sel = selected[qi] ?? new Set<string>()
+    if (sel.size === 0) return false
+    if ([...sel].some(isOther)) return (custom[qi]?.trim() ?? '').length > 0
+    return true
+  })
+
+  const submit = async () => {
+    setSending(true)
+    const parts = questions.map((q, qi) => {
+      const sel = [...(selected[qi] ?? [])]
+      const customVal = custom[qi]?.trim()
+      const answers = [
+        ...sel.filter((o) => !isOther(o)),
+        ...(sel.some(isOther) && customVal ? [customVal] : []),
+      ]
+      return `${qi + 1}. ${answers.join(', ') || '(no answer)'}`
+    })
+    await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, content: parts.join('\n'), userId }),
+    })
+    setSending(false)
+  }
+
+  return (
+    <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.85)', backdropFilter: 'blur(10px)' }}>
+      <div className="space-y-5 mb-4">
+        {questions.map((q, qi) => (
+          <div key={qi}>
+            <p className="text-xs font-semibold text-white/60 mb-2">{q.text}</p>
+            <div className="space-y-1.5">
+              {q.options.map((opt) => {
+                const checked = selected[qi]?.has(opt) ?? false
+                return (
+                  <div key={opt}>
+                    <label className="flex items-center gap-2.5 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(qi, opt)}
+                        className="w-4 h-4 rounded border-white/30 bg-white/10 accent-indigo-500 cursor-pointer"
+                      />
+                      <span className="text-sm text-white/75 group-hover:text-white transition-colors">
+                        {isOther(opt) ? 'Something else…' : opt}
+                      </span>
+                    </label>
+                    {isOther(opt) && checked && (
+                      <input
+                        type="text"
+                        autoFocus
+                        value={custom[qi] ?? ''}
+                        onChange={(e) => setCustom((prev) => ({ ...prev, [qi]: e.target.value }))}
+                        placeholder="Type your answer…"
+                        className="mt-1.5 ml-6 w-[calc(100%-1.5rem)] text-sm bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white placeholder-white/35 outline-none focus:border-indigo-400"
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={() => void submit()}
+        disabled={!canSubmit || sending}
+        className="w-full py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow"
+      >
+        {sending ? 'Sending…' : 'Send answers →'}
+      </button>
+    </div>
+  )
+}
+
 // ─── ProjectChannel ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -462,6 +560,26 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const approvalTask = lastRelevant?.event_type === 'APPROVAL_REQUIRED'
     ? { taskId: lastRelevant.task_id ?? null }
     : null
+
+  // Pending clarification: last CLARIFICATION_REQUIRED message with no user reply after it
+  const lastClarification = useMemo(() =>
+    [...messages].reverse().find(
+      (m) => (m.metadata as Record<string, unknown>)?.event_type === 'CLARIFICATION_REQUIRED'
+    ) ?? null
+  , [messages])
+
+  const pendingClarification = useMemo(() => {
+    if (!lastClarification) return false
+    return !messages.some(
+      (m) => m.author_type === 'user' && new Date(m.created_at) > new Date(lastClarification.created_at)
+    )
+  }, [lastClarification, messages])
+
+  const clarificationQuestions = useMemo((): ClarificationQuestion[] => {
+    if (!lastClarification) return []
+    const meta = lastClarification.metadata as Record<string, unknown>
+    return (meta.questions as ClarificationQuestion[]) ?? []
+  }, [lastClarification])
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -676,60 +794,65 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           <ApprovalCard projectId={projectId} taskId={approvalTask.taskId} />
         )}
 
-        {/* Input bar */}
-        <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,text/*,application/json,.ts,.tsx,.js,.jsx,.md,.sql,.py"
-            className="hidden"
-            onChange={(e) => void handleFiles(e.target.files)}
-          />
-          {pendingFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {pendingFiles.map((att, i) => (
-                <AttachmentChip
-                  key={i}
-                  att={att}
-                  onRemove={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
-                />
-              ))}
-            </div>
-          )}
-          <div className="flex items-center gap-3 rounded-2xl px-5 py-3 transition-all" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)' }}>
-            <textarea
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
-              placeholder="Message your team…"
-              className="flex-1 resize-none text-sm text-white/90 placeholder-white/35 bg-transparent outline-none leading-5"
-              style={{ maxHeight: '120px' }}
-              disabled={sending}
+        {/* MCQ clarification widget replaces input bar when Maya is waiting for an answer */}
+        {pendingClarification && clarificationQuestions.length > 0 ? (
+          <ClarificationWidget questions={clarificationQuestions} projectId={projectId} userId={userId} />
+        ) : (
+          /* Input bar */
+          <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,text/*,application/json,.ts,.tsx,.js,.jsx,.md,.sql,.py"
+              className="hidden"
+              onChange={(e) => void handleFiles(e.target.files)}
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="text-white/40 hover:text-white/70 transition-colors disabled:opacity-30"
-              title="Attach file"
-            >
-              {uploading
-                ? <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/></svg>
-                : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              }
-            </button>
-            <button
-              onClick={() => void send()}
-              disabled={(!input.trim() && !pendingFiles.length) || sending}
-              className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow"
-            >
-              <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-              </svg>
-            </button>
+            {pendingFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {pendingFiles.map((att, i) => (
+                  <AttachmentChip
+                    key={i}
+                    att={att}
+                    onRemove={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-3 rounded-2xl px-5 py-3 transition-all" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)' }}>
+              <textarea
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
+                placeholder="Message your team…"
+                className="flex-1 resize-none text-sm text-white/90 placeholder-white/35 bg-transparent outline-none leading-5"
+                style={{ maxHeight: '120px' }}
+                disabled={sending}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="text-white/40 hover:text-white/70 transition-colors disabled:opacity-30"
+                title="Attach file"
+              >
+                {uploading
+                  ? <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/></svg>
+                  : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                }
+              </button>
+              <button
+                onClick={() => void send()}
+                disabled={(!input.trim() && !pendingFiles.length) || sending}
+                className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow"
+              >
+                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   )

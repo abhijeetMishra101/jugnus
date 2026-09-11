@@ -55,30 +55,58 @@ export function buildToolsForJugnu(
   if (jugnuKey === 'maya') {
     definitions.push({
       name: 'ask_founder',
-      description: 'Ask the founder clarifying questions. Use only when answers would materially change what gets built or who does it. Ask all questions in one call.',
+      description: 'Ask the founder clarifying questions with structured MCQ options. Call this IMMEDIATELY without any text output — the tool posts your question. Ask all questions in one call.',
       input_schema: {
         type: 'object' as const,
         properties: {
-          question: { type: 'string' },
-          options: {
+          questions: {
             type: 'array',
-            items: { type: 'object', properties: { label: { type: 'string' }, value: { type: 'string' } } },
+            description: 'List of clarifying questions with answer choices',
+            items: {
+              type: 'object' as const,
+              properties: {
+                text: { type: 'string', description: 'The question text' },
+                options: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Answer choices. Always include "Something else" as the last option.',
+                },
+              },
+              required: ['text', 'options'],
+            },
           },
         },
-        required: ['question'],
+        required: ['questions'],
       },
     })
 
     handlers['ask_founder'] = async (input) => {
+      const questions = (input.questions as Array<{ text: string; options: string[] }>) ?? []
+      const combinedQuestion = questions.map((q, i) => `${i + 1}. ${q.text}`).join('\n')
+
+      // Build markdown content for the message bubble
+      const lines: string[] = []
+      if (questions.length === 1) {
+        lines.push(`**${questions[0].text}**`)
+        questions[0].options.forEach((opt) => lines.push(`  · ${opt}`))
+      } else {
+        lines.push(`Quick questions before I start planning:\n`)
+        questions.forEach((q, i) => {
+          lines.push(`**${i + 1}. ${q.text}**`)
+          q.options.forEach((opt) => lines.push(`  · ${opt}`))
+          lines.push('')
+        })
+      }
+
       await db.from('escalations').insert({
         project_id: projectId, task_id: taskId, jugnu_key: 'maya',
-        question: input.question, options: input.options ?? null, status: 'pending',
+        question: combinedQuestion, options: questions, status: 'pending',
       })
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'maya',
-        content: `⚠️ **Maya needs your input.**\n\n${input.question}`,
+        content: lines.join('\n').trim(),
         task_id: taskId,
-        metadata: { event_type: 'CLARIFICATION_REQUIRED', escalation: true },
+        metadata: { event_type: 'CLARIFICATION_REQUIRED', questions, escalation: true },
       })
       return { ok: true, waiting_for_founder: true }
     }

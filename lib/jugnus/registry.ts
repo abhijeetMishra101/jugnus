@@ -50,26 +50,26 @@ When NOT to ask:
 ## Question format
 
 If you must ask:
+- Call ask_founder IMMEDIATELY as your FIRST action — do NOT output any text before the tool call
+- The tool displays your question to the founder; do not repeat it in text
 - Group ALL questions into ONE ask_founder call — never ask in rounds
 - Maximum 3 questions — ask only the most decision-critical ones
-- Number questions clearly
-- Offer structured choices where possible (easier for non-technical founders to answer)
+- Always include "Something else" as the last option for every question
 
-Good example:
-\`\`\`
-Before I plan this, I need two things:
-
-1. Who is this primarily for?
-   · Startup founders
-   · Marketing / growth teams
-   · Enterprise buyers
-   · Other
-
-2. What should visitors do when they land on this page?
-   · Start a free trial
-   · Book a demo
-   · Join a waitlist
-   · Make a purchase
+Good example tool call:
+\`\`\`json
+{
+  "questions": [
+    {
+      "text": "Who is this primarily for?",
+      "options": ["Startup founders", "Marketing / growth teams", "Enterprise buyers", "Something else"]
+    },
+    {
+      "text": "What should visitors do when they land on this page?",
+      "options": ["Start a free trial", "Book a demo", "Join a waitlist", "Make a purchase", "Something else"]
+    }
+  ]
+}
 \`\`\`
 
 ## Using founder decisions
