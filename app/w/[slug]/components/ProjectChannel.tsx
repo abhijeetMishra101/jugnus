@@ -226,16 +226,17 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
                   className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble"
                   style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}
                 >
-                  <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  </div>
-                  {isClarification && questions.length > 0 && (
+                  {isClarification && questions.length > 0 ? (
                     <InlineClarification
                       questions={questions}
                       projectId={projectId}
                       userId={userId}
                       accentColor={j.color}
                     />
+                  ) : (
+                    <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
                   )}
                 </div>
                 {i > 0 && (
