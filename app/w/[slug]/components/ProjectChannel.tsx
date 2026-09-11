@@ -298,7 +298,7 @@ function DesignPreviewCard({ projectId, isRevising }: { projectId: string; isRev
         {/* Scaled iframe thumbnail */}
         <div className="relative w-full overflow-hidden" style={{ height: 220 }}>
           <iframe
-            src={`/preview/${projectId}`}
+            src={`/preview/design/${projectId}`}
             title="Design preview"
             className="border-0 pointer-events-none"
             style={{
@@ -327,7 +327,7 @@ function DesignPreviewCard({ projectId, isRevising }: { projectId: string; isRev
           </div>
           {!isRevising && (
             <a
-              href={`/preview/${projectId}`}
+              href={`/preview/design/${projectId}`}
               target="_blank"
               rel="noreferrer"
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
