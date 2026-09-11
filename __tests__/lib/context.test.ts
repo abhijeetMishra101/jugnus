@@ -147,16 +147,79 @@ describe('formatContextBlock', () => {
     expect(block).not.toContain('UPCOMING TASKS')
   })
 
-  it('includes artifact url in completed tasks when present', () => {
+  it('shows build evidence preview_url in completed Leo task', () => {
     const ctx: ProjectContext = {
       ...BASE_CTX,
       completedTasks: [
-        { id: 'done-1', title: 'Mockup', description: '', capability: 'design',
-          jugnu_key: 'nia', status: 'completed', result: null,
-          artifact: { url: 'https://example.com/file.html' } as Record<string, unknown> },
+        { id: 'done-1', title: 'Built landing page', description: '', capability: 'build',
+          jugnu_key: 'leo', status: 'completed', result: 'Built index.html',
+          artifact: {
+            type: 'files',
+            paths: ['index.html'],
+            build_evidence: {
+              html_valid: true,
+              primary_html_file: 'index.html',
+              preview_url: '/preview/proj-123',
+              files_checked: ['index.html'],
+              checked_at: '2026-09-12T00:00:00Z',
+            },
+          } as Record<string, unknown> },
       ],
     }
+    const block = formatContextBlock(ctx, 'tara')
+    expect(block).toContain('/preview/proj-123')
+    expect(block).toContain('BUILD EVIDENCE')
+    expect(block).toContain('html_valid')
+  })
+
+  it('renders array-format founder_constraints as Q/A pairs', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: {
+        founder_constraints: [
+          { question: 'Who is the primary audience?', answer: 'Startup founders', source: 'clarification', created_at: '2026-09-12T00:00:00Z' },
+          { question: 'What should visitors do?', answer: 'Book a demo', source: 'clarification', created_at: '2026-09-12T00:00:00Z' },
+        ],
+      },
+    }
+    const block = formatContextBlock(ctx, 'nia')
+    expect(block).toContain('FOUNDER DECISIONS')
+    expect(block).toContain('Who is the primary audience?')
+    expect(block).toContain('Startup founders')
+    expect(block).toContain('Book a demo')
+    expect(block).toContain('Q:')
+    expect(block).toContain('A:')
+  })
+
+  it('renders legacy key-value founder_constraints for backwards compatibility', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: {
+        founder_constraints: { audience: 'ops managers', cta: 'book a call' },
+      },
+    }
     const block = formatContextBlock(ctx, 'leo')
-    expect(block).toContain('https://example.com/file.html')
+    expect(block).toContain('FOUNDER DECISIONS')
+    expect(block).toContain('ops managers')
+    expect(block).toContain('book a call')
+  })
+
+  it('omits FOUNDER DECISIONS when founder_constraints is empty array', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: { founder_constraints: [] },
+    }
+    const block = formatContextBlock(ctx, 'nia')
+    expect(block).not.toContain('FOUNDER DECISIONS')
+  })
+
+  it('omits approval_metrics from the CONSTRAINTS display', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: { approval_metrics: { approved_at: '2026-09-12' }, timeline: '2 days' },
+    }
+    const block = formatContextBlock(ctx, 'leo')
+    expect(block).toContain('timeline')
+    expect(block).not.toContain('approval_metrics')
   })
 })

@@ -33,10 +33,10 @@ export async function POST(request: Request) {
 
   if (error || !msg) return NextResponse.json({ error: 'Failed to save message' }, { status: 500 })
 
-  // Check for pending escalation — if so, resolve it and kick Maya
+  // Check for pending escalation — if so, resolve it, persist Q&A as durable constraint, and re-dispatch Maya
   const { data: escalation } = await db
     .from('escalations')
-    .select('id')
+    .select('id, question')
     .eq('project_id', projectId)
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
@@ -46,6 +46,36 @@ export async function POST(request: Request) {
   if (escalation) {
     await db.from('escalations').update({ status: 'resolved', resolution: content.trim(), resolved_at: new Date().toISOString() })
       .eq('id', escalation.id)
+
+    // Persist Q&A as a durable founder constraint so all downstream jugnus receive it
+    // regardless of whether the original chat messages fall outside the rolling history window
+    if (escalation.question) {
+      const { data: projData } = await db
+        .from('projects')
+        .select('constraints')
+        .eq('id', projectId)
+        .single()
+
+      const existing = ((projData?.constraints ?? {}) as Record<string, unknown>)
+      const prior = Array.isArray(existing.founder_constraints)
+        ? (existing.founder_constraints as Array<Record<string, unknown>>)
+        : []
+
+      await db.from('projects').update({
+        constraints: {
+          ...existing,
+          founder_constraints: [
+            ...prior,
+            {
+              question: escalation.question,
+              answer: content.trim(),
+              source: 'clarification',
+              created_at: new Date().toISOString(),
+            },
+          ],
+        },
+      }).eq('id', projectId)
+    }
 
     waitUntil(
       fetch(new URL('/api/internal/jugnu-respond', process.env.NEXT_PUBLIC_APP_URL!).toString(), {

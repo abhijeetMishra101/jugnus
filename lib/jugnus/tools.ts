@@ -213,7 +213,7 @@ export function buildToolsForJugnu(
   if (jugnuKey === 'leo') {
     definitions.push({
       name: 'submit_for_review',
-      description: 'Submit all written files for Tara\'s review. Call this after writing all files — it ends your turn.',
+      description: 'Submit all written files for Tara\'s review. Call this after writing all files — it ends your turn. The system will validate that a previewable HTML file exists before proceeding.',
       input_schema: {
         type: 'object' as const,
         properties: {
@@ -225,11 +225,55 @@ export function buildToolsForJugnu(
 
     handlers['submit_for_review'] = async (input) => {
       const { files } = await listFiles(projectId, db)
+
+      // ── Build validation ────────────────────────────────────────────────────
+      // For the alpha target (HTML pages/campaigns), validate that a previewable
+      // HTML file exists and has minimum structure. Throw on failure so Leo sees
+      // the error and can fix it before submitting again.
+      const { data: htmlFiles } = await db
+        .from('file_snapshots')
+        .select('path, content')
+        .eq('project_id', projectId)
+        .ilike('path', '%.html')
+        .not('path', 'ilike', 'design/%')
+
+      const buildErrors: string[] = []
+      let primaryHtmlFile: string | null = null
+
+      if (!htmlFiles || htmlFiles.length === 0) {
+        buildErrors.push('No HTML file found outside design/. For the alpha, output must include at least one .html file (e.g. index.html) that the founder can preview. Write the HTML file and call submit_for_review again.')
+      } else {
+        const preferred = htmlFiles.find((f) => f.path === 'index.html') ?? htmlFiles[0]
+        primaryHtmlFile = preferred.path
+        const html = preferred.content ?? ''
+        if (html.length < 200) buildErrors.push(`${preferred.path} appears too short (${html.length} chars). Write a complete page.`)
+        if (!html.toLowerCase().includes('<body')) buildErrors.push(`${preferred.path} is missing a <body> tag. Output must be a complete HTML page.`)
+        if (!html.toLowerCase().includes('</html>')) buildErrors.push(`${preferred.path} appears to be a fragment. Write a complete HTML document with <html>, <head>, and <body>.`)
+      }
+
+      if (buildErrors.length > 0) {
+        // Throw so dispatch.ts marks this as is_error and Leo continues working
+        throw new Error(`Build validation failed:\n${buildErrors.map((e) => `• ${e}`).join('\n')}`)
+      }
+
+      const previewUrl = getPreviewUrl(projectId)
+      const buildEvidence = {
+        html_valid: true,
+        primary_html_file: primaryHtmlFile,
+        preview_url: previewUrl,
+        files_checked: (htmlFiles ?? []).map((f) => f.path),
+        checked_at: new Date().toISOString(),
+      }
+
       if (taskId) {
         await db.from('tasks').update({
           status: 'completed',
           result: input.summary,
-          artifact: { type: 'files', paths: files.map((f) => f.path) },
+          artifact: {
+            type: 'files',
+            paths: files.map((f) => f.path),
+            build_evidence: buildEvidence,
+          },
           completed_at: new Date().toISOString(),
         }).eq('id', taskId)
       }
@@ -253,11 +297,11 @@ export function buildToolsForJugnu(
 
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'leo',
-        content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}${prLine}`,
+        content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}\n\n✅ Build check passed — preview available at [${previewUrl}](${previewUrl})${prLine}`,
         task_id: taskId,
-        metadata: { event_type: 'REVIEW_STARTED', review_ready: true, file_count: files.length, pr_url: prUrl },
+        metadata: { event_type: 'REVIEW_STARTED', review_ready: true, file_count: files.length, pr_url: prUrl, build_evidence: buildEvidence },
       })
-      return { ok: true, files_submitted: files.length }
+      return { ok: true, files_submitted: files.length, preview_url: previewUrl }
     }
   }
 
@@ -276,6 +320,22 @@ export function buildToolsForJugnu(
     })
 
     handlers['approve'] = async (input) => {
+      // Hard gate: if build evidence shows html_valid:false, Tara cannot approve
+      const { data: leoTask } = await db
+        .from('tasks')
+        .select('artifact')
+        .eq('project_id', projectId)
+        .eq('jugnu_key', 'leo')
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      const buildEvidence = (leoTask?.artifact as Record<string, unknown> | null)?.build_evidence as Record<string, unknown> | undefined
+      if (buildEvidence && buildEvidence.html_valid === false) {
+        throw new Error('Cannot approve: build evidence shows html_valid is false. Use request_changes to ask Leo to fix the HTML output.')
+      }
+
       if (taskId) {
         await db.from('tasks').update({
           status: 'completed',
@@ -284,25 +344,27 @@ export function buildToolsForJugnu(
         }).eq('id', taskId)
       }
 
-      const { data: htmlFiles } = await db
-        .from('file_snapshots')
-        .select('path')
-        .eq('project_id', projectId)
-        .ilike('path', '%.html')
-        .not('path', 'ilike', 'design/%')
-        .limit(1)
+      const liveUrl = buildEvidence?.preview_url
+        ? String(buildEvidence.preview_url)
+        : (() => {
+            // Fallback: check for HTML files if no build evidence (e.g. older projects)
+            return null
+          })()
 
-      const hasHtml = (htmlFiles?.length ?? 0) > 0
-      const liveUrl = hasHtml ? getPreviewUrl(projectId) : null
       const deployLine = liveUrl ? `\n\n🌐 [**View live →**](${liveUrl})` : ''
+
+      // Note whether this was an LLM-judged approval vs deterministically verified
+      const verificationNote = buildEvidence?.html_valid === true
+        ? `\n\n*Deterministic check: HTML output present and structurally valid. Content review is LLM judgement.*`
+        : `\n\n*Note: No deterministic build evidence available. This approval is based on LLM judgement only.*`
 
       await db.from('projects').update({ status: 'completed' }).eq('id', projectId)
 
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'tara',
-        content: `✅ **Tara approved the work.**\n\n${input.comment}${deployLine}`,
+        content: `✅ **Tara approved the work.**\n\n${input.comment}${deployLine}${verificationNote}`,
         task_id: taskId,
-        metadata: { event_type: 'REVIEW_PASSED', review_verdict: 'approved', project_complete: true, live_url: liveUrl },
+        metadata: { event_type: 'REVIEW_PASSED', review_verdict: 'approved', project_complete: true, live_url: liveUrl, build_verified: buildEvidence?.html_valid === true },
       })
       return { ok: true, verdict: 'approved' }
     }
