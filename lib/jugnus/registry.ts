@@ -32,7 +32,6 @@ Jugnus is in Beta. The following features are NOT available:
 |---|---|
 | Authentication / user accounts | login, sign up, sign in, user accounts, auth, protected, roles, permissions, profile, session, logout |
 | Payments / billing | payment, Stripe, checkout, subscription, billing, pricing tiers, charge, invoice, credit card |
-| SMS / push notifications | SMS, text message, push notification, Twilio, mobile alert |
 | Real-time collaboration | multiple users editing simultaneously, live cursors, collaborative editing, multiplayer |
 | Third-party OAuth | Google login, GitHub login, "login with", social login |
 
@@ -328,7 +327,98 @@ fetch('/api/collect/PROJECT_ID_HERE', {
 }).then(r => r.json()).then(r => { if (r.ok) { /* show success */ } })
 \`\`\`
 - Set \`form\` to the form type: 'waitlist', 'contact', 'survey', etc.
-- Always show a visible success state and a clear error state`,
+- Always show a visible success state and a clear error state
+
+### Email sending
+
+Send transactional emails from the app (confirmations, notifications, reports):
+\`\`\`javascript
+fetch('/api/email/PROJECT_ID_HERE', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    to: 'user@example.com',
+    subject: 'Your report is ready',
+    html: '<p>Hello! Your report is attached.</p>',
+  })
+}).then(r => r.json()).then(r => { if (r.ok) { /* email sent */ } })
+\`\`\`
+- \`to\`, \`subject\`, and either \`html\` or \`text\` are required
+- Use for welcome emails, confirmations, notifications, reports
+
+### File uploads
+
+Allow users to upload files; get back a public URL to store or display:
+\`\`\`javascript
+const formData = new FormData()
+formData.append('file', fileInput.files[0])
+
+fetch('/api/upload/PROJECT_ID_HERE', { method: 'POST', body: formData })
+  .then(r => r.json())
+  .then(({ url, name, type, size }) => {
+    // store url in project_data, display in UI, etc.
+  })
+\`\`\`
+- Returns \`{ url, name, type, size }\` — \`url\` is a permanent public URL
+- Max 20 MB per file
+- Store the URL in project_data if you need to reference it later
+
+### Incoming webhooks
+
+To receive events from third-party services (Stripe, Twilio, GitHub, etc.):
+- Webhook URL: \`https://jugnus.vercel.app/api/webhook/PROJECT_ID_HERE/stripe\` (replace \`stripe\` with the source name)
+- Payloads are stored automatically in project_data under collection \`webhook_stripe\`
+- Read events via the Data API: \`GET /api/data/PROJECT_ID_HERE/webhook_stripe\`
+- Always show the webhook URL prominently in the app so the founder knows where to paste it in their third-party dashboard
+
+\`\`\`javascript
+// Poll for new webhook events
+useEffect(() => {
+  const poll = () =>
+    fetch('/api/data/PROJECT_ID_HERE/webhook_stripe')
+      .then(r => r.json())
+      .then(({ records }) => setEvents(records))
+  poll()
+  const interval = setInterval(poll, 5000)
+  return () => clearInterval(interval)
+}, [])
+\`\`\`
+
+### Scheduled jobs
+
+Schedule future actions (send email in 24h, trigger a webhook at midnight, etc.):
+\`\`\`javascript
+// Schedule a future email
+fetch('/api/data/PROJECT_ID_HERE/scheduled_actions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'send_email',
+    run_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h from now
+    status: 'pending',
+    to: 'user@example.com',
+    subject: 'Your trial is ending',
+    html: '<p>Your trial ends tomorrow.</p>',
+  })
+})
+
+// Schedule an outgoing HTTP POST
+fetch('/api/data/PROJECT_ID_HERE/scheduled_actions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'http_post',
+    run_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1h from now
+    status: 'pending',
+    url: 'https://hooks.slack.com/services/...',
+    body: { text: 'Reminder: daily standup in 5 minutes' },
+  })
+})
+\`\`\`
+- Supported action types: \`send_email\`, \`http_post\`
+- The Jugnus scheduler runs every minute and executes overdue pending actions
+- Each action record gets updated to \`completed\` or \`failed\` with a \`completed_at\` timestamp
+- Read scheduled action status via \`GET /api/data/PROJECT_ID_HERE/scheduled_actions\``,
   },
 
   tara: {
