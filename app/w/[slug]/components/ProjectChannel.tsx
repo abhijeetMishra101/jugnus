@@ -705,51 +705,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     item.type === 'jugnu' && item.authorKey === 'nia' ? i : acc, -1)
 
   return (
-    <>
-      <style>{`
-        @keyframes jugnu-bounce {
-          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-          40% { transform: translateY(-6px); opacity: 1; }
-        }
-        @keyframes jugnu-float {
-          0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-8px); }
-        }
-        /* Bee flies in from the right (where the send button lives).
-           Keeps Y movement small so the path is correct whether the
-           section appears near the top or bottom of the chat. */
-        /* ── Night scene animations ───────────────────────────── */
-        @keyframes lantern-flicker {
-          0%,100% { opacity: 0.65; transform: scale(1);    }
-          18%     { opacity: 1;    transform: scale(1.12); }
-          35%     { opacity: 0.55; transform: scale(0.92); }
-          55%     { opacity: 0.9;  transform: scale(1.06); }
-          78%     { opacity: 0.7;  transform: scale(0.98); }
-        }
-        @keyframes firefly-wander {
-          0%   { transform: translate(0px,   0px);  opacity: 0.5; }
-          20%  { transform: translate(14px,  -9px); opacity: 1;   }
-          45%  { transform: translate(-7px, -16px); opacity: 0.7; }
-          65%  { transform: translate(10px,  -5px); opacity: 1;   }
-          85%  { transform: translate(-4px,  -2px); opacity: 0.6; }
-          100% { transform: translate(0px,   0px);  opacity: 0.5; }
-        }
-        @keyframes water-drift {
-          0%,100% { transform: translateX(0);    opacity: 0.28; }
-          50%     { transform: translateX(-18px); opacity: 0.42; }
-        }
-        @keyframes jugnu-fly-in {
-          0%   { transform: translate(280px, 30px) scale(0.5) rotate(18deg);  opacity: 0; }
-          8%   { opacity: 1; }
-          28%  { transform: translate(110px, -14px) scale(0.78) rotate(-10deg); }
-          52%  { transform: translate(22px,   9px)  scale(0.94) rotate(5deg);  }
-          72%  { transform: translate(-9px,  -3px)  scale(1)    rotate(-2deg); }
-          87%  { transform: translate(4px,    1px)  scale(1)    rotate(1deg);  }
-          100% { transform: translate(0px,   0px)   scale(1)    rotate(0deg);  opacity: 1; }
-        }
-      `}</style>
-
-      <div className="flex-1 flex flex-col min-h-0 relative">
+    <div className="flex-1 flex flex-col min-h-0 relative">
         {/* ── Background + animated overlays — outside scroll container so they never scroll away ── */}
         <div
           className="absolute inset-0 pointer-events-none overflow-hidden"
@@ -875,6 +831,5 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           </div>
         </div>
       </div>
-    </>
   )
 }
