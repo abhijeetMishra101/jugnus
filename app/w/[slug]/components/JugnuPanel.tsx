@@ -19,6 +19,13 @@ interface Jugnu {
   status: string
 }
 
+interface Submission {
+  id: string
+  form_type: string
+  data: Record<string, unknown>
+  submitted_at: string
+}
+
 interface Props {
   jugnus: Jugnu[]
   tasks: Task[]
@@ -51,9 +58,28 @@ const JUGNU_ROLE: Record<string, string> = {
 export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, projectId, jugnuRoles }: Props) {
   const [jugnus, setJugnus] = useState<Jugnu[]>(initialJugnus)
   const [tasks, setTasks]   = useState<Task[]>(initialTasks)
+  const [submissions, setSubmissions] = useState<Submission[]>([])
 
   useEffect(() => {
     const db = createBrowserClient()
+
+    // Load existing submissions
+    void db.from('form_submissions')
+      .select('id,form_type,data,submitted_at')
+      .eq('project_id', projectId)
+      .order('submitted_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => { if (data?.length) setSubmissions(data as Submission[]) })
+
+    // Subscribe to new submissions in real time
+    const subSub = db
+      .channel(`form-submissions:${projectId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'form_submissions', filter: `project_id=eq.${projectId}` },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          setSubmissions((prev) => [payload.new as Submission, ...prev])
+        })
+      .subscribe()
 
     // Fresh snapshot on mount so we never miss tasks created before the subscription fires
     void db.from('tasks')
@@ -93,6 +119,7 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
     return () => {
       void db.removeChannel(jugnuSub)
       void db.removeChannel(taskSub)
+      void db.removeChannel(subSub)
     }
   }, [projectId])
 
@@ -190,6 +217,39 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
                       <span className="shrink-0 text-xs text-white/25">Pending</span>
                     )}
                   </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Form submissions */}
+      {submissions.length > 0 && (
+        <div className="p-5 border-b border-white/10">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white/90">Submissions</h3>
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-500/20 text-indigo-300">
+              {submissions.length}
+            </span>
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {submissions.map((s) => {
+              const email = typeof s.data.email === 'string' ? s.data.email : null
+              const name  = typeof s.data.name  === 'string' ? s.data.name  : null
+              const label = email ?? name ?? s.form_type
+              const sub   = email && name ? name : s.form_type
+              const time  = new Date(s.submitted_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+              return (
+                <div key={s.id} className="flex items-start gap-2 py-1.5 border-b border-white/5 last:border-0">
+                  <div className="shrink-0 w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs text-indigo-300 font-semibold mt-0.5">
+                    {label.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white/80 truncate font-medium">{label}</p>
+                    <p className="text-xs text-white/35 truncate">{sub !== label ? sub : time}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-white/25 mt-0.5">{time}</span>
                 </div>
               )
             })}

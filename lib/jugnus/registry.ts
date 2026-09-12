@@ -229,7 +229,28 @@ For the current alpha (landing pages, campaign pages, feature pages):
 - Even when building with React/Next.js, also write a standalone index.html for preview
 - If submit_for_review returns a build error, fix the identified issue and call it again
 
-Do NOT call complete_task — always end with submit_for_review.`,
+Do NOT call complete_task — always end with submit_for_review.
+
+## Form submissions
+
+For any form that collects user data (waitlist, contact, survey, newsletter):
+- Do NOT use HTML form action attributes or server-side form handling
+- Use JavaScript fetch to POST to the Jugnus collect API
+- The project ID is in your context block under "ID:" — embed it literally in the HTML
+- Request format:
+  \`\`\`javascript
+  fetch('/api/collect/PROJECT_ID_HERE', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ form: 'waitlist', email: emailValue })
+  })
+  .then(r => r.json())
+  .then(r => { if (r.ok) { /* show success */ } else { /* show error */ } })
+  \`\`\`
+- Replace PROJECT_ID_HERE with the actual project UUID from your context
+- Set the \`form\` field to describe the form type: 'waitlist', 'contact', 'survey', etc.
+- Include all collected fields in the JSON body alongside \`form\`
+- Always show a visible success message on submit and a clear error state if the fetch fails`,
   },
 
   tara: {
