@@ -142,19 +142,23 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       .eq('key', next.jugnu_key)
   }
 
-  const ETA: Record<string, string> = {
-    maya: '~30s',
+  // ETAs only for passive-wait jugnus — Maya responds quickly / interactively so no ETA needed
+  const ETA: Partial<Record<string, string>> = {
     nia:  '~30–90s',
     leo:  '~60–90s',
     tara: '~30s',
   }
-  const eta = ETA[next.jugnu_key] ?? '~1 min'
+  const eta = ETA[next.jugnu_key]
+  const jugnu_name = next.jugnu_key.charAt(0).toUpperCase() + next.jugnu_key.slice(1)
+  const content = eta
+    ? `⚡ ${jugnu_name} is on it — expect results in ${eta}`
+    : `⚡ ${jugnu_name} is on it`
 
   await db.from('messages').insert({
     project_id: projectId,
     author_type: 'system',
     author_key: 'system',
-    content: `⚡ ${next.jugnu_key.charAt(0).toUpperCase() + next.jugnu_key.slice(1)} is on it — expect results in ${eta}`,
+    content,
     task_id: next.id,
     metadata: { event_type: 'TASK_ASSIGNED', jugnu_key: next.jugnu_key, task_id: next.id },
   })
