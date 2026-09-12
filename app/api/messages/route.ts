@@ -77,6 +77,15 @@ export async function POST(request: Request) {
       }).eq('id', projectId)
     }
 
+    // Immediately signal Maya is back so the UI shows the typing indicator without the ~60s blind wait
+    await db.from('messages').insert({
+      project_id: projectId,
+      author_type: 'system',
+      author_key: 'system',
+      content: '✨ Maya is reviewing your answers and assembling the plan…',
+      metadata: { event_type: 'TASK_ASSIGNED', jugnu_key: 'maya' },
+    })
+
     waitUntil(
       fetch(new URL('/api/internal/jugnu-respond', process.env.NEXT_PUBLIC_APP_URL!).toString(), {
         method: 'POST',
