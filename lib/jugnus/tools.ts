@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from './registry'
 import { writeFile, readFile, listFiles } from '../storage/files'
-import { pushProjectToGitHub } from './github'
+
 import { getPreviewUrl } from './deploy-static'
 
 export interface ToolSet {
@@ -348,28 +348,11 @@ ${body}
         }).eq('id', taskId)
       }
 
-      const { data: fullFiles } = await db
-        .from('file_snapshots')
-        .select('path, content')
-        .eq('project_id', projectId)
-        .order('path', { ascending: true })
-
-      const { data: proj } = await db.from('projects').select('title').eq('id', projectId).single()
-      const { prUrl, error: ghError } = await pushProjectToGitHub({
-        files: (fullFiles ?? []) as { path: string; content: string }[],
-        projectTitle: proj?.title ?? 'Jugnus project',
-        projectId,
-      })
-
-      const prLine = prUrl
-        ? `\n\n[**→ View PR + Vercel preview**](${prUrl})`
-        : ghError ? `\n\n⚠️ GitHub push skipped: ${ghError}` : ''
-
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'leo',
-        content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}\n\n✅ Build check passed — preview available at [${previewUrl}](${previewUrl})${prLine}`,
+        content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}\n\n✅ Build check passed — preview available at [${previewUrl}](${previewUrl})`,
         task_id: taskId,
-        metadata: { event_type: 'REVIEW_STARTED', review_ready: true, file_count: files.length, pr_url: prUrl, build_evidence: buildEvidence },
+        metadata: { event_type: 'REVIEW_STARTED', review_ready: true, file_count: files.length, build_evidence: buildEvidence },
       })
       return { ok: true, files_submitted: files.length, preview_url: previewUrl }
     }

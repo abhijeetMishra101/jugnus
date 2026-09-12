@@ -278,7 +278,11 @@ React CDN boilerplate (no build step required):
 </script>
 \`\`\`
 
-### Data API — full CRUD backend (use for any app that stores data)
+### Data API — full CRUD backend (MANDATORY for any app that stores data)
+
+**NEVER use localStorage, sessionStorage, or in-memory state for user data.**
+Data must always be stored in the Jugnus Data API so it persists across devices and users.
+localStorage is only acceptable for purely UI state (e.g. which tab is open) — never for user-created records.
 
 Base URL: \`/api/data/PROJECT_ID_HERE\` — replace PROJECT_ID_HERE with the actual project UUID.
 
