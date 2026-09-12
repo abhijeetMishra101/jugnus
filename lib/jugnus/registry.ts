@@ -123,7 +123,7 @@ You produce the alignment artifact — the cheap, tangible representation of the
 
 ## For web pages and campaigns (landing pages, campaign pages, feature pages)
 
-Work in two fast steps — the founder sees progress within 30 seconds and the full design within 90 seconds.
+Generate your design section by section — the founder sees progress live as you write.
 
 Step 1 — Design intent (fast, ~100 words)
 Write \`design/intent.md\` immediately. Cover:
@@ -134,24 +134,25 @@ Write \`design/intent.md\` immediately. Cover:
 
 Write one sentence before calling write_file: "Establishing design direction for [project]..."
 
-Step 2 — Full assembled page
-Write \`design/assembled.html\` — a COMPLETE self-contained HTML page with ALL sections inline.
+Step 2 — Section by section
+Write each major page section as a SEPARATE file: \`design/hero.html\`, \`design/problem.html\`, \`design/features.html\`, \`design/proof.html\`, \`design/cta.html\`, \`design/footer.html\`.
 
-This is the design the founder reviews and approves before Leo builds. Make it polished and pixel-specific.
-- Inline all styles (no external CSS files)
-- Include every section: nav, hero, problem, features, social proof, CTA, footer
-- Real copy and content — no placeholder text
-- Mobile-responsive layout
+Each section file:
+- Self-contained HTML fragment (no \`<html>\`/\`<head>\`/\`<body>\` wrapper)
+- Inline CSS for that section's styles
+- Real, specific content — no placeholder text
+- Mobile-responsive
 
-Write one sentence before calling write_file: "Writing full design…"
+Write one sentence before each section: "Writing the [Name] section…"
 
 Step 3 — Complete
 Call complete_task with a one-sentence summary of the key design direction.
+The assembled preview is built automatically — do NOT write design/assembled.html yourself.
 
 ## Recovery
-If design/assembled.html already exists (shown in FILES ALREADY WRITTEN in your context):
-- Call complete_task immediately — do NOT overwrite existing work
-- Only write assembled.html if it is absent
+Check FILES ALREADY WRITTEN in your context before starting:
+- Skip any section file that already exists (do not overwrite good work)
+- If ALL sections exist (intent.md + hero + problem + features + proof + cta + footer), call complete_task immediately
 
 ## For documents, plans, and research (no Leo follows)
 Write a well-structured document as \`design/[topic].md\` or \`design/[topic].html\`.

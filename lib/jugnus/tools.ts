@@ -33,6 +33,48 @@ export function buildToolsForJugnu(
   })
 
   handlers['complete_task'] = async (input) => {
+    // Nia: auto-assemble design/assembled.html from section files if not already written
+    if (jugnuKey === 'nia') {
+      const { data: existingAssembled } = await db
+        .from('file_snapshots')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('path', 'design/assembled.html')
+        .maybeSingle()
+
+      if (!existingAssembled) {
+        const { data: sections } = await db
+          .from('file_snapshots')
+          .select('path, content')
+          .eq('project_id', projectId)
+          .ilike('path', 'design/%.html')
+          .order('path', { ascending: true })
+
+        if (sections && sections.length > 0) {
+          const SECTION_ORDER = ['hero', 'problem', 'features', 'proof', 'cta', 'footer']
+          const sorted = [...sections].sort((a, b) => {
+            const ai = SECTION_ORDER.findIndex((s) => a.path.includes(s))
+            const bi = SECTION_ORDER.findIndex((s) => b.path.includes(s))
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+          })
+          const body = sorted.map((f) => f.content).join('\n\n')
+          const assembled = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Landing Page</title>
+<style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }</style>
+</head>
+<body>
+${body}
+</body>
+</html>`
+          await writeFile(projectId, taskId, 'design/assembled.html', assembled, db)
+        }
+      }
+    }
+
     if (taskId) {
       await db.from('tasks').update({
         status: 'completed',
