@@ -278,6 +278,13 @@ React CDN boilerplate (no build step required):
 </script>
 \`\`\`
 
+**Code length rules — strictly required:**
+- Keep index.html under 400 lines total. If you feel you need more, cut CSS first.
+- Use concise inline CSS — avoid verbose per-element styles. One rule that applies broadly beats five specific rules.
+- Do NOT write placeholder or example data unless the task asks for it.
+- Write ONE file: index.html. Do not split into separate .js or .css files.
+- Tight, functional code ships. Verbose code times out.
+
 ### Data API — full CRUD backend (MANDATORY for any app that stores data)
 
 **NEVER use localStorage, sessionStorage, or in-memory state for user data.**
