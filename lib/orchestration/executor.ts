@@ -145,7 +145,7 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
   // ETAs only for passive-wait jugnus — Maya responds quickly / interactively so no ETA needed
   const ETA: Partial<Record<string, string>> = {
     nia:  '~30–90s',
-    leo:  '~60–90s',
+    leo:  '~2–4 min',
     tara: '~30s',
   }
   const eta = ETA[next.jugnu_key]
