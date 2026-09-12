@@ -142,11 +142,19 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       .eq('key', next.jugnu_key)
   }
 
+  const ETA: Record<string, string> = {
+    maya: '~30s',
+    nia:  '~30–90s',
+    leo:  '~60–90s',
+    tara: '~30s',
+  }
+  const eta = ETA[next.jugnu_key] ?? '~1 min'
+
   await db.from('messages').insert({
     project_id: projectId,
     author_type: 'system',
     author_key: 'system',
-    content: `⚡ ${next.jugnu_key.toUpperCase()} is working on: ${next.title}`,
+    content: `⚡ ${next.jugnu_key.charAt(0).toUpperCase() + next.jugnu_key.slice(1)} is on it — expect results in ${eta}`,
     task_id: next.id,
     metadata: { event_type: 'TASK_ASSIGNED', jugnu_key: next.jugnu_key, task_id: next.id },
   })
