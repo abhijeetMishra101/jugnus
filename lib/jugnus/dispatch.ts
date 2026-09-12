@@ -11,8 +11,20 @@ const anthropic = new Anthropic({
     : {}),
 })
 
-const MODEL = 'claude-sonnet-4-6'
+const MODEL_SONNET = 'claude-sonnet-4-6'
+const MODEL_HAIKU  = 'claude-haiku-4-5-20251001'
 const MAX_TOKENS = 8192
+
+// Per-jugnu model selection: Nia uses Haiku (10x faster for HTML section generation, 4x cheaper)
+const MODEL_FOR_JUGNU: Partial<Record<JugnuKey, string>> = {
+  nia: MODEL_HAIKU,
+}
+
+// Pricing per 1M tokens
+const PRICING: Record<string, { input: number; cacheRead: number; output: number }> = {
+  [MODEL_SONNET]: { input: 3.00, cacheRead: 0.30, output: 15.00 },
+  [MODEL_HAIKU]:  { input: 0.80, cacheRead: 0.08, output: 4.00  },
+}
 // Flush streaming content to DB every N characters to keep UI live without hammering Supabase
 const STREAM_FLUSH_INTERVAL = 150
 
@@ -32,6 +44,7 @@ export interface DispatchResult {
 export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResult> {
   const { projectId, taskId, jugnuKey, db } = input
   const jugnu = getJugnu(jugnuKey)
+  const MODEL = MODEL_FOR_JUGNU[jugnuKey] ?? MODEL_SONNET
 
   const ctx = await buildProjectContext(projectId, taskId, db)
   if (!ctx) return { posted: false, toolsUsed: [], finalMessage: null }
@@ -212,12 +225,13 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
     const response = await stream.finalMessage()
 
-    // Accumulate token usage — claude-sonnet-4-6 pricing: $3/M input, $0.30/M cache read, $15/M output
+    // Accumulate token usage with per-model pricing
     if (response.usage) {
       const inputTok = response.usage.input_tokens ?? 0
       const cacheTok = (response.usage as unknown as Record<string, unknown>).cache_read_input_tokens as number ?? 0
       const outputTok = response.usage.output_tokens ?? 0
-      const turnCost = (inputTok * 3 + cacheTok * 0.30 + outputTok * 15) / 1_000_000
+      const p = PRICING[MODEL] ?? PRICING[MODEL_SONNET]
+      const turnCost = (inputTok * p.input + cacheTok * p.cacheRead + outputTok * p.output) / 1_000_000
       totalInputTokens += inputTok
       totalCachedTokens += cacheTok
       totalOutputTokens += outputTok

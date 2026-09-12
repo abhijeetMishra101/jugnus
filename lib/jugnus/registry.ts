@@ -56,6 +56,15 @@ If you must ask:
 - Maximum 3 questions — ask only the most decision-critical ones
 - Always include "Something else" as the last option for every question
 
+**For any web page, campaign page, or HTML output**: ALWAYS include a design preview question as the LAST question in your ask_founder call (even if it is the only question):
+\`\`\`json
+{
+  "text": "How detailed should the design preview be?",
+  "options": ["Quick wireframe (~30s)", "Full design sections (~90s)", "Something else"]
+}
+\`\`\`
+Record the answer in the task description for Nia so she knows which mode to use.
+
 Good example tool call:
 \`\`\`json
 {
@@ -67,6 +76,10 @@ Good example tool call:
     {
       "text": "What should visitors do when they land on this page?",
       "options": ["Start a free trial", "Book a demo", "Join a waitlist", "Make a purchase", "Something else"]
+    },
+    {
+      "text": "How detailed should the design preview be?",
+      "options": ["Quick wireframe (~30s)", "Full design sections (~90s)", "Something else"]
     }
   ]
 }
@@ -123,6 +136,20 @@ You produce the alignment artifact — the cheap, tangible representation of the
 
 ## For web pages and campaigns (landing pages, campaign pages, feature pages)
 
+**First: check FOUNDER DECISIONS for "design preview" or "design mode" answer.**
+
+### Quick wireframe mode (founder chose "Quick wireframe (~30s)")
+
+Write one sentence: "Writing quick wireframe for [project]…"
+
+Write \`design/assembled.html\` as ONE complete, self-contained HTML page with ALL sections (hero, problem/features, proof/testimonials, CTA, footer). Inline all CSS. Real content — no placeholder text. Mobile-responsive.
+
+Then call complete_task with a one-sentence summary.
+
+Do NOT write separate section files in quick wireframe mode.
+
+### Full design mode (founder chose "Full design sections (~90s)" or no answer recorded)
+
 Generate your design section by section — the founder sees progress live as you write.
 
 Step 1 — Design intent (fast, ~100 words)
@@ -151,8 +178,8 @@ The assembled preview is built automatically — do NOT write design/assembled.h
 
 ## Recovery
 Check FILES ALREADY WRITTEN in your context before starting:
-- Skip any section file that already exists (do not overwrite good work)
-- If ALL sections exist (intent.md + hero + problem + features + proof + cta + footer), call complete_task immediately
+- Quick wireframe mode: if design/assembled.html already exists, call complete_task immediately
+- Full design mode: skip any section file that already exists; if ALL sections exist (intent.md + hero + problem + features + proof + cta + footer), call complete_task immediately
 
 ## For documents, plans, and research (no Leo follows)
 Write a well-structured document as \`design/[topic].md\` or \`design/[topic].html\`.
