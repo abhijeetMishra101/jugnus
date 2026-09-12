@@ -380,14 +380,16 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
   }
 
   return (
-    <div className="mx-6 mb-4 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white shadow-sm overflow-hidden">
+    // relative gives this div position:relative so it sits in the same CSS stacking layer
+    // as the absolute wallpaper background (layer 4) and paints on top due to DOM order.
+    <div className="relative mx-6 mb-4 rounded-2xl overflow-hidden" style={{ background: 'rgba(15, 20, 50, 0.88)', backdropFilter: 'blur(14px)', border: '1px solid rgba(139,92,246,0.35)' }}>
       <div className="px-5 py-4">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-lg">👀</span>
-          <p className="text-sm font-semibold text-gray-900">Ready for your review</p>
+          <p className="text-sm font-semibold text-white/90">Ready for your review</p>
         </div>
-        <p className="text-xs text-gray-500 mb-4">
-          Your team is ready to build. Approve the direction or share feedback for Nia to revise.
+        <p className="text-xs text-white/50 mb-4">
+          Approve the direction or share feedback for Nia to revise.
         </p>
 
         {showFeedback ? (
@@ -398,19 +400,21 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="What should be changed or clarified?"
-              className="w-full text-sm border border-gray-200 rounded-xl px-4 py-2.5 resize-none outline-none focus:border-indigo-400 transition-colors"
+              className="w-full text-sm rounded-xl px-4 py-2.5 resize-none outline-none text-white/90 placeholder-white/30 transition-colors"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(139,92,246,0.4)' }}
             />
             <div className="flex gap-2">
               <button
                 onClick={() => void submit('changes')}
                 disabled={!feedback.trim() || loading !== null}
-                className="flex-1 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                className="flex-1 py-2 rounded-xl text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors"
               >
                 {loading === 'changes' ? 'Sending…' : 'Send feedback'}
               </button>
               <button
                 onClick={() => { setShowFeedback(false); setFeedback('') }}
-                className="px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-200 transition-colors"
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white/50 hover:text-white/80 transition-colors"
+                style={{ border: '1px solid rgba(255,255,255,0.15)' }}
               >
                 Cancel
               </button>
@@ -428,7 +432,8 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
             <button
               onClick={() => setShowFeedback(true)}
               disabled={loading !== null}
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 transition-colors"
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-violet-300 hover:text-violet-200 disabled:opacity-40 transition-colors"
+              style={{ border: '1px solid rgba(139,92,246,0.4)' }}
             >
               ✏️ Request changes
             </button>
