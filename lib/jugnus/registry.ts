@@ -231,26 +231,78 @@ For the current alpha (landing pages, campaign pages, feature pages):
 
 Do NOT call complete_task — always end with submit_for_review.
 
-## Form submissions
+## Building interactive and fullstack apps
 
-For any form that collects user data (waitlist, contact, survey, newsletter):
-- Do NOT use HTML form action attributes or server-side form handling
-- Use JavaScript fetch to POST to the Jugnus collect API
-- The project ID is in your context block under "ID:" — embed it literally in the HTML
-- Request format:
-  \`\`\`javascript
-  fetch('/api/collect/PROJECT_ID_HERE', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ form: 'waitlist', email: emailValue })
-  })
-  .then(r => r.json())
-  .then(r => { if (r.ok) { /* show success */ } else { /* show error */ } })
-  \`\`\`
-- Replace PROJECT_ID_HERE with the actual project UUID from your context
-- Set the \`form\` field to describe the form type: 'waitlist', 'contact', 'survey', etc.
-- Include all collected fields in the JSON body alongside \`form\`
-- Always show a visible success message on submit and a clear error state if the fetch fails`,
+The project ID is in your context block under "ID:" — embed it literally in every fetch URL.
+
+### When to use React vs vanilla JS
+- **Vanilla JS**: landing pages, static sites, simple forms with no state
+- **React via CDN**: any app with interactive state — todos, dashboards, trackers, tools
+
+React CDN boilerplate (no build step required):
+\`\`\`html
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+  const { useState, useEffect } = React;
+  function App() {
+    // your component here
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+\`\`\`
+
+### Data API — full CRUD backend (use for any app that stores data)
+
+Base URL: \`/api/data/PROJECT_ID_HERE\` — replace PROJECT_ID_HERE with the actual project UUID.
+
+**List records**
+\`\`\`javascript
+fetch('/api/data/PROJECT_ID_HERE/items')
+  .then(r => r.json()).then(({ records }) => { /* records is an array */ })
+\`\`\`
+
+**Create a record**
+\`\`\`javascript
+fetch('/api/data/PROJECT_ID_HERE/items', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ text: 'Buy milk', done: false })
+}).then(r => r.json()).then(({ record }) => { /* record has id, created_at, updated_at */ })
+\`\`\`
+
+**Update a record**
+\`\`\`javascript
+fetch(\`/api/data/PROJECT_ID_HERE/items/\${id}\`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ done: true })
+}).then(r => r.json()).then(({ record }) => { /* merged record */ })
+\`\`\`
+
+**Delete a record**
+\`\`\`javascript
+fetch(\`/api/data/PROJECT_ID_HERE/items/\${id}\`, { method: 'DELETE' })
+\`\`\`
+
+- Replace \`items\` with a descriptive collection name: \`tasks\`, \`entries\`, \`contacts\`, \`expenses\`, etc.
+- Each record automatically gets \`id\`, \`created_at\`, \`updated_at\` — never generate IDs yourself
+- Data persists across page loads and is shared across all users of the preview URL
+- For a todo app: collection = \`todos\`. For a CRM: \`contacts\`. For a budget tracker: \`transactions\`.
+
+### Form submissions (one-way data collection)
+
+For waitlist, contact, survey forms — use the simpler collect API instead of the data API:
+\`\`\`javascript
+fetch('/api/collect/PROJECT_ID_HERE', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ form: 'waitlist', email: emailValue })
+}).then(r => r.json()).then(r => { if (r.ok) { /* show success */ } })
+\`\`\`
+- Set \`form\` to the form type: 'waitlist', 'contact', 'survey', etc.
+- Always show a visible success state and a clear error state`,
   },
 
   tara: {
