@@ -134,7 +134,7 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
       <div className="p-5 border-b border-white/10">
         <div className="flex items-center gap-2 mb-4">
           <span className="text-base">✦</span>
-          <h3 className="text-sm font-semibold text-white/90">Agents in action</h3>
+          <h3 className="text-sm font-semibold text-white/90">Meet Your Team</h3>
         </div>
 
         <div className="space-y-3">
@@ -142,7 +142,8 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
             const currentTask = tasks.find((t) => t.jugnu_key === j.key && t.status === 'in_progress')
             const hasDone    = tasks.some((t) => t.jugnu_key === j.key && t.status === 'completed')
             const hasPending = tasks.some((t) => t.jugnu_key === j.key && (t.status === 'pending' || t.status === 'in_progress'))
-            const derivedStatus = currentTask ? 'working' : hasDone && !hasPending ? 'done' : 'idle'
+            // Fall back to jugnus.status for jugnus that bypass task rows (e.g. Maya during planning)
+            const derivedStatus = currentTask ? 'working' : hasDone && !hasPending ? 'done' : j.status === 'working' ? 'working' : 'idle'
             const badge = STATUS_BADGE[derivedStatus] ?? STATUS_BADGE.idle
             return (
               <div key={j.key} className="flex items-center gap-3">

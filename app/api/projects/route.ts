@@ -70,6 +70,9 @@ export async function POST(request: Request) {
     content: '✨ Maya is reviewing your objective and assembling the team…',
   })
 
+  // Mark Maya working before dispatching — she bypasses advanceProject so we set it manually
+  await db.from('jugnus').update({ status: 'working' }).eq('workspace_id', workspaceId).eq('key', 'maya')
+
   // Kick off Maya — runPipeline handles its own errors and HTTP-chains to the next jugnu
   waitUntil(runPipeline(projectId, null, 'maya', db))
 
