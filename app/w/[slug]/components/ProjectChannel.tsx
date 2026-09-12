@@ -511,7 +511,7 @@ function InlineClarification({
                       style={{ accentColor }}
                     />
                     <span className="text-sm leading-snug" style={{ color: checked ? 'rgba(240,240,255,1)' : 'rgba(240,240,255,0.65)' }}>
-                      {isOther(opt) ? 'Something else…' : opt}
+                      {isOther(opt) ? 'Enter your own…' : opt}
                     </span>
                   </label>
                   {isOther(opt) && checked && (
