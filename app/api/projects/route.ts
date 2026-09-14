@@ -39,6 +39,9 @@ export async function POST(request: Request) {
 
   const projectId = project.id
 
+  // Reset all jugnus to idle first — clears any stale "Working" state from a previously cancelled project
+  await db.from('jugnus').update({ status: 'idle' }).eq('workspace_id', workspaceId)
+
   // Seed jugnus, post messages, and create Maya's task in parallel (all reference projectId, not each other)
   const [, , , { data: mayaTask }] = await Promise.all([
     // Seed jugnu roster for this workspace (idempotent)
