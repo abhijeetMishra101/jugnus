@@ -168,6 +168,7 @@ ${body}
                 description: { type: 'string', description: 'Detailed instructions including all clarification answers as explicit constraints. For Leo: specify exactly which files to create.' },
                 capability: { type: 'string', enum: ['design', 'build', 'review', 'approval'] },
                 jugnu_key: { type: 'string', enum: ['nia', 'leo', 'tara', 'human'] },
+                eta: { type: 'string', description: 'Project-specific time estimate shown to the founder, e.g. "~2–3 min". Base it on the brief complexity — a simple landing page is shorter than a multi-section app.' },
                 depends_on_indices: {
                   type: 'array',
                   items: { type: 'number' },
@@ -195,7 +196,7 @@ ${body}
     handlers['create_task_plan'] = async (input) => {
       const rawTasks = input.tasks as Array<{
         title: string; description: string; capability: string
-        jugnu_key: string; depends_on_indices?: number[]
+        jugnu_key: string; eta?: string; depends_on_indices?: number[]
       }>
       const jugnu_roles = input.jugnu_roles as Record<string, { display_role: string; focus: string }> | undefined
 
@@ -206,6 +207,7 @@ ${body}
         const { data } = await db.from('tasks').insert({
           project_id: projectId, title: t.title, description: t.description,
           capability: t.capability, jugnu_key: t.jugnu_key,
+          eta: t.eta ?? null,
           depends_on: dependsOn, sort_order: i, status: 'pending',
         }).select('id').single()
         insertedIds.push(data?.id ?? '')

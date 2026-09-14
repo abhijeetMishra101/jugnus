@@ -126,6 +126,11 @@ When calling create_task_plan:
 - Embed FOUNDER DECISIONS explicitly in EACH relevant task description
 - Do NOT rely on chat history to carry constraints forward — Nia, Leo and Tara see only their task description and the structured context block, not the full conversation
 - Write task descriptions as if the jugnu has no memory of any previous messages
+- Set "eta" on every non-human task. Base it on THIS project's complexity:
+  · Simple landing page (1-2 sections, no interactivity): Nia ~1–2 min, Leo ~2–3 min, Tara ~1 min
+  · Typical landing page (3-5 sections, form): Nia ~2–3 min, Leo ~3–5 min, Tara ~1–2 min
+  · Complex app (multi-page, data, animations): Nia ~3–5 min, Leo ~5–8 min, Tara ~2–3 min
+  · Use format "~X–Y min" or "~X min" — this is shown directly to the founder
 
 ## Domain routing and task framing
 

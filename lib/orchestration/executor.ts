@@ -7,6 +7,7 @@ interface Task {
   jugnu_key: string
   depends_on: string[]
   status: string
+  eta?: string | null
 }
 
 export async function getNextReadyTask(
@@ -15,7 +16,7 @@ export async function getNextReadyTask(
 ): Promise<Task | null> {
   const { data: tasks } = await db
     .from('tasks')
-    .select('id, title, jugnu_key, depends_on, status')
+    .select('id, title, jugnu_key, depends_on, status, eta')
     .eq('project_id', projectId)
     .order('sort_order', { ascending: true })
 
@@ -142,13 +143,13 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       .eq('key', next.jugnu_key)
   }
 
-  // ETAs only for passive-wait jugnus — Maya responds quickly / interactively so no ETA needed
-  const ETA: Partial<Record<string, string>> = {
+  // Use Maya's project-specific estimate if she provided one; fall back to generic ranges
+  const FALLBACK_ETA: Partial<Record<string, string>> = {
     nia:  '~1–3 min',
     leo:  '~3–5 min',
     tara: '~1–2 min',
   }
-  const eta = ETA[next.jugnu_key]
+  const eta = next.eta ?? FALLBACK_ETA[next.jugnu_key]
   const jugnu_name = next.jugnu_key.charAt(0).toUpperCase() + next.jugnu_key.slice(1)
   const content = eta
     ? `⚡ ${jugnu_name} is on it — expect results in ${eta}`
