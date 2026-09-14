@@ -70,11 +70,23 @@ export async function POST(request: Request) {
     content: '✨ Maya is reviewing your objective and assembling the team…',
   })
 
-  // Mark Maya working before dispatching — she bypasses advanceProject so we set it manually
+  // Create a real task row for Maya so derivedStatus tracks her Working → Done correctly
+  const { data: mayaTask } = await db.from('tasks').insert({
+    project_id: projectId,
+    title: 'Plan the project',
+    description: 'Evaluate the brief, ask any clarifying questions, and create the task plan.',
+    capability: 'planning',
+    jugnu_key: 'maya',
+    depends_on: [],
+    sort_order: -1,
+    status: 'in_progress',
+    started_at: new Date().toISOString(),
+  }).select('id').single()
+
   await db.from('jugnus').update({ status: 'working' }).eq('workspace_id', workspaceId).eq('key', 'maya')
 
-  // Kick off Maya — runPipeline handles its own errors and HTTP-chains to the next jugnu
-  waitUntil(runPipeline(projectId, null, 'maya', db))
+  // Kick off Maya with her real taskId so complete_task marks her Done
+  waitUntil(runPipeline(projectId, mayaTask?.id ?? null, 'maya', db))
 
   return NextResponse.json({ id: projectId, title }, { status: 201 })
 }
