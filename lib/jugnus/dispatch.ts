@@ -171,6 +171,13 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
     let textBuffer = ''
     let lastFlushedLen = 0
 
+    // Tool input streaming — surfaces write_file content as it generates (terminal feel)
+    let activeToolName: string | null = null
+    let toolInputBuffer = ''
+    let toolStreamRowId: string | null = null
+    let toolStreamPath: string | null = null
+    let toolStreamLastFlush = 0
+
     const earlyActivityLabel: Record<string, string> = {
       write_file:        `📝 Writing file…`,
       read_file:         `👁️ Reading file…`,
@@ -187,6 +194,11 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       // This closes the silent gap where Nia generates a large HTML file for several minutes.
       if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
         const toolName = event.content_block.name
+        activeToolName = toolName
+        toolInputBuffer = ''
+        toolStreamRowId = null
+        toolStreamPath = null
+        toolStreamLastFlush = 0
         void db.from('messages').insert({
           project_id: projectId,
           author_type: 'activity',
@@ -194,6 +206,65 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
           content: earlyActivityLabel[toolName] ?? `🔧 ${toolName}…`,
           metadata: { event_type: 'JUGNU_THINKING', tool: toolName, jugnu_key: jugnuKey },
         })
+      }
+
+      if (event.type === 'content_block_stop') {
+        // Finalize the tool stream row when the block closes
+        if (activeToolName === 'write_file' && toolStreamRowId) {
+          try {
+            const parsed = JSON.parse(toolInputBuffer) as { path?: string; content?: string }
+            if (parsed.content) {
+              await db.from('messages').update({
+                content: parsed.content,
+                metadata: { event_type: 'FILE_STREAM', streaming: false, jugnu_key: jugnuKey, file_path: toolStreamPath ?? parsed.path },
+              }).eq('id', toolStreamRowId)
+            }
+          } catch { /* partial buffer on edge case — leave as-is */ }
+        }
+        activeToolName = null
+        toolInputBuffer = ''
+        toolStreamRowId = null
+        toolStreamPath = null
+        toolStreamLastFlush = 0
+      }
+
+      // Stream write_file tool input so users see the file content generating in real-time
+      if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta' && activeToolName === 'write_file') {
+        toolInputBuffer += event.delta.partial_json
+
+        // Extract path once we have it
+        if (!toolStreamPath) {
+          const m = toolInputBuffer.match(/"path"\s*:\s*"([^"]+)"/)
+          if (m) toolStreamPath = m[1]
+        }
+
+        // Extract content field using regex — handles partial JSON strings safely
+        const contentMatch = toolInputBuffer.match(/"content":"((?:[^"\\]|\\[\s\S])*)/)
+        if (contentMatch && toolStreamPath) {
+          const partial = contentMatch[1]
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '\t')
+            .replace(/\\r/g, '\r')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\')
+
+          if (partial.length - toolStreamLastFlush >= STREAM_FLUSH_INTERVAL * 2) {
+            if (!toolStreamRowId) {
+              const { data: row } = await db.from('messages').insert({
+                project_id: projectId,
+                author_type: 'jugnu',
+                author_key: jugnuKey,
+                content: partial,
+                task_id: taskId,
+                metadata: { event_type: 'FILE_STREAM', streaming: true, jugnu_key: jugnuKey, file_path: toolStreamPath },
+              }).select('id').single()
+              toolStreamRowId = row?.id ?? null
+            } else {
+              await db.from('messages').update({ content: partial }).eq('id', toolStreamRowId)
+            }
+            toolStreamLastFlush = partial.length
+          }
+        }
       }
 
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {

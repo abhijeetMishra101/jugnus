@@ -149,6 +149,41 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
   )
 }
 
+// ─── File stream preview bubble ───────────────────────────────────────────────
+
+function FileStreamBubble({ msg, j }: { msg: Message; j: { color: string; bg: string } }) {
+  const meta = (msg.metadata ?? {}) as Record<string, unknown>
+  const filePath = meta.file_path as string | null | undefined
+  const isStreaming = meta.streaming === true
+  const lines = msg.content.split('\n').length
+
+  return (
+    <div
+      className="rounded-2xl rounded-tl-sm overflow-hidden shadow-sm"
+      style={{ border: `1px solid ${j.color}22`, background: '#0d1117' }}
+    >
+      {/* File header */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b" style={{ borderColor: j.color + '22', background: j.bg }}>
+        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: j.color }}>
+          <path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M9 2v4h4" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span className="text-xs font-mono font-medium" style={{ color: j.color }}>{filePath ?? 'file'}</span>
+        <span className="ml-auto text-[10px]" style={{ color: j.color, opacity: 0.5 }}>
+          {isStreaming ? (
+            <span style={{ animation: 'jugnu-bounce 1s ease-in-out infinite' }}>writing…</span>
+          ) : `${lines} lines`}
+        </span>
+      </div>
+      {/* Content */}
+      <pre className="px-4 py-3 text-xs overflow-x-auto overflow-y-auto max-h-64 leading-relaxed"
+        style={{ color: 'rgba(200,210,230,0.9)', fontFamily: 'ui-monospace, SFMono-Regular, monospace', whiteSpace: 'pre' }}>
+        {msg.content}
+      </pre>
+    </div>
+  )
+}
+
 // ─── Single message bubble (no avatar — used inside JugnuSection) ─────────────
 
 function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: string }) {
@@ -217,29 +252,34 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
         <div className="space-y-3">
           {messages.map((msg, i) => {
             const meta = (msg.metadata ?? {}) as Record<string, unknown>
+            const isFileStream = meta.event_type === 'FILE_STREAM'
             const isClarification = msg.id === pendingMsgId && meta.event_type === 'CLARIFICATION_REQUIRED'
             const questions = isClarification
               ? (meta.questions as ClarificationQuestion[] | undefined) ?? []
               : []
             return (
               <div key={msg.id}>
-                <div
-                  className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble"
-                  style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}
-                >
-                  {isClarification && questions.length > 0 ? (
-                    <InlineClarification
-                      questions={questions}
-                      projectId={projectId}
-                      userId={userId}
-                      accentColor={j.color}
-                    />
-                  ) : (
-                    <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
-                  )}
-                </div>
+                {isFileStream ? (
+                  <FileStreamBubble msg={msg} j={j} />
+                ) : (
+                  <div
+                    className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble"
+                    style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}
+                  >
+                    {isClarification && questions.length > 0 ? (
+                      <InlineClarification
+                        questions={questions}
+                        projectId={projectId}
+                        userId={userId}
+                        accentColor={j.color}
+                      />
+                    ) : (
+                      <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {i > 0 && (
                   <span className="block text-[10px] text-white/40 mt-0.5 ml-1">
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
