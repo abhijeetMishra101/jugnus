@@ -19,8 +19,8 @@ export async function POST(request: Request) {
   const file = formData.get('file') as File | null
   const projectId = formData.get('projectId') as string | null
 
-  if (!file || !projectId) {
-    return NextResponse.json({ error: 'file and projectId required' }, { status: 400 })
+  if (!file) {
+    return NextResponse.json({ error: 'file required' }, { status: 400 })
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: 'File too large (max 10 MB)' }, { status: 413 })
@@ -28,10 +28,11 @@ export async function POST(request: Request) {
 
   const db = createServiceClient()
   const ext = file.name.split('.').pop() ?? 'bin'
-  const path = `${projectId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+  const folder = projectId ?? `pending-${Date.now()}`
+  const path = `${folder}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
   const bytes = await file.arrayBuffer()
-  const { error } = await db.storage.from(BUCKET).upload(path, bytes, {
+  const { error } = await db.storage.from(BUCKET).upload(path, new Uint8Array(bytes), {
     contentType: file.type,
     upsert: false,
   })

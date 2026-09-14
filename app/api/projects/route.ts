@@ -12,24 +12,32 @@ export const maxDuration = 300
  * Then immediately dispatches Maya to clarify and build the task plan.
  */
 export async function POST(request: Request) {
-  const { workspaceId, objective } = await request.json() as {
+  type Attachment = { url: string; name: string; isImage: boolean; textContent?: string | null }
+  const { workspaceId, objective, attachments } = await request.json() as {
     workspaceId: string
     objective: string
+    attachments?: Attachment[]
   }
 
   if (!workspaceId || !objective?.trim()) {
     return NextResponse.json({ error: 'workspaceId and objective required' }, { status: 400 })
   }
 
+  const safeAttachments: Attachment[] = (attachments ?? []).filter((a) => a.url && a.name)
+
   const db = createServiceClient()
 
   // Derive a title from the first sentence of the objective
   const title = objective.split(/[.!?]/)[0].trim().slice(0, 80) || 'New Project'
 
+  const initialConstraints = safeAttachments.length > 0
+    ? { attachments: safeAttachments.map(({ url, name, isImage }) => ({ url, name, isImage })) }
+    : {}
+
   // Create the project
   const { data: project, error } = await db
     .from('projects')
-    .insert({ workspace_id: workspaceId, title, objective: objective.trim(), status: 'planning' })
+    .insert({ workspace_id: workspaceId, title, objective: objective.trim(), status: 'planning', constraints: initialConstraints })
     .select('id')
     .single()
 
@@ -58,12 +66,13 @@ export async function POST(request: Request) {
         }, { onConflict: 'workspace_id,key', ignoreDuplicates: true })
       )
     ),
-    // Post founder's objective as first message
+    // Post founder's objective as first message (with attachments if any)
     db.from('messages').insert({
       project_id: projectId,
       author_type: 'user',
       author_key: workspaceId,
       content: objective.trim(),
+      metadata: safeAttachments.length > 0 ? { attachments: safeAttachments } : null,
     }),
     // Post Maya's "I'm on it" system message
     db.from('messages').insert({

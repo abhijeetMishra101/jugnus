@@ -94,9 +94,15 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
     : 'No current task assigned.'
 
   const constraintLines = Object.entries(ctx.constraints)
-    .filter(([k]) => k !== 'jugnu_roles' && k !== 'founder_constraints' && k !== 'approval_metrics')
+    .filter(([k]) => k !== 'jugnu_roles' && k !== 'founder_constraints' && k !== 'approval_metrics' && k !== 'attachments')
     .map(([k, v]) => `  ${k}: ${v}`)
     .join('\n')
+
+  type AttRef = { url: string; name: string; isImage: boolean }
+  const attachmentRefs = (ctx.constraints.attachments as AttRef[] | undefined) ?? []
+  const attachmentBlock = attachmentRefs.length > 0
+    ? `\nVISUAL REFERENCES PROVIDED BY FOUNDER:\n${attachmentRefs.map((a) => `  ${a.isImage ? '🖼' : '📄'} ${a.name}${a.isImage ? ` — ${a.url}` : ''}`).join('\n')}\n(Images are included in the conversation — examine them for brand colours, style, layout, and content.)`
+    : ''
 
   const founderConstraintsRaw: unknown = ctx.constraints.founder_constraints
   let founderDecisionLines = ''
@@ -147,6 +153,7 @@ Status: ${ctx.status}
 
 FOUNDER OBJECTIVE:
 ${ctx.objective}
+${attachmentBlock}
 ${constraintLines ? `\nCONSTRAINTS:\n${constraintLines}` : ''}
 ${founderDecisionLines ? `\nFOUNDER DECISIONS (from clarification — apply these to your work):\n${founderDecisionLines}` : ''}
 ${completed ? `\nCOMPLETED TASKS:\n${completed}` : ''}

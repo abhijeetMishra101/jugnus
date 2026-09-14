@@ -72,13 +72,30 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         ? `[${m.author_key.toUpperCase()}]: ${m.content}`
         : m.content
 
-      // Append text attachment content so jugnus can read uploaded files
+      const imageAtts: Att[] = []
+
       if (m.author_type === 'user' && m.metadata?.attachments) {
         const atts = (m.metadata.attachments as Att[])
+        // Append text file contents inline
         const textParts = atts
           .filter((a) => !a.isImage && a.textContent)
           .map((a) => `\n\n[Attached file: ${a.name}]\n\`\`\`\n${a.textContent}\n\`\`\``)
         if (textParts.length) text += textParts.join('')
+        // Collect images for Claude vision content blocks
+        imageAtts.push(...atts.filter((a) => a.isImage && a.url))
+      }
+
+      if (imageAtts.length > 0) {
+        return {
+          role: 'user' as const,
+          content: [
+            ...imageAtts.map((a) => ({
+              type: 'image' as const,
+              source: { type: 'url' as const, url: a.url },
+            })),
+            { type: 'text' as const, text },
+          ] as Anthropic.ContentBlockParam[],
+        }
       }
 
       return {
