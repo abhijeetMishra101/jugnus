@@ -9,7 +9,7 @@ export const maxDuration = 60
 //   2. Mid-generation hang — jugnu started but stopped producing output
 // 3 min is safe because: Haiku generates a large HTML file in < 60s; with file streaming
 // DB updates arrive every few seconds during active generation, so genuine work shows activity.
-const NO_ACTIVITY_THRESHOLD_MINUTES = 3
+const NO_ACTIVITY_THRESHOLD_MINUTES = 2
 // Hard ceiling — anything in_progress > 8 min is killed regardless of activity
 const HARD_CAP_MINUTES = 8
 const MAX_RETRIES = 3
