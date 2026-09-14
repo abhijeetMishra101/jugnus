@@ -327,7 +327,7 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
           {messages.map((msg, i) => {
             const meta = (msg.metadata ?? {}) as Record<string, unknown>
             const isFileStream = meta.event_type === 'FILE_STREAM'
-            const isClarification = msg.id === pendingMsgId && meta.event_type === 'CLARIFICATION_REQUIRED'
+            const isClarification = msg.id === pendingMsgId && (meta.event_type === 'CLARIFICATION_REQUIRED' || meta.event_type === 'INFO_REQUESTED')
             const questions = isClarification
               ? (meta.questions as ClarificationQuestion[] | undefined) ?? []
               : []
@@ -728,15 +728,15 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     ? { taskId: lastRelevant.task_id ?? null }
     : null
 
-  // Pending clarification: last CLARIFICATION_REQUIRED message with no user reply after it
+  // Pending question: last CLARIFICATION_REQUIRED or INFO_REQUESTED with no user reply after it
   const lastClarification = useMemo(() =>
-    [...messages].reverse().find(
-      (m) => (m.metadata as Record<string, unknown>)?.event_type === 'CLARIFICATION_REQUIRED'
-    ) ?? null
+    [...messages].reverse().find((m) => {
+      const evt = (m.metadata as Record<string, unknown>)?.event_type
+      return evt === 'CLARIFICATION_REQUIRED' || evt === 'INFO_REQUESTED'
+    }) ?? null
   , [messages])
 
-  // pendingMsgId: the CLARIFICATION_REQUIRED message ID that still has no user reply after it
-  // (used by JugnuSection to render the inline MCQ form inside the bubble)
+  // pendingMsgId: the question message ID that still has no user reply after it
   const pendingMsgId = useMemo((): string | null => {
     if (!lastClarification) return null
     const answered = messages.some(

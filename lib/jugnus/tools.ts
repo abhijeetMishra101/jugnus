@@ -271,6 +271,69 @@ ${body}
     }
   }
 
+  // ── request_info — Nia, Leo, Tara: pause mid-execution to ask for real data ──
+  if (['nia', 'leo', 'tara'].includes(jugnuKey)) {
+    definitions.push({
+      name: 'request_info',
+      description: 'Pause your work and ask the founder for specific real-world details you need (address, phone, email, hours, prices, names). Call this BEFORE writing placeholder values. Group ALL missing info into ONE call — do not call multiple times. You will be re-dispatched after the founder answers to fill in the real values.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          reason: { type: 'string', description: 'One sentence explaining why you need this info, shown to the founder. E.g. "I need a few details to complete the Contact section."' },
+          fields: {
+            type: 'array',
+            description: 'The specific pieces of info needed.',
+            items: {
+              type: 'object' as const,
+              properties: {
+                label:       { type: 'string', description: 'Short field name. E.g. "Shop address", "Phone number", "Opening hours"' },
+                why:         { type: 'string', description: 'One short phrase saying where it appears. E.g. "shown in footer and Google Maps link"' },
+                placeholder: { type: 'string', description: 'What you will use if skipped. E.g. "123 Main Street, City"' },
+              },
+              required: ['label', 'why', 'placeholder'],
+            },
+          },
+        },
+        required: ['reason', 'fields'],
+      },
+    })
+
+    handlers['request_info'] = async (input) => {
+      const reason = input.reason as string
+      const fields = (input.fields as Array<{ label: string; why: string; placeholder: string }>) ?? []
+
+      // Build MCQ questions — "Something else" triggers the free-text input in InlineClarification
+      const questions = fields.map((f) => ({
+        text: `${f.label} — ${f.why}`,
+        options: ['Something else', `Skip — use "${f.placeholder}"`],
+      }))
+
+      const lines: string[] = [`**${reason}**\n`]
+      fields.forEach((f, i) => {
+        lines.push(`**${i + 1}. ${f.label}** _(${f.why})_`)
+      })
+
+      await db.from('escalations').insert({
+        project_id: projectId,
+        task_id: taskId,
+        jugnu_key: jugnuKey,
+        question: fields.map((f) => f.label).join(', '),
+        options: questions,
+        status: 'pending',
+      })
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'jugnu',
+        author_key: jugnuKey,
+        content: lines.join('\n').trim(),
+        task_id: taskId,
+        metadata: { event_type: 'INFO_REQUESTED', questions, escalation: true },
+      })
+
+      return { ok: true, waiting_for_founder: true }
+    }
+  }
+
   // ── File tools — Leo, Nia, Tara (readers) ────────────────────────────────────
   if (['leo', 'nia', 'tara'].includes(jugnuKey)) {
     definitions.push({

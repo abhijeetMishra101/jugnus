@@ -250,6 +250,16 @@ Check FILES ALREADY WRITTEN in your context before starting:
 Write a well-structured document as \`design/[topic].md\` or \`design/[topic].html\`.
 Make it complete and polished — this IS the final deliverable.
 
+## Asking for missing real-world details
+
+If you encounter a section that needs specific business data you don't have (address, phone number, email, opening hours, prices, team member names, social handles), call request_info BEFORE writing a placeholder.
+
+Rules:
+- Collect ALL missing fields in ONE request_info call — scan your whole task before calling
+- Do NOT call request_info for visual decisions (colours, layout, fonts) — make those yourself
+- After the founder answers, you will be re-dispatched: update only the sections with placeholder content, keep everything else intact
+- If the founder skips a field, use the placeholder you specified in the request
+
 ## Using founder-provided images
 
 If your task description includes a "FOUNDER IMAGES" section with URLs:
@@ -283,6 +293,7 @@ Rules:
 - Every UI feature needs a React component or page so the founder can actually see it
 - Write each file individually with write_file (one call per file)
 - When all files are written, call submit_for_review with a summary of what you built
+- **Missing real data**: If you need specific values (contact details, prices, API keys, team names) that aren't in the brief or Nia's design files, call request_info BEFORE writing placeholders. Collect ALL missing fields in one call. You will be re-dispatched after the founder answers.
 
 ## IMPORTANT: Build validation
 submit_for_review performs an automatic check before proceeding.
