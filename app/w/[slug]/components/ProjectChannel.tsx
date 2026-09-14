@@ -94,11 +94,28 @@ function buildFeed(messages: Message[], initialIds: Set<string>): FeedItem[] {
 
 // ─── TypingBubble ─────────────────────────────────────────────────────────────
 
+const THINKING_PHRASES: Record<string, string[]> = {
+  maya: ['Planning the team…', 'Reviewing your brief…', 'Mapping out the work…', 'Almost ready…'],
+  nia:  ['Sketching layouts…', 'Thinking about colours…', 'Shaping the design…', 'Polishing sections…'],
+  leo:  ['Setting up the app…', 'Wiring components…', 'Connecting the API…', 'Finalising the build…'],
+  tara: ['Reading the code…', 'Running checks…', 'Verifying the app…', 'Wrapping up review…'],
+}
+
 function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: string[] }) {
   const j = JUGNU[jugnuKey]
+  const [phraseIdx, setPhraseIdx] = useState(0)
+
+  useEffect(() => {
+    const phrases = THINKING_PHRASES[jugnuKey] ?? []
+    if (!phrases.length) return
+    const id = setInterval(() => setPhraseIdx((p) => (p + 1) % phrases.length), 4000)
+    return () => clearInterval(id)
+  }, [jugnuKey])
+
   if (!j) return null
 
   const lastActivity = activities[activities.length - 1]
+  const phrases = THINKING_PHRASES[jugnuKey] ?? []
 
   return (
     <div className="flex items-end gap-1 px-3 py-1.5">
@@ -121,6 +138,11 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
             {[0, 1, 2].map((i) => (
               <span key={i} className="block w-2 h-2 rounded-full" style={{ backgroundColor: j.color, animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
             ))}
+            {!lastActivity && phrases.length > 0 && (
+              <span className="text-xs ml-1.5" style={{ color: j.color, opacity: 0.5 }}>
+                {phrases[phraseIdx]}
+              </span>
+            )}
           </div>
         </div>
       </div>

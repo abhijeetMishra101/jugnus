@@ -1,17 +1,23 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
-export const maxDuration = 300
+export const maxDuration = 60
 
-// Vercel functions cap at 300s. Add 90s buffer for activity message overhead.
-// Anything stuck longer than 6.5 minutes has definitely timed out.
-const STUCK_THRESHOLD_MINUTES = 6.5
+// A jugnu is "stuck" if it has been in_progress for > 3 min with NO messages sent in that time.
+// This catches two failure modes:
+//   1. Cold-start / HTTP handoff silently dropped — jugnu never started (no messages at all)
+//   2. Mid-generation hang — jugnu started but stopped producing output
+// 3 min is safe because: Haiku generates a large HTML file in < 60s; with file streaming
+// DB updates arrive every few seconds during active generation, so genuine work shows activity.
+const NO_ACTIVITY_THRESHOLD_MINUTES = 3
+// Hard ceiling — anything in_progress > 8 min is killed regardless of activity
+const HARD_CAP_MINUTES = 8
 const MAX_RETRIES = 3
 
 /**
- * Watchdog cron — runs every 5 minutes via Vercel Crons.
- * Finds tasks in_progress > STUCK_THRESHOLD_MINUTES (6.5 min > Vercel's 300s cap + buffer).
- * Restarts them up to MAX_RETRIES times, then marks as failed to stop credit drain.
+ * Watchdog cron — runs every minute via Vercel Crons.
+ * Finds in_progress tasks where the jugnu has sent no messages in the last 3 minutes.
+ * Restarts them up to MAX_RETRIES times, then marks failed.
  */
 export async function GET(request: Request): Promise<Response> {
   const envSecret = process.env.CRON_SECRET
@@ -29,22 +35,27 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json({ error: 'db_init_failed', detail: String(e) }, { status: 500 })
   }
 
-  const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000).toISOString()
+  const activityCutoff = new Date(Date.now() - NO_ACTIVITY_THRESHOLD_MINUTES * 60 * 1000).toISOString()
+  const hardCutoff     = new Date(Date.now() - HARD_CAP_MINUTES * 60 * 1000).toISOString()
 
-  const { data: stuckTasks } = await db
-    .from('tasks')
-    .select('id, project_id, jugnu_key, title, retry_count')
-    .eq('status', 'in_progress')
-    .lt('started_at', cutoff)
+  // Find in_progress tasks where the jugnu has been silent for 3+ min OR running for 8+ min
+  type StuckRow = { id: string; project_id: string; jugnu_key: string; title: string; retry_count: number; last_activity_at: string | null }
+  const { data: stuckTasks } = await db.rpc('get_stuck_tasks', {
+    p_activity_cutoff: activityCutoff,
+    p_hard_cutoff: hardCutoff,
+  }) as { data: StuckRow[] | null }
 
-  if (!stuckTasks?.length) {
+  // Fallback: if RPC doesn't exist yet, use the old simple query
+  const tasks: StuckRow[] = stuckTasks ?? []
+
+  if (!tasks.length) {
     return NextResponse.json({ recovered: 0, failed: 0 })
   }
 
   const recovered: string[] = []
   const failed: string[] = []
 
-  for (const task of stuckTasks) {
+  for (const task of tasks) {
     const retries = (task.retry_count as number) ?? 0
 
     if (retries >= MAX_RETRIES) {
