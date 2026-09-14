@@ -154,6 +154,43 @@ ${body}
     }
 
     definitions.push({
+      name: 'join_v2_waitlist',
+      description: 'Record that the founder wants to be notified when a v2.0 feature ships. Call this when the founder selects "Join v2.0 waitlist". Then proceed with planning as if they chose "Continue without these features".',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          features: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of v2.0 feature names the founder wants — e.g. ["E-commerce / payments", "User authentication"]',
+          },
+        },
+        required: ['features'],
+      },
+    })
+
+    handlers['join_v2_waitlist'] = async (input) => {
+      const features = (input.features as string[]) ?? []
+      const { data: proj } = await db.from('projects').select('workspace_id').eq('id', projectId).single()
+
+      await db.from('form_submissions').insert({
+        project_id: projectId,
+        form_type: 'v2_waitlist',
+        data: { features, workspace_id: proj?.workspace_id ?? null },
+      })
+
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'jugnu',
+        author_key: 'maya',
+        content: `✅ Got it! I've added you to the v2.0 waitlist for: **${features.join(', ')}**. You'll be notified when it ships. Continuing with what's available now…`,
+        metadata: { event_type: 'V2_WAITLIST_JOINED', features },
+      })
+
+      return { ok: true, waitlisted: features }
+    }
+
+    definitions.push({
       name: 'create_task_plan',
       description: 'Create the task plan for this project. Call once after understanding the objective. Tasks execute in dependency order.',
       input_schema: {
