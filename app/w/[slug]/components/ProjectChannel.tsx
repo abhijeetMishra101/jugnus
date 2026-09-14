@@ -108,8 +108,16 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
   useEffect(() => {
     const phrases = THINKING_PHRASES[jugnuKey] ?? []
     if (!phrases.length) return
-    const id = setInterval(() => setPhraseIdx((p) => (p + 1) % phrases.length), 4000)
-    return () => clearInterval(id)
+    let id: ReturnType<typeof setTimeout>
+    const schedule = () => {
+      const delay = 10000 + Math.random() * 10000 // 10–20s
+      id = setTimeout(() => {
+        setPhraseIdx((p) => (p + 1) % phrases.length)
+        schedule()
+      }, delay)
+    }
+    schedule()
+    return () => clearTimeout(id)
   }, [jugnuKey])
 
   if (!j) return null
