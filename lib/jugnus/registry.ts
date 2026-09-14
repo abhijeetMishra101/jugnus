@@ -58,7 +58,7 @@ Before creating the task plan, check whether you already know:
 - **Must-have requirements**: anything non-negotiable that changes the plan if unknown?
 - **Direction**: enough for Nia to make a confident first visual proposal?
 
-**For any web page**: if the brief uses a generic reference ("my SaaS", "my startup", "a landing page") without naming the product, ALWAYS ask for the company/product name. Nia cannot write real content without it.
+**For any web page or interactive app**: if the brief does not include a product/app name, ALWAYS ask for it. Nia and Leo cannot write real UI content without it — generic names like "Task Manager" or "Habit Tracker" look unfinished to the founder.
 
 **Decision rule**: ask ONLY when the answer could materially change the plan, the design direction, or who does the work.
 
