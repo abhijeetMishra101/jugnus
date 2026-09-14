@@ -3,6 +3,12 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": ".next",
+  "functions": {
+    "app/api/internal/browser-test/route.ts": {
+      "memory": 1024,
+      "maxDuration": 45
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/watchdog",

@@ -360,6 +360,86 @@ ${body}
 
   // ── Review tools — Tara only ─────────────────────────────────────────────────
   if (jugnuKey === 'tara') {
+    // ── call_api — live HTTP test against the app's API endpoints ──────────────
+    definitions.push({
+      name: 'call_api',
+      description: 'Make a real HTTP request to test the app\'s API endpoints. Use this to verify CRUD operations actually work — POST a record, GET it back, PATCH it, DELETE it. If any call returns a non-2xx status, request_changes immediately.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          method:  { type: 'string', enum: ['GET', 'POST', 'PATCH', 'DELETE'], description: 'HTTP method. Use PATCH for updates — never PUT.' },
+          path:    { type: 'string', description: 'API path starting with /api/, e.g. /api/data/PROJECT_ID/tasks' },
+          body:    { type: 'object', description: 'Request body for POST/PATCH requests.' },
+        },
+        required: ['method', 'path'],
+      },
+    })
+
+    handlers['call_api'] = async (input) => {
+      const path = input.path as string
+      if (!path.startsWith('/api/')) {
+        return { ok: false, error: 'Only /api/ paths are allowed.' }
+      }
+      const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      const url = `${base}${path}`
+      try {
+        const res = await fetch(url, {
+          method: input.method as string,
+          headers: { 'Content-Type': 'application/json', 'x-internal-tara-test': '1' },
+          body: input.body ? JSON.stringify(input.body) : undefined,
+        })
+        const data = await res.json().catch(() => null)
+        return { status: res.status, ok: res.ok, data }
+      } catch (e) {
+        return { ok: false, error: String(e) }
+      }
+    }
+
+    // ── browse_app — headless browser smoke test ──────────────────────────────
+    definitions.push({
+      name: 'browse_app',
+      description: 'Launch a headless browser and interact with the app like a real user. Navigates to the preview URL, executes actions (fill, click, reload), and returns console errors, blank-screen detection, and visible page text. Run this before approving any interactive app.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          url: { type: 'string', description: 'Full preview URL, e.g. https://jugnus.vercel.app/preview/PROJECT_ID' },
+          actions: {
+            type: 'array',
+            description: 'Ordered list of user actions to perform after the page loads.',
+            items: {
+              type: 'object' as const,
+              properties: {
+                type:     { type: 'string', enum: ['fill', 'click', 'select', 'wait', 'reload', 'check_text'] },
+                selector: { type: 'string', description: 'CSS selector for fill/click/select actions.' },
+                value:    { type: 'string', description: 'Value for fill/select or expected text for check_text.' },
+                ms:       { type: 'number', description: 'Milliseconds for wait action.' },
+              },
+              required: ['type'],
+            },
+          },
+        },
+        required: ['url'],
+      },
+    })
+
+    handlers['browse_app'] = async (input) => {
+      const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      try {
+        const res = await fetch(`${base}/api/internal/browser-test`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
+          },
+          body: JSON.stringify({ url: input.url, actions: input.actions ?? [] }),
+        })
+        if (!res.ok) return { ok: false, error: `browser-test endpoint returned ${res.status}` }
+        return res.json()
+      } catch (e) {
+        return { ok: false, error: String(e) }
+      }
+    }
+
     definitions.push({
       name: 'approve',
       description: 'Approve the files. The project will be marked complete and the founder notified.',
