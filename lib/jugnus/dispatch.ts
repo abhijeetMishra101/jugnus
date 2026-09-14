@@ -35,6 +35,7 @@ export interface DispatchInput {
   taskId: string | null
   jugnuKey: JugnuKey
   db: SupabaseClient
+  nudge?: string
 }
 
 export interface DispatchResult {
