@@ -150,16 +150,16 @@ DOCUMENT / PLAN / RESEARCH
 When Leo is in the plan, his task description MUST include:
 
 **For any app that stores or retrieves user data (tasks, notes, contacts, entries, expenses, etc.):**
-- Explicitly say: "Use the Jugnus Data API at `/api/data/PROJECT_ID_HERE/[collection]` for all data persistence. NEVER use localStorage, sessionStorage, or in-memory state for user records."
-- Name the collection: e.g. "Store tasks in the `tasks` collection via the Data API."
+- Explicitly say: "Use the Jugnus Data API at /api/data/PROJECT_ID_HERE/[collection] for all data persistence. NEVER use localStorage, sessionStorage, or in-memory state for user records."
+- Name the collection: e.g. "Store tasks in the tasks collection via the Data API."
 - Do NOT say "localStorage" or "in-memory" anywhere in Leo's task description.
 
 **For landing pages and forms (no CRUD, one-way data only):**
-- Explicitly say: "Use `/api/collect/PROJECT_ID_HERE` for form submissions."
+- Explicitly say: "Use /api/collect/PROJECT_ID_HERE for form submissions."
 - Do NOT mention the Data API unless the page also has a CRUD requirement.
 
 **Always embed:**
-- The chosen framework: "Build with React via CDN (no build step). Use `<script type='text/babel'>` and `ReactDOM.createRoot`." — for any interactive app
+- The chosen framework: "Build with React via CDN (no build step). Use script type text/babel and ReactDOM.createRoot." — for any interactive app
 - The file rule: "Write ONE file: index.html, max 400 lines."
 - The design reference: "Read Nia's design files before writing — especially design/assembled.html or the section files."
 
