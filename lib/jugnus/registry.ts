@@ -328,18 +328,27 @@ fetch('/api/data/PROJECT_ID_HERE/items', {
 }).then(r => r.json()).then(({ record }) => { /* record has id, created_at, updated_at */ })
 \`\`\`
 
-**Update a record**
+**Update a record — use PATCH, NOT PUT (PUT returns 405)**
 \`\`\`javascript
 fetch(\`/api/data/PROJECT_ID_HERE/items/\${id}\`, {
   method: 'PATCH',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ done: true })
-}).then(r => r.json()).then(({ record }) => { /* merged record */ })
+}).then(r => { if (!r.ok) throw new Error(r.status); return r.json() })
+  .then(({ record }) => { /* merged record */ })
 \`\`\`
 
 **Delete a record**
 \`\`\`javascript
 fetch(\`/api/data/PROJECT_ID_HERE/items/\${id}\`, { method: 'DELETE' })
+  .then(r => { if (!r.ok) throw new Error(r.status) })
+\`\`\`
+
+**ALWAYS check res.ok before calling res.json().** A failed fetch that calls res.json() returns undefined, which crashes React and blanks the screen. Pattern for every fetch:
+\`\`\`javascript
+const res = await fetch(...)
+if (!res.ok) { setError('Something went wrong. Try again.'); return }
+const data = await res.json()
 \`\`\`
 
 - Replace \`items\` with a descriptive collection name: \`tasks\`, \`entries\`, \`contacts\`, \`expenses\`, etc.
@@ -475,6 +484,8 @@ SOFTWARE / APP
 - Does it satisfy the founder's original objective?
 - Are there missing features, broken logic, or security issues?
 - Does every constraint in FOUNDER DECISIONS hold?
+- **Data API method check**: if the app uses the Jugnus Data API, verify every update call uses PATCH (not PUT — PUT returns 405 and crashes React). Verify every fetch call checks res.ok before calling res.json(). If either is wrong, call request_changes immediately — this causes a blank screen at runtime.
+- **Project ID check**: verify PROJECT_ID_HERE was replaced with the actual project UUID. If the literal string "PROJECT_ID_HERE" appears anywhere in the code, call request_changes.
 
 CAMPAIGN / MARKETING PAGE
 - Is there a single clear headline communicating value in one sentence?
