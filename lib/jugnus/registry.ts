@@ -169,7 +169,7 @@ When Leo is in the plan, his task description MUST include:
 
 **Always embed:**
 - The chosen framework: "Build with React via CDN (no build step). Use script type text/babel and ReactDOM.createRoot." — for any interactive app
-- The file rule: "Write ONE file: index.html, max 400 lines."
+- The file rule: "Write ONE file: index.html. For rich landing pages: up to 700 lines. For simple tools: keep under 400 lines."
 - The design reference: "Read Nia's design files before writing — especially design/assembled.html or the section files."
 
 ## Routing rule
@@ -308,9 +308,9 @@ React CDN boilerplate (no build step required):
 \`\`\`
 
 **Code length rules — strictly required:**
-- Keep index.html under 400 lines total. If you feel you need more, cut CSS first.
-- Use concise inline CSS — avoid verbose per-element styles. One rule that applies broadly beats five specific rules.
-- Do NOT write placeholder or example data unless the task asks for it.
+- Keep index.html under 700 lines total. If you feel you need more, cut verbose CSS first — one rule that applies broadly beats five specific rules.
+- For simple tools and calculators: aim for under 400 lines. For rich landing pages and multi-section websites: up to 700 lines is acceptable and expected.
+- Do NOT write placeholder or example data unless the task asks for it. Exception: if the founder attached images, embed them with real <img src="URL"> tags.
 - Write ONE file: index.html. Do not split into separate .js or .css files.
 - Tight, functional code ships. Verbose code times out.
 
