@@ -560,7 +560,8 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const [pendingFiles, setPendingFiles] = useState<Attachment[]>([])
   const [uploading, setUploading]       = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const bottomRef    = useRef<HTMLDivElement>(null)
+  const bottomRef       = useRef<HTMLDivElement>(null)
+  const scrollRef       = useRef<HTMLDivElement>(null)
   // IDs of messages that existed at load time — those sections never play the fly-in
   const initialIds   = useRef(new Set(initialMessages.map((m) => m.id)))
 
@@ -660,7 +661,12 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   }, [projectId])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distanceFromBottom < 120) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages, activeJugnu])
 
   const handleFiles = useCallback(async (files: FileList | null) => {
@@ -742,7 +748,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-4 relative">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto py-4 relative">
           {feed.map((item, i) => {
             const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
             const inner = (() => {
