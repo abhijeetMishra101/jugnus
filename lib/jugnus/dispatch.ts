@@ -141,20 +141,28 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
     }
 
     // Activity indicator while waiting for first token
+    const turn0Label: Partial<Record<JugnuKey, string>> = {
+      maya: '📋 Planning the project…',
+      nia:  '🎨 Starting design…',
+      leo:  '⚙️ Starting build…',
+      tara: '🔍 Starting review…',
+    }
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'activity',
       author_key: jugnuKey,
-      content: turn === 0 ? `💭 Reviewing task and planning approach…` : `💭 Continuing work (turn ${turn + 1})…`,
+      content: turn === 0 ? (turn0Label[jugnuKey] ?? '💭 Starting…') : `💭 Continuing (turn ${turn + 1})…`,
       metadata: { event_type: 'JUGNU_THINKING', jugnu_key: jugnuKey, turn },
     })
 
-    // Streaming API call
+    // Streaming API call — tool_choice:'any' forces Claude to always emit a tool call,
+    // preventing pure-reasoning turns that consume the full 300s Vercel timeout
     const stream = anthropic.messages.stream({
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: systemContent as Anthropic.MessageCreateParams['system'],
       tools: tools.definitions,
+      tool_choice: { type: 'any' },
       messages,
     })
 
