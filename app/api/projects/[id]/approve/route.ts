@@ -7,9 +7,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params
-  const { verdict, feedback } = await request.json() as {
+  type RefAttachment = { url: string; name: string; isImage: boolean }
+  const { verdict, feedback, attachments } = await request.json() as {
     verdict: 'approved' | 'changes'
     feedback?: string
+    attachments?: RefAttachment[]
   }
 
   const db = createServiceClient()
@@ -108,10 +110,15 @@ export async function POST(
     started_at: null,
   }).eq('id', humanTask.id)
 
+  const imageRefs = (attachments ?? []).filter((a) => a.isImage)
+  const imageBlock = imageRefs.length > 0
+    ? `\n\nFOUNDER REFERENCE IMAGES (use these as real img tags in revised sections):\n${imageRefs.map((a) => `- ${a.name}: ${a.url}`).join('\n')}`
+    : ''
+
   await db.from('tasks').insert({
     project_id: projectId,
     title: 'Revise alignment artifact based on founder feedback',
-    description: `The founder reviewed your alignment artifact and requested changes:\n\n${feedback}\n\nUpdate your artifact using write_file to reflect this feedback, then call complete_task.`,
+    description: `The founder reviewed your alignment artifact and requested changes:\n\n${feedback}${imageBlock}\n\nUpdate your artifact using write_file to reflect this feedback, then call complete_task.`,
     capability: 'design',
     jugnu_key: 'nia',
     depends_on: [],

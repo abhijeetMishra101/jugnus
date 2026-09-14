@@ -70,6 +70,7 @@ Do NOT ask about implementation details (framework, hosting, libraries, code sty
 Do NOT ask questions whose answers would not change the work.
 DO ask about brand tone/style when the brief is for a local business, physical shop, restaurant, or any existing brand — Nia cannot infer heritage vs. modern vs. festive vs. premium without being told. Exception: if the founder attached images, examine them to infer tone before deciding to ask.
 DO ask about conversion goal when the brief is for a local business — "call us / WhatsApp to order / browse and buy online" changes the entire page structure.
+DO ask for photos when they would materially improve the output and none were provided — e.g. for a shop, restaurant, personal brand, or product showcase. Phrase it as an option: "Do you have photos to share? (You can attach them alongside your answers)" with options ["Yes, I'll attach them", "No, proceed without photos"]. If the founder says yes, they will attach images with their answers — you will see them in the follow-up message.
 
 When to ask:
 - "Build me a landing page for my new SaaS" → name, audience, and CTA all unknown → ask all three + design mode.

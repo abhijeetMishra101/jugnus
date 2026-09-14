@@ -193,6 +193,71 @@ function FileStreamBubble({ msg, j }: { msg: Message; j: { color: string; bg: st
   )
 }
 
+// ─── Shared attach row — used in clarifications and design review ─────────────
+
+function AttachRow({ onAttachmentsChange }: { onAttachmentsChange: (atts: Attachment[]) => void }) {
+  const [attachments, setAttachments] = useState<(Attachment & { preview?: string; uploading?: boolean })[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const upload = async (file: File) => {
+    const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
+    setAttachments((prev) => [...prev, { url: '', name: file.name, type: file.type, size: file.size, isImage: file.type.startsWith('image/'), preview, uploading: true }])
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch('/api/upload', { method: 'POST', body: form })
+    if (!res.ok) { setAttachments((prev) => prev.filter((a) => a.name !== file.name)); return }
+    const data = await res.json() as Attachment & { preview?: string }
+    setAttachments((prev) => {
+      const next = prev.map((a) => a.name === file.name && a.uploading ? { ...data, preview } : a)
+      onAttachmentsChange(next.filter((a) => a.url && !a.uploading).map(({ url, name, type, size, isImage, textContent }) => ({ url, name, type, size, isImage, textContent })))
+      return next
+    })
+  }
+
+  const remove = (name: string) => {
+    setAttachments((prev) => {
+      const next = prev.filter((a) => a.name !== name)
+      onAttachmentsChange(next.filter((a) => a.url).map(({ url, name: n, type, size, isImage, textContent }) => ({ url, name: n, type, size, isImage, textContent })))
+      return next
+    })
+  }
+
+  return (
+    <div>
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {attachments.map((a) => (
+            <div key={a.name} className="relative group">
+              {a.isImage && a.preview
+                ? <div className="w-12 h-12 rounded-lg overflow-hidden border border-white/10">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={a.preview} alt={a.name} className="w-full h-full object-cover" />
+                    {a.uploading && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><span className="block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /></div>}
+                  </div>
+                : <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/60 max-w-[120px]">
+                    <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 2v4h4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <span className="truncate">{a.name}</span>
+                    {a.uploading && <span className="block w-2.5 h-2.5 border border-white/50 border-t-transparent rounded-full animate-spin shrink-0" />}
+                  </div>
+              }
+              <button type="button" onClick={() => remove(a.name)} className="absolute -top-1 -right-1 hidden group-hover:flex w-3.5 h-3.5 rounded-full bg-gray-800 text-white items-center justify-center text-[9px]">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/60 transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M13.5 9.5l-5 5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54L6.5 12.3a1 1 0 01-1.42-1.42L10.5 5.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        Attach photos or files
+      </button>
+      <input ref={fileRef} type="file" className="hidden" multiple accept="image/*,.txt,.md,.json,.csv" onChange={(e) => { Array.from(e.target.files ?? []).forEach(upload); e.target.value = '' }} />
+    </div>
+  )
+}
+
 // ─── Single message bubble (no avatar — used inside JugnuSection) ─────────────
 
 function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: string }) {
@@ -432,17 +497,24 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
   const [feedback, setFeedback] = useState('')
   const [showFeedback, setShowFeedback] = useState(false)
   const [loading, setLoading] = useState<'approved' | 'changes' | null>(null)
+  const [refImages, setRefImages] = useState<Attachment[]>([])
 
   const submit = async (verdict: 'approved' | 'changes') => {
     setLoading(verdict)
     await fetch(`/api/projects/${projectId}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verdict, feedback: verdict === 'changes' ? feedback : undefined, taskId }),
+      body: JSON.stringify({
+        verdict,
+        feedback: verdict === 'changes' ? feedback : undefined,
+        attachments: verdict === 'changes' && refImages.length ? refImages : undefined,
+        taskId,
+      }),
     })
     setLoading(null)
     setShowFeedback(false)
     setFeedback('')
+    setRefImages([])
   }
 
   return (
@@ -469,7 +541,8 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
               className="w-full text-sm rounded-xl px-4 py-2.5 resize-none outline-none text-white/90 placeholder-white/30 transition-colors"
               style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(139,92,246,0.4)' }}
             />
-            <div className="flex gap-2">
+            <AttachRow onAttachmentsChange={setRefImages} />
+            <div className="flex gap-2 mt-2">
               <button
                 onClick={() => void submit('changes')}
                 disabled={!feedback.trim() || loading !== null}
@@ -478,7 +551,7 @@ function ApprovalCard({ projectId, taskId }: { projectId: string; taskId: string
                 {loading === 'changes' ? 'Sending…' : 'Send feedback'}
               </button>
               <button
-                onClick={() => { setShowFeedback(false); setFeedback('') }}
+                onClick={() => { setShowFeedback(false); setFeedback(''); setRefImages([]) }}
                 className="px-4 py-2 rounded-xl text-sm font-medium text-white/50 hover:text-white/80 transition-colors"
                 style={{ border: '1px solid rgba(255,255,255,0.15)' }}
               >
@@ -520,6 +593,7 @@ function InlineClarification({
   const [selected, setSelected] = useState<Record<number, Set<string>>>({})
   const [custom, setCustom]     = useState<Record<number, string>>({})
   const [sending, setSending]   = useState(false)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
 
   const isOther = (opt: string) =>
     opt.toLowerCase().includes('other') || opt.toLowerCase().includes('something else')
@@ -553,7 +627,7 @@ function InlineClarification({
     await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, content: parts.join('\n'), userId }),
+      body: JSON.stringify({ projectId, content: parts.join('\n'), userId, attachments: attachments.length ? attachments : undefined }),
     })
     setSending(false)
   }
@@ -597,6 +671,7 @@ function InlineClarification({
           </div>
         </div>
       ))}
+      <AttachRow onAttachmentsChange={setAttachments} />
       <button
         onClick={() => void submit()}
         disabled={!canSubmit || sending}
