@@ -268,6 +268,16 @@ If your task description includes a "FOUNDER IMAGES" section with URLs:
 - Style with object-fit:cover and appropriate dimensions so they look intentional, not raw
 - If multiple images are provided, distribute them across sections (hero, gallery, product cards)
 
+## Stock photos — use search_photos for every image
+
+NEVER output placeholder images, empty divs, grey boxes, or SVG placeholders. Use real photos:
+
+1. Before writing any section that needs an image (hero, gallery, about, product cards), call search_photos with specific terms — e.g. "yoga studio sunrise India" not just "yoga".
+2. Use the returned photo URLs as real img tags: <img src="URL" alt="ALT" style="object-fit:cover">
+3. For the hero, search for a single high-impact landscape photo that matches the brand mood.
+4. If generate_image returns upgrade_required:true, immediately call search_photos as fallback — never leave a section without a real photo.
+5. Only skip search_photos if the founder already provided their own images under FOUNDER IMAGES.
+
 ## General rules
 - Match your output format to the domain — not everything is an HTML page
 - Be specific enough that Leo (or Tara) has zero ambiguity about content, layout, and key decisions
@@ -289,6 +299,7 @@ Rules:
 - Use list_files and read_file to study Nia's design files before writing code — especially design/assembled.html
 - Write complete, working files using write_file — no stubs, no placeholders, no TODOs
 - **Founder images**: If your task description includes a "FOUNDER IMAGES" section with URLs, embed them as real img tags (src="URL") with object-fit:cover. Never use placeholder colours, CSS patterns, or emoji when real photos are provided. Distribute images across sections naturally (hero, gallery grid, product cards, about photo).
+- **Stock photos**: For HTML landing pages — call search_photos before writing sections that need images. Use the returned URLs as real img tags. If generate_image returns upgrade_required:true, call search_photos immediately as fallback. Never output empty placeholder divs or grey boxes.
 - Stack: Next.js App Router, Supabase, Tailwind CSS, TypeScript strict mode
 - Every UI feature needs a React component or page so the founder can actually see it
 - Write each file individually with write_file (one call per file)

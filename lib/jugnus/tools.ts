@@ -355,6 +355,66 @@ ${body}
     handlers['read_file'] = async (input) => readFile(projectId, input.path as string, db)
   }
 
+  // ── Photo tools — Nia and Leo ────────────────────────────────────────────────
+  if (jugnuKey === 'nia' || jugnuKey === 'leo') {
+    definitions.push({
+      name: 'search_photos',
+      description: 'Search Unsplash for high-quality stock photos. Call this before writing any section that needs images. Returns real URLs to use as <img src="..."> tags.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          query: { type: 'string', description: 'Specific search terms, e.g. "yoga studio sunrise" or "indian sweet shop interior colourful"' },
+          count: { type: 'number', description: 'Number of photos to return (1–5, default 3)' },
+        },
+        required: ['query'],
+      },
+    })
+
+    handlers['search_photos'] = async (input) => {
+      const query = input.query as string
+      const count = Math.min(Math.max(Number(input.count ?? 3), 1), 5)
+      const key = process.env.UNSPLASH_ACCESS_KEY
+      if (!key) return { error: 'Unsplash not configured — use placeholder images instead.' }
+      try {
+        const res = await fetch(
+          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${count}&orientation=landscape&client_id=${key}`
+        )
+        const data = await res.json() as { results: Array<{ urls: { regular: string }; alt_description: string | null; user: { name: string } }> }
+        const photos = (data.results ?? []).map((p) => ({
+          url: p.urls.regular,
+          alt: p.alt_description ?? query,
+          photographer: p.user.name,
+        }))
+        return { photos }
+      } catch (e) {
+        return { error: String(e) }
+      }
+    }
+
+    definitions.push({
+      name: 'generate_image',
+      description: 'Generate a custom AI image. IMPORTANT: check the result — if upgrade_required is true, immediately call search_photos as fallback instead.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          prompt: { type: 'string', description: 'Detailed image prompt describing the scene, mood, style, and colours.' },
+        },
+        required: ['prompt'],
+      },
+    })
+
+    handlers['generate_image'] = async (_input) => {
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'system',
+        author_key: 'system',
+        content: '✨ AI image generation is a Pro feature.',
+        metadata: { event_type: 'UPGRADE_REQUIRED', feature: 'ai_image_generation' },
+      })
+      return { upgrade_required: true, message: 'AI image generation requires a Pro account. Call search_photos immediately as a fallback.' }
+    }
+  }
+
   // ── Write tools — Leo and Nia ────────────────────────────────────────────────
   if (jugnuKey === 'leo' || jugnuKey === 'nia') {
     definitions.push({

@@ -384,12 +384,39 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
   )
 }
 
+// ─── Pro upgrade card ─────────────────────────────────────────────────────────
+
+function ProUpgradeCard() {
+  return (
+    <div className="mx-4 my-3 rounded-2xl px-5 py-4" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.12) 0%, rgba(99,102,241,0.12) 100%)', border: '1px solid rgba(168,85,247,0.3)' }}>
+      <div className="flex items-start gap-3">
+        <span className="text-2xl leading-none mt-0.5">✨</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-purple-300">AI Image Generation — Pro</p>
+          <p className="text-xs mt-1 leading-relaxed" style={{ color: 'rgba(220,200,255,0.65)' }}>
+            Generate custom images tailored to your brand using FLUX AI — hero shots, product mockups, lifestyle photos. Available on the Pro plan.
+          </p>
+          <button
+            className="mt-3 text-xs font-semibold px-4 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+            style={{ background: 'rgba(168,85,247,0.25)', color: '#d8b4fe', border: '1px solid rgba(168,85,247,0.4)' }}
+          >
+            Upgrade to Pro →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── System / User standalone items ──────────────────────────────────────────
 
 function SystemItem({ msg }: { msg: Message }) {
   const meta = (msg.metadata ?? {}) as Record<string, unknown>
   const deployUrl = meta.deploy_url as string | null | undefined
   const isCompleted = meta.event_type === 'PROJECT_COMPLETED' && deployUrl
+  const isUpgradeRequired = meta.event_type === 'UPGRADE_REQUIRED'
+
+  if (isUpgradeRequired) return <ProUpgradeCard />
 
   const label = isCompleted
     ? '✨ All tasks completed. Your Jugnus finished the project.'

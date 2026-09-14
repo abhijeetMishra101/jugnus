@@ -363,6 +363,8 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       const activityLabel: Record<string, string> = {
         write_file:        `📝 Writing \`${inp.path ?? 'file'}\``,
         read_file:         `👁️ Reading \`${inp.path ?? 'file'}\``,
+        search_photos:     `🖼️ Searching photos for "${inp.query ?? ''}"…`,
+        generate_image:    `🎨 Checking image generation…`,
         create_task_plan:  `📋 Building task plan`,
         complete_task:     `✅ Wrapping up`,
         submit_for_review: `🔍 Submitting for review`,
