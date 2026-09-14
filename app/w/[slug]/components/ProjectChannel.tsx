@@ -94,24 +94,8 @@ function buildFeed(messages: Message[], initialIds: Set<string>): FeedItem[] {
 
 // ─── TypingBubble ─────────────────────────────────────────────────────────────
 
-const THINKING_PHRASES = [
-  'Reading the brief…',
-  'Thinking it through…',
-  'Considering options…',
-  'Almost there…',
-  'Crafting a response…',
-  'Putting it together…',
-]
-
 function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: string[] }) {
   const j = JUGNU[jugnuKey]
-  const [phraseIdx, setPhraseIdx] = useState(0)
-
-  useEffect(() => {
-    const id = setInterval(() => setPhraseIdx((p) => (p + 1) % THINKING_PHRASES.length), 3000)
-    return () => clearInterval(id)
-  }, [])
-
   if (!j) return null
 
   const lastActivity = activities[activities.length - 1]
@@ -137,11 +121,6 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
             {[0, 1, 2].map((i) => (
               <span key={i} className="block w-2 h-2 rounded-full" style={{ backgroundColor: j.color, animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
             ))}
-            {!lastActivity && (
-              <span className="text-xs ml-1.5" style={{ color: j.color, opacity: 0.5 }}>
-                {THINKING_PHRASES[phraseIdx]}
-              </span>
-            )}
           </div>
         </div>
       </div>
