@@ -598,12 +598,18 @@ function InlineClarification({
   const isOther = (opt: string) =>
     opt.toLowerCase().includes('other') || opt.toLowerCase().includes('something else')
 
+  const isRadio = (opts: string[]) => opts.some((o) => o.startsWith('Skip —'))
+
   const toggle = (qi: number, opt: string) => {
     setSelected((prev) => {
       const s = new Set(prev[qi] ?? [])
       if (s.has(opt)) s.delete(opt); else s.add(opt)
       return { ...prev, [qi]: s }
     })
+  }
+
+  const selectOne = (qi: number, opt: string) => {
+    setSelected((prev) => ({ ...prev, [qi]: new Set([opt]) }))
   }
 
   const canSubmit = questions.every((_, qi) => {
@@ -640,14 +646,16 @@ function InlineClarification({
           <div className="space-y-1.5">
             {q.options.map((opt) => {
               const checked = selected[qi]?.has(opt) ?? false
+              const radio = isRadio(q.options)
               return (
                 <div key={opt}>
                   <label className="flex items-center gap-2.5 cursor-pointer group">
                     <input
-                      type="checkbox"
+                      type={radio ? 'radio' : 'checkbox'}
+                      name={radio ? `clarification-q-${qi}` : undefined}
                       checked={checked}
-                      onChange={() => toggle(qi, opt)}
-                      className="w-4 h-4 rounded cursor-pointer shrink-0"
+                      onChange={() => radio ? selectOne(qi, opt) : toggle(qi, opt)}
+                      className={`w-4 h-4 cursor-pointer shrink-0 ${radio ? '' : 'rounded'}`}
                       style={{ accentColor }}
                     />
                     <span className="text-sm leading-snug" style={{ color: checked ? 'rgba(240,240,255,1)' : 'rgba(240,240,255,0.65)' }}>
