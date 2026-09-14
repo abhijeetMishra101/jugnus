@@ -173,9 +173,10 @@ function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: s
 
 // ─── Jugnu section — illustration sticky on the left ─────────────────────────
 
-function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, userId }: {
+function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, userId, isActive, activities }: {
   authorKey: string; messages: Message[]; isNew: boolean
   pendingMsgId: string | null; projectId: string; userId: string
+  isActive?: boolean; activities?: string[]
 }) {
   const j = JUGNU[authorKey]
   if (!j) return null
@@ -247,6 +248,22 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
               </div>
             )
           })}
+
+          {/* Inline typing indicator — no second avatar */}
+          {isActive && (
+            <div className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm" style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}>
+              {activities && activities.length > 0 && (
+                <p className="text-xs font-mono mb-2.5" style={{ color: j.color, opacity: 0.8 }}>
+                  {activities[activities.length - 1]}
+                </p>
+              )}
+              <div className="flex items-center gap-1.5">
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="block w-2 h-2 rounded-full" style={{ backgroundColor: j.color, animation: `jugnu-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -751,12 +768,15 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         <div ref={scrollRef} className="flex-1 overflow-y-auto py-4 relative">
           {feed.map((item, i) => {
             const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
+            const isLastActiveJugnu = item.type === 'jugnu' && item.authorKey === activeJugnu && i === feed.length - 1
             const inner = (() => {
               if (item.type === 'jugnu') {
                 return <JugnuSection
                   authorKey={item.authorKey} messages={item.messages} isNew={item.isNew}
                   pendingMsgId={pendingMsgId}
                   projectId={projectId} userId={userId}
+                  isActive={isLastActiveJugnu}
+                  activities={isLastActiveJugnu ? activities : undefined}
                 />
               }
               if (item.type === 'system') return <SystemItem msg={item.message} />
@@ -772,7 +792,14 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
             )
           })}
 
-          {activeJugnu && <TypingBubble jugnuKey={activeJugnu} activities={activities} />}
+          {activeJugnu && (() => {
+            // If the last feed item is from the same jugnu, the typing dots render
+            // inside JugnuSection to avoid a duplicate avatar. Only show a standalone
+            // TypingBubble if the active jugnu hasn't spoken yet in this section.
+            const lastFeedItem = feed[feed.length - 1]
+            const sameJugnuIsLast = lastFeedItem?.type === 'jugnu' && lastFeedItem.authorKey === activeJugnu
+            return sameJugnuIsLast ? null : <TypingBubble jugnuKey={activeJugnu} activities={activities} />
+          })()}
 
           <div ref={bottomRef} />
         </div>

@@ -86,11 +86,22 @@ export async function POST(request: Request) {
       metadata: { event_type: 'TASK_ASSIGNED', jugnu_key: 'maya' },
     })
 
+    // Look up Maya's actual in-progress task so complete_task can mark it done
+    const { data: mayaTask } = await db
+      .from('tasks')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('jugnu_key', 'maya')
+      .eq('status', 'in_progress')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single()
+
     waitUntil(
       fetch(new URL('/api/internal/jugnu-respond', process.env.NEXT_PUBLIC_APP_URL!).toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}` },
-        body: JSON.stringify({ projectId, taskId: null, jugnuKey: 'maya' }),
+        body: JSON.stringify({ projectId, taskId: mayaTask?.id ?? null, jugnuKey: 'maya' }),
       }).catch(console.error)
     )
   }

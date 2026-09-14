@@ -67,7 +67,7 @@ export default async function WorkspaceLayout({ children, params }: Props) {
             </Link>
           </div>
 
-          <ProjectList projects={projects ?? []} slug={slug} />
+          <ProjectList projects={projects ?? []} slug={slug} workspaceId={workspace.id} />
         </div>
 
         {/* User footer */}

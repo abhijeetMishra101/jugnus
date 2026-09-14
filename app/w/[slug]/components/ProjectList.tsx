@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createBrowserClient } from '@supabase/ssr'
 
 interface Project {
   id: string
@@ -19,10 +20,50 @@ const STATUS_DOT: Record<string, string> = {
   active:    'bg-indigo-400',
 }
 
-export function ProjectList({ projects: initial, slug }: { projects: Project[]; slug: string }) {
+export function ProjectList({
+  projects: initial,
+  slug,
+  workspaceId,
+}: {
+  projects: Project[]
+  slug: string
+  workspaceId: string
+}) {
   const [projects, setProjects] = useState<Project[]>(initial)
   const [deleting, setDeleting] = useState<string | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    const channel = supabase
+      .channel(`projects:${workspaceId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'projects', filter: `workspace_id=eq.${workspaceId}` },
+        (payload) => {
+          const p = payload.new as Project
+          setProjects((prev) => {
+            if (prev.some((x) => x.id === p.id)) return prev
+            return [{ id: p.id, title: p.title, status: p.status }, ...prev]
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'projects', filter: `workspace_id=eq.${workspaceId}` },
+        (payload) => {
+          const p = payload.new as Project
+          setProjects((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: p.status } : x)))
+        }
+      )
+      .subscribe()
+
+    return () => { void supabase.removeChannel(channel) }
+  }, [workspaceId])
 
   const remove = async (id: string) => {
     setDeleting(id)
