@@ -75,8 +75,9 @@ function makeAdvanceDb(opts: {
   hasFiles?: boolean
   humanClaimFails?: boolean
   pendingEscalations?: number
+  noWorkspaceId?: boolean
 }) {
-  const { inProgressTask = null, tasks = [], nonCompletedCount = 0, hasFiles = false, humanClaimFails = false, pendingEscalations = 0 } = opts
+  const { inProgressTask = null, tasks = [], nonCompletedCount = 0, hasFiles = false, humanClaimFails = false, pendingEscalations = 0, noWorkspaceId = false } = opts
   let tasksSelectCalls = 0
 
   const tasksFrom = {
@@ -122,7 +123,7 @@ function makeAdvanceDb(opts: {
     from: vi.fn((table: string) => {
       if (table === 'tasks') return tasksFrom
       if (table === 'projects') return {
-        select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { workspace_id: 'ws-1' } }) }) }),
+        select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: noWorkspaceId ? null : { workspace_id: 'ws-1' } }) }) }),
         update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }),
       }
       if (table === 'jugnus') return {
@@ -238,5 +239,59 @@ describe('advanceProject', () => {
     const result = await advanceProject('proj-1', db)
     expect(result.dispatched).toBe(false)
     expect(result.taskId).toBe('human-2')
+  })
+
+  it('marks project completed without deploy_url when NEXT_PUBLIC_APP_URL is unset', async () => {
+    const origUrl = process.env.NEXT_PUBLIC_APP_URL
+    delete process.env.NEXT_PUBLIC_APP_URL
+    try {
+      const db = makeAdvanceDb({
+        tasks: [{ id: 'a', title: 'Done', jugnu_key: 'nia', depends_on: [], status: 'completed' }],
+        nonCompletedCount: 0,
+      })
+      const result = await advanceProject('proj-1', db)
+      expect(result.dispatched).toBe(false)
+    } finally {
+      process.env.NEXT_PUBLIC_APP_URL = origUrl
+    }
+  })
+
+  it('marks project completed without jugnus update when project has no workspace_id', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'a', title: 'Done', jugnu_key: 'nia', depends_on: [], status: 'completed' }],
+      nonCompletedCount: 0,
+      noWorkspaceId: true,
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(false)
+  })
+
+  it('returns dispatched:false when non-human task claim is lost to a race condition', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'task-race', title: 'Design', jugnu_key: 'nia', depends_on: [], status: 'pending' }],
+      humanClaimFails: true,
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(false)
+    expect(result.taskId).toBeNull()
+  })
+
+  it('dispatches task and posts message without ETA for jugnu_key with no fallback', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'task-m', title: 'Plan', jugnu_key: 'maya', depends_on: [], status: 'pending' }],
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(true)
+    expect(result.jugnuKey).toBe('maya')
+  })
+
+  it('dispatches task when project has no workspace_id', async () => {
+    const db = makeAdvanceDb({
+      tasks: [{ id: 'task-n', title: 'Design', jugnu_key: 'nia', depends_on: [], status: 'pending' }],
+      noWorkspaceId: true,
+    })
+    const result = await advanceProject('proj-1', db)
+    expect(result.dispatched).toBe(true)
+    expect(result.jugnuKey).toBe('nia')
   })
 })

@@ -223,4 +223,31 @@ describe('formatContextBlock', () => {
     expect(block).toContain('timeline')
     expect(block).not.toContain('approval_metrics')
   })
+
+  it('renders VISUAL REFERENCES block with image and non-image attachments', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: {
+        attachments: [
+          { url: 'https://cdn.example.com/shop.jpg', name: 'Shop front', isImage: true },
+          { url: 'https://cdn.example.com/menu.pdf', name: 'Menu.pdf', isImage: false },
+        ],
+      },
+    }
+    const block = formatContextBlock(ctx, 'nia')
+    expect(block).toContain('VISUAL REFERENCES PROVIDED BY FOUNDER')
+    expect(block).toContain('🖼')
+    expect(block).toContain('📄')
+    expect(block).toContain('Shop front')
+    expect(block).toContain('Menu.pdf')
+    expect(block).toContain('https://cdn.example.com/shop.jpg')
+  })
+
+  it('renders FILES ALREADY WRITTEN block when existingFiles is non-empty', () => {
+    const ctx: ProjectContext = { ...BASE_CTX, existingFiles: ['index.html', 'styles.css'] }
+    const block = formatContextBlock(ctx, 'leo')
+    expect(block).toContain('FILES ALREADY WRITTEN')
+    expect(block).toContain('index.html')
+    expect(block).toContain('styles.css')
+  })
 })
