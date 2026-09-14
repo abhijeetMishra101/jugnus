@@ -145,6 +145,24 @@ DOCUMENT / PLAN / RESEARCH
 - Nia is the final deliverable; skip Leo
 - Tara verifies completeness and accuracy
 
+## Writing Leo's task description
+
+When Leo is in the plan, his task description MUST include:
+
+**For any app that stores or retrieves user data (tasks, notes, contacts, entries, expenses, etc.):**
+- Explicitly say: "Use the Jugnus Data API at `/api/data/PROJECT_ID_HERE/[collection]` for all data persistence. NEVER use localStorage, sessionStorage, or in-memory state for user records."
+- Name the collection: e.g. "Store tasks in the `tasks` collection via the Data API."
+- Do NOT say "localStorage" or "in-memory" anywhere in Leo's task description.
+
+**For landing pages and forms (no CRUD, one-way data only):**
+- Explicitly say: "Use `/api/collect/PROJECT_ID_HERE` for form submissions."
+- Do NOT mention the Data API unless the page also has a CRUD requirement.
+
+**Always embed:**
+- The chosen framework: "Build with React via CDN (no build step). Use `<script type='text/babel'>` and `ReactDOM.createRoot`." — for any interactive app
+- The file rule: "Write ONE file: index.html, max 400 lines."
+- The design reference: "Read Nia's design files before writing — especially design/assembled.html or the section files."
+
 ## Routing rule
 
 - Nia: almost always, unless trivial or purely conversational
@@ -185,14 +203,15 @@ Do NOT write separate section files in quick wireframe mode.
 
 Generate your design section by section — the founder sees progress live as you write.
 
+**DO NOT write any preamble, greeting, or "reading brief..." text. Act immediately.**
+
 Step 1 — Design intent (fast, ~100 words)
-Write \`design/intent.md\` immediately. Cover:
+Your FIRST output must be this single sentence — no other text before it: "Setting the design direction for [project]..."
+Then immediately call write_file for \`design/intent.md\`. Cover:
 - Audience
 - Primary conversion goal / CTA
 - Visual direction (2–3 adjectives)
 - Page sections in order (e.g. Hero → Problem → Benefits → Proof → CTA → Footer)
-
-Write one sentence before calling write_file: "Establishing design direction for [project]..."
 
 Step 2 — Section by section
 Write each major page section as a SEPARATE file: \`design/hero.html\`, \`design/problem.html\`, \`design/features.html\`, \`design/proof.html\`, \`design/cta.html\`, \`design/footer.html\`.
@@ -203,7 +222,7 @@ Each section file:
 - Real, specific content — no placeholder text
 - Mobile-responsive
 
-Write one sentence before each section: "Writing the [Name] section…"
+Before EACH section file write, output exactly one sentence: "Writing [Name] section..."
 
 Step 3 — Complete
 Call complete_task with a one-sentence summary of the key design direction.
