@@ -72,14 +72,19 @@ export async function POST(
 
     if (dispatched && jugnuKey) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
-      void fetch(`${appUrl}/api/internal/jugnu-respond`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
-        },
-        body: JSON.stringify({ projectId, taskId, jugnuKey }),
-      }).catch((e) => console.error('[approve] handoff failed:', e))
+      try {
+        const res = await fetch(`${appUrl}/api/internal/jugnu-respond`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
+          },
+          body: JSON.stringify({ projectId, taskId, jugnuKey }),
+        })
+        if (!res.ok) console.error('[approve] handoff returned', res.status)
+      } catch (e) {
+        console.error('[approve] handoff failed:', e)
+      }
     }
 
     return NextResponse.json({ ok: true, verdict: 'approved' })
@@ -137,14 +142,19 @@ export async function POST(
   const { dispatched, jugnuKey, taskId } = await advanceProject(projectId, db)
   if (dispatched && jugnuKey) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
-    void fetch(`${appUrl}/api/internal/jugnu-respond`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
-      },
-      body: JSON.stringify({ projectId, taskId, jugnuKey }),
-    }).catch((e) => console.error('[approve] revision handoff failed:', e))
+    try {
+      const res = await fetch(`${appUrl}/api/internal/jugnu-respond`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
+        },
+        body: JSON.stringify({ projectId, taskId, jugnuKey }),
+      })
+      if (!res.ok) console.error('[approve] revision handoff returned', res.status)
+    } catch (e) {
+      console.error('[approve] revision handoff failed:', e)
+    }
   }
 
   return NextResponse.json({ ok: true, verdict: 'changes_requested' })
