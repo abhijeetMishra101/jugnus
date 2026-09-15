@@ -354,9 +354,25 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
                         accentColor={j.color}
                       />
                     ) : (
-                      <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      </div>
+                      <>
+                        <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                        {meta.event_type === 'REVIEW_PASSED' && (meta.preview_url || meta.live_url) && (
+                          <a
+                            href={(meta.preview_url ?? meta.live_url) as string}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-medium mt-3 px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
+                            style={{ background: 'rgba(99,102,241,0.55)', color: '#c7d2fe', border: '1px solid rgba(99,102,241,0.4)' }}
+                          >
+                            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                              <path d="M6 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3M10 2h4m0 0v4m0-4L7 9" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            View Preview
+                          </a>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

@@ -69,6 +69,17 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       .not('status', 'in', '("completed","skipped","failed")')
 
     if (count === 0) {
+      // Skip if PROJECT_COMPLETED was already emitted (e.g. by Tara's approve handler)
+      const { count: alreadyEmitted } = await db
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('author_type', 'system')
+        .contains('metadata', { event_type: 'PROJECT_COMPLETED' })
+      if ((alreadyEmitted ?? 0) > 0) {
+        return { dispatched: false, jugnuKey: null, taskId: null }
+      }
+
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
       const previewUrl = appUrl ? `${appUrl}/preview/${projectId}` : null
 

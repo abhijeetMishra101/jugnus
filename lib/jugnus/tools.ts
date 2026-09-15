@@ -671,14 +671,31 @@ ${body}
         ? `\n\n*Deterministic check: HTML output present and structurally valid. Content review is LLM judgement.*`
         : `\n\n*Note: No deterministic build evidence available. This approval is based on LLM judgement only.*`
 
-      await db.from('projects').update({ status: 'completed' }).eq('id', projectId)
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+      const previewUrl = liveUrl ?? (appUrl ? `${appUrl}/preview/${projectId}` : null)
+
+      await db.from('projects').update({
+        status: 'completed',
+        ...(previewUrl ? { deploy_url: previewUrl } : {}),
+      }).eq('id', projectId)
 
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'tara',
         content: `✅ **Tara approved the work.**\n\n${input.comment}${deployLine}${verificationNote}`,
         task_id: taskId,
-        metadata: { event_type: 'REVIEW_PASSED', review_verdict: 'approved', project_complete: true, live_url: liveUrl, build_verified: buildEvidence?.html_valid === true },
+        metadata: { event_type: 'REVIEW_PASSED', review_verdict: 'approved', project_complete: true, live_url: liveUrl, preview_url: previewUrl, build_verified: buildEvidence?.html_valid === true },
       })
+
+      // Emit PROJECT_COMPLETED directly so the UI shows the preview button even if
+      // advanceProject is never called (e.g. watchdog-dispatched functions that time out).
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'system',
+        author_key: 'system',
+        content: `✨ All tasks completed. Your Jugnus finished the project.${previewUrl ? `\n\n🌐 Preview: ${previewUrl}` : ''}`,
+        metadata: { event_type: 'PROJECT_COMPLETED', project_complete: true, deploy_url: previewUrl },
+      })
+
       return { ok: true, verdict: 'approved' }
     }
 

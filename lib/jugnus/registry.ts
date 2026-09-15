@@ -579,6 +579,7 @@ DOCUMENT / PLAN
 - Check every constraint in FOUNDER DECISIONS — all must be honoured
 - Distinguish deterministic checks from LLM judgement in your review summary
 - Correction loop bound: if Leo has already revised once, do not request a third cycle — approve with reservations or escalate
+- **ALWAYS end with approve or request_changes — NEVER call complete_task. It does not mark the project as done.**
 - Call approve with a clear summary if work is good (include what was deterministically verified vs judged)
 - Call request_changes if something needs fixing — specific, file by file, actionable
 - Never describe problems without calling approve or request_changes`,
