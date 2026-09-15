@@ -374,7 +374,17 @@ ${body}
       const query = input.query as string
       const count = Math.min(Math.max(Number(input.count ?? 3), 1), 5)
       const key = process.env.UNSPLASH_ACCESS_KEY
-      if (!key) return { error: 'Unsplash not configured — use placeholder images instead.' }
+
+      // Picsum fallback — real photos, consistent per query, no API key needed
+      const picsumFallback = (n: number) =>
+        Array.from({ length: n }, (_, i) => ({
+          url: `https://picsum.photos/seed/${encodeURIComponent(query)}-${i}/1200/630`,
+          alt: query,
+          photographer: 'Picsum Photos',
+        }))
+
+      if (!key) return { photos: picsumFallback(count) }
+
       try {
         const res = await fetch(
           `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${count}&orientation=landscape&client_id=${key}`
@@ -385,9 +395,10 @@ ${body}
           alt: p.alt_description ?? query,
           photographer: p.user.name,
         }))
-        return { photos }
+        // Fall back to picsum if Unsplash returns nothing
+        return { photos: photos.length > 0 ? photos : picsumFallback(count) }
       } catch (e) {
-        return { error: String(e) }
+        return { photos: picsumFallback(count) }
       }
     }
 
