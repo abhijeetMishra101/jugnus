@@ -129,7 +129,16 @@ function makeAdvanceDb(opts: {
       if (table === 'jugnus') return {
         update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) }),
       }
-      if (table === 'messages') return { insert: vi.fn().mockResolvedValue({ error: null }) }
+      if (table === 'messages') return {
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              contains: vi.fn().mockResolvedValue({ count: 0 }),
+            }),
+          }),
+        }),
+      }
       if (table === 'escalations') return {
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
