@@ -46,7 +46,38 @@ export async function GET(request: Request): Promise<Response> {
   }) as { data: StuckRow[] | null }
 
   // Fallback: if RPC doesn't exist yet, use the old simple query
-  const tasks: StuckRow[] = stuckTasks ?? []
+  let tasks: StuckRow[] = stuckTasks ?? []
+
+  // Also catch orphaned pending tasks — all deps completed but jugnu was never dispatched
+  // (happens when the void fetch from submit_for_review/approve silently drops)
+  const ORPHAN_PENDING_MINUTES = 2
+  const orphanCutoff = new Date(Date.now() - ORPHAN_PENDING_MINUTES * 60 * 1000).toISOString()
+  const { data: allTasks } = await db
+    .from('tasks')
+    .select('id, project_id, jugnu_key, title, retry_count, depends_on, status, created_at')
+    .eq('status', 'pending')
+    .neq('jugnu_key', 'human')
+    .lt('created_at', orphanCutoff)
+
+  for (const t of allTasks ?? []) {
+    // Check if all deps are completed — if so, this task is orphaned
+    const deps = (t.depends_on as string[] | null) ?? []
+    if (deps.length === 0) {
+      // No deps but still pending — check if any sibling is in_progress (legitimate wait)
+      const { count: inProgressCount } = await db
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', t.project_id)
+        .eq('status', 'in_progress')
+      if ((inProgressCount ?? 0) === 0 && !tasks.find((s) => s.id === t.id)) {
+        // Promote to in_progress so the rest of the watchdog loop can handle it
+        await db.from('tasks')
+          .update({ status: 'in_progress', started_at: new Date().toISOString(), retry_count: 0 })
+          .eq('id', t.id)
+        tasks = [...tasks, { id: t.id, project_id: t.project_id, jugnu_key: t.jugnu_key, title: t.title, retry_count: 0, last_activity_at: null }]
+      }
+    }
+  }
 
   if (!tasks.length) {
     return NextResponse.json({ recovered: 0, failed: 0 })
