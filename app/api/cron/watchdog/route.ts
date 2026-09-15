@@ -3,15 +3,16 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
 
-// A jugnu is "stuck" if it has been in_progress for > 3 min with NO messages sent in that time.
+// A jugnu is "stuck" if it has been in_progress for > 5 min with NO messages sent in that time.
 // This catches two failure modes:
 //   1. Cold-start / HTTP handoff silently dropped — jugnu never started (no messages at all)
 //   2. Mid-generation hang — jugnu started but stopped producing output
-// 3 min is safe because: Haiku generates a large HTML file in < 60s; with file streaming
-// DB updates arrive every few seconds during active generation, so genuine work shows activity.
-const NO_ACTIVITY_THRESHOLD_MINUTES = 2
-// Hard ceiling — anything in_progress > 8 min is killed regardless of activity
-const HARD_CAP_MINUTES = 8
+// 5 min: Leo writes large HTML files that can take 3-4 min per turn with no intermediate messages.
+// The activity join only counts jugnu messages (including activity inserts before each tool call),
+// but the gap between write_file start and the next tool's activity message can exceed 2 min.
+const NO_ACTIVITY_THRESHOLD_MINUTES = 5
+// Hard ceiling — anything in_progress > 15 min is killed regardless of activity
+const HARD_CAP_MINUTES = 15
 const MAX_RETRIES = 3
 
 /**
