@@ -404,13 +404,20 @@ ${body}
     })
 
     handlers['generate_image'] = async (_input) => {
-      await db.from('messages').insert({
-        project_id: projectId,
-        author_type: 'system',
-        author_key: 'system',
-        content: '✨ AI image generation is a Pro feature.',
-        metadata: { event_type: 'UPGRADE_REQUIRED', feature: 'ai_image_generation' },
-      })
+      // Only post the upgrade card once per project — skip if already shown
+      const { count } = await db.from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .contains('metadata', { event_type: 'UPGRADE_REQUIRED' })
+      if ((count ?? 0) === 0) {
+        await db.from('messages').insert({
+          project_id: projectId,
+          author_type: 'system',
+          author_key: 'system',
+          content: '✨ AI image generation is a Pro feature.',
+          metadata: { event_type: 'UPGRADE_REQUIRED', feature: 'ai_image_generation' },
+        })
+      }
       return { upgrade_required: true, message: 'AI image generation requires a Pro account. Call search_photos immediately as a fallback.' }
     }
   }

@@ -76,8 +76,14 @@ type FeedItem   = JugnuGroup | SoloItem
 
 function buildFeed(messages: Message[], initialIds: Set<string>): FeedItem[] {
   const feed: FeedItem[] = []
+  let upgradeCardShown = false
   for (const msg of messages) {
     if (msg.author_type === 'activity') continue
+    // Only show the Pro upgrade card once, no matter how many generate_image calls were made
+    if ((msg.metadata as Record<string, unknown>)?.event_type === 'UPGRADE_REQUIRED') {
+      if (upgradeCardShown) continue
+      upgradeCardShown = true
+    }
     if (msg.author_type === 'jugnu') {
       const last = feed[feed.length - 1]
       if (last?.type === 'jugnu' && last.authorKey === msg.author_key) {
@@ -387,6 +393,16 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
 // ─── Pro upgrade card ─────────────────────────────────────────────────────────
 
 function ProUpgradeCard() {
+  const [choice, setChoice] = useState<'pro' | 'unsplash' | null>(null)
+
+  if (choice === 'unsplash') {
+    return (
+      <div className="mx-4 my-2 px-4 py-2.5 rounded-xl text-xs" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)' }}>
+        ✓ Using Unsplash open-source photos for images
+      </div>
+    )
+  }
+
   return (
     <div className="mx-4 my-3 rounded-2xl px-5 py-4" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.12) 0%, rgba(99,102,241,0.12) 100%)', border: '1px solid rgba(168,85,247,0.3)' }}>
       <div className="flex items-start gap-3">
@@ -396,12 +412,22 @@ function ProUpgradeCard() {
           <p className="text-xs mt-1 leading-relaxed" style={{ color: 'rgba(220,200,255,0.65)' }}>
             Generate custom images tailored to your brand using FLUX AI — hero shots, product mockups, lifestyle photos. Available on the Pro plan.
           </p>
-          <button
-            className="mt-3 text-xs font-semibold px-4 py-1.5 rounded-lg transition-opacity hover:opacity-80"
-            style={{ background: 'rgba(168,85,247,0.25)', color: '#d8b4fe', border: '1px solid rgba(168,85,247,0.4)' }}
-          >
-            Upgrade to Pro →
-          </button>
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <button
+              onClick={() => setChoice('pro')}
+              className="text-xs font-semibold px-4 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+              style={{ background: 'rgba(168,85,247,0.25)', color: '#d8b4fe', border: '1px solid rgba(168,85,247,0.4)' }}
+            >
+              Upgrade to Pro →
+            </button>
+            <button
+              onClick={() => setChoice('unsplash')}
+              className="text-xs font-medium px-4 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+              style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              Use open-source photos
+            </button>
+          </div>
         </div>
       </div>
     </div>
