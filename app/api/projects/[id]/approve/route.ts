@@ -16,18 +16,23 @@ export async function POST(
 
   const db = createServiceClient()
 
-  // Find the pending human approval task
+  // Find the pending human approval task (in_progress or failed-by-watchdog)
   const { data: humanTask } = await db
     .from('tasks')
     .select('id')
     .eq('project_id', projectId)
     .eq('jugnu_key', 'human')
-    .eq('status', 'in_progress')
+    .in('status', ['in_progress', 'failed'])
+    .order('created_at', { ascending: false })
+    .limit(1)
     .single()
 
   if (!humanTask) {
     return NextResponse.json({ error: 'No pending approval task found' }, { status: 404 })
   }
+
+  // Ensure task is in_progress (watchdog may have marked it failed before the human clicked)
+  await db.from('tasks').update({ status: 'in_progress' }).eq('id', humanTask.id).eq('status', 'failed')
 
   if (verdict === 'approved') {
     await db.from('tasks').update({
