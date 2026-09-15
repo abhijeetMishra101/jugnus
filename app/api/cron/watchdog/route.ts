@@ -3,16 +3,16 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
 
-// A jugnu is "stuck" if it has been in_progress for > 5 min with NO messages sent in that time.
+// A jugnu is "stuck" if it has been in_progress for > 2 min with NO activity in that time.
+// Activity = any message (including pre-tool activity inserts) OR any file_snapshots write.
 // This catches two failure modes:
-//   1. Cold-start / HTTP handoff silently dropped — jugnu never started (no messages at all)
+//   1. Cold-start / HTTP handoff silently dropped — jugnu never started
 //   2. Mid-generation hang — jugnu started but stopped producing output
-// 5 min: Leo writes large HTML files that can take 3-4 min per turn with no intermediate messages.
-// The activity join only counts jugnu messages (including activity inserts before each tool call),
-// but the gap between write_file start and the next tool's activity message can exceed 2 min.
-const NO_ACTIVITY_THRESHOLD_MINUTES = 5
-// Hard ceiling — anything in_progress > 15 min is killed regardless of activity
-const HARD_CAP_MINUTES = 15
+// Leo writing a large HTML file keeps file_snapshots.updated_at fresh every few seconds,
+// so the 2-min check won't fire on genuine work even for long-running turns.
+const NO_ACTIVITY_THRESHOLD_MINUTES = 2
+// Hard ceiling — anything in_progress > 10 min is killed regardless of activity
+const HARD_CAP_MINUTES = 10
 const MAX_RETRIES = 3
 
 /**
