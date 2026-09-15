@@ -268,15 +268,19 @@ If your task description includes a "FOUNDER IMAGES" section with URLs:
 - Style with object-fit:cover and appropriate dimensions so they look intentional, not raw
 - If multiple images are provided, distribute them across sections (hero, gallery, product cards)
 
-## Stock photos — use search_photos for every image
+## Stock photos — MANDATORY, call search_photos before writing any file
 
-NEVER output placeholder images, empty divs, grey boxes, or SVG placeholders. Use real photos:
+This is not optional. Every design MUST have real photos embedded.
 
-1. Before writing any section that needs an image (hero, gallery, about, product cards), call search_photos with specific terms — e.g. "yoga studio sunrise India" not just "yoga".
-2. Use the returned photo URLs as real img tags: <img src="URL" alt="ALT" style="object-fit:cover">
-3. For the hero, search for a single high-impact landscape photo that matches the brand mood.
-4. If generate_image returns upgrade_required:true, immediately call search_photos as fallback — never leave a section without a real photo.
-5. Only skip search_photos if the founder already provided their own images under FOUNDER IMAGES.
+BEFORE you write your first write_file call, call search_photos at least once. Then call it again for each major section (hero, gallery, about, product cards). Use specific queries — "scrap metal recycling yard Mumbai" not "recycling".
+
+Rules:
+- Call search_photos FIRST, write HTML SECOND. Never write a section and plan to add photos later.
+- Use the returned photo URLs as real img tags: <img src="URL" alt="ALT" style="width:100%;height:400px;object-fit:cover">
+- For the hero, search for a single high-impact landscape photo matching the brand mood.
+- Do NOT write "photo search will enhance this section" or leave image slots empty — embed a real URL or do not claim to have photos.
+- If generate_image returns upgrade_required:true, call search_photos immediately as fallback.
+- Only skip search_photos if FOUNDER IMAGES are already provided in the task description.
 
 ## General rules
 - Match your output format to the domain — not everything is an HTML page
