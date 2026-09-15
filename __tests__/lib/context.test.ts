@@ -235,8 +235,8 @@ describe('formatContextBlock', () => {
       },
     }
     const block = formatContextBlock(ctx, 'nia')
-    expect(block).toContain('VISUAL REFERENCES PROVIDED BY FOUNDER')
-    expect(block).toContain('🖼')
+    expect(block).toContain('FOUNDER IMAGES')
+    expect(block).toContain('CRITICAL')
     expect(block).toContain('📄')
     expect(block).toContain('Shop front')
     expect(block).toContain('Menu.pdf')

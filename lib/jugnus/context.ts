@@ -101,7 +101,7 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
   type AttRef = { url: string; name: string; isImage: boolean }
   const attachmentRefs = (ctx.constraints.attachments as AttRef[] | undefined) ?? []
   const attachmentBlock = attachmentRefs.length > 0
-    ? `\nVISUAL REFERENCES PROVIDED BY FOUNDER:\n${attachmentRefs.map((a) => `  ${a.isImage ? '🖼' : '📄'} ${a.name}${a.isImage ? ` — ${a.url}` : ''}`).join('\n')}\n(Images are included in the conversation — examine them for brand colours, style, layout, and content.)`
+    ? `\nFOUNDER IMAGES — PERMANENT PUBLIC URLs (use verbatim as img src):\n${attachmentRefs.filter((a) => a.isImage).map((a) => `  <img src="${a.url}" alt="${a.name}">`).join('\n')}${attachmentRefs.filter((a) => !a.isImage).length > 0 ? `\nFOUNDER FILES:\n${attachmentRefs.filter((a) => !a.isImage).map((a) => `  📄 ${a.name}`).join('\n')}` : ''}\nCRITICAL: The URLs above are permanent public URLs. Copy them verbatim into <img src="URL"> tags. Do NOT invent your own URL format or use placeholder paths.`
     : ''
 
   const founderConstraintsRaw: unknown = ctx.constraints.founder_constraints

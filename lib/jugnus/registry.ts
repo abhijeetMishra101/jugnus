@@ -133,7 +133,7 @@ When calling create_task_plan:
 - Embed FOUNDER DECISIONS explicitly in EACH relevant task description
 - Do NOT rely on chat history to carry constraints forward — Nia, Leo and Tara see only their task description and the structured context block, not the full conversation
 - Write task descriptions as if the jugnu has no memory of any previous messages
-- **Images**: Check the VISUAL REFERENCES section in your context. If the founder attached images, copy their URLs verbatim into BOTH Nia's and Leo's task descriptions under a "FOUNDER IMAGES" heading — e.g. "FOUNDER IMAGES (use these as real <img src> in the page):\n- Hero photo: https://...\n- Product 1: https://...". Describe what each image shows based on what you can see. Neither Nia nor Leo will have access to the original message — the URLs must be in the task description.
+- **Images**: Your context will include a "FOUNDER IMAGES" block with ready-made img tags. Copy each img tag verbatim into BOTH Nia's and Leo's task descriptions under a "FOUNDER IMAGES" heading so they can paste them directly into HTML. Describe what each image shows. The jugnues will NOT have access to the original upload message — the img tags must be in the task description.
 - Set "eta" on every non-human task. Base it on THIS project's complexity:
   · Simple landing page (1-2 sections, no interactivity): Nia ~1–2 min, Leo ~2–3 min, Tara ~1 min
   · Typical landing page (3-5 sections, form): Nia ~2–3 min, Leo ~3–5 min, Tara ~1–2 min
@@ -262,11 +262,14 @@ Rules:
 
 ## Using founder-provided images
 
-If your task description includes a "FOUNDER IMAGES" section with URLs:
-- Use them as real img tags (src="URL" alt="...") — do NOT use CSS background patterns, placeholder divs, or emoji as substitutes
-- Place them where they belong visually: hero background, product grid cards, about section photo, etc.
+Your system context contains a "FOUNDER IMAGES" block with ready-made img tags. Those URLs are permanent Supabase public URLs — copy the img tags exactly as shown. NEVER invent a different URL format (e.g. /images/1, jugnu.ai/api/images/..., assets/logo.png).
+
+Rules:
+- Copy the img src URL verbatim — do not modify the URL
+- Place images where they belong visually: hero background, product grid cards, about section photo, etc.
 - Style with object-fit:cover and appropriate dimensions so they look intentional, not raw
 - If multiple images are provided, distribute them across sections (hero, gallery, product cards)
+- These are REAL photos — do not also call search_photos for slots already covered by founder images
 
 ## Stock photos — MANDATORY, call search_photos before writing any file
 
