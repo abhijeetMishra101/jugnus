@@ -51,20 +51,39 @@ export function buildToolsForJugnu(
           .order('path', { ascending: true })
 
         if (sections && sections.length > 0) {
-          const SECTION_ORDER = ['hero', 'problem', 'features', 'proof', 'cta', 'footer']
+          // Footer always last; everything else ordered by logical page flow
+          const SECTION_ORDER = ['hero', 'what', 'about', 'benefits', 'features', 'product', 'proof', 'testimonial', 'why', 'how', 'process', 'pricing', 'cta', 'order', 'contact']
           const sorted = [...sections].sort((a, b) => {
+            if (a.path.includes('footer')) return 1
+            if (b.path.includes('footer')) return -1
             const ai = SECTION_ORDER.findIndex((s) => a.path.includes(s))
             const bi = SECTION_ORDER.findIndex((s) => b.path.includes(s))
-            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+            return (ai === -1 ? 50 : ai) - (bi === -1 ? 50 : bi)
           })
           const body = sorted.map((f) => f.content).join('\n\n')
+
+          // Read tokens.css if Maya seeded it — inline into <style> so CSS vars work across all sections
+          const { data: tokensFile } = await db.from('file_snapshots')
+            .select('content').eq('project_id', projectId).eq('path', 'design/tokens.css').maybeSingle()
+          const tokensStyle = tokensFile?.content
+            ? `\n<style>\n${tokensFile.content}\n</style>`
+            : ''
+
+          // Extract Google Fonts @import from tokens.css to put in a <link> (browsers load it faster)
+          const fontsImportMatch = tokensFile?.content?.match(/@import url\(['"]([^'"]+)['"]\);?/)
+          const fontsLink = fontsImportMatch
+            ? `\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="${fontsImportMatch[1]}" rel="stylesheet">`
+            : ''
+
           const assembled = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Landing Page</title>
-<style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }</style>
+<title>Landing Page</title>${fontsLink}
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { theme: { extend: { colors: { primary: 'var(--color-primary)', accent: 'var(--color-accent)', bg: 'var(--color-bg)' }, fontFamily: { display: 'var(--font-display)', body: 'var(--font-body)' } } } }</script>
+<style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; }</style>${tokensStyle}
 </head>
 <body>
 ${body}
@@ -225,6 +244,20 @@ ${body}
               tara: { type: 'object', properties: { display_role: { type: 'string' }, focus: { type: 'string' } }, required: ['display_role', 'focus'] },
             },
           },
+          design_tokens: {
+            type: 'object',
+            description: 'Brand design tokens for web page projects. Provide these for any landing page, campaign page, or HTML output — Nia and Leo will use them as CSS custom properties instead of hardcoded values.',
+            properties: {
+              primary_color:   { type: 'string', description: 'Main brand color as hex, e.g. "#1E5C2A"' },
+              accent_color:    { type: 'string', description: 'CTA / highlight color as hex, e.g. "#F5A623"' },
+              bg_color:        { type: 'string', description: 'Page background color as hex, e.g. "#F5ECD7"' },
+              text_color:      { type: 'string', description: 'Primary text color as hex, e.g. "#1A1A1A"' },
+              text_muted:      { type: 'string', description: 'Secondary / muted text color as hex, e.g. "#6B4C3A"' },
+              display_font:    { type: 'string', description: 'Google Font name for headings, e.g. "Playfair Display"' },
+              body_font:       { type: 'string', description: 'Google Font name for body text, e.g. "Inter"' },
+            },
+            required: ['primary_color', 'accent_color', 'bg_color', 'display_font', 'body_font'],
+          },
         },
         required: ['tasks'],
       },
@@ -236,6 +269,63 @@ ${body}
         jugnu_key: string; eta?: string; depends_on_indices?: number[]
       }>
       const jugnu_roles = input.jugnu_roles as Record<string, { display_role: string; focus: string }> | undefined
+      const design_tokens = input.design_tokens as {
+        primary_color: string; accent_color: string; bg_color: string
+        text_color?: string; text_muted?: string; display_font: string; body_font: string
+      } | undefined
+
+      // Seed design/tokens.css so Nia and Leo have a consistent design system to reference
+      if (design_tokens) {
+        const { primary_color, accent_color, bg_color, text_color = '#1A1A1A', text_muted = '#666666', display_font, body_font } = design_tokens
+        const googleFontsUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(display_font)}:wght@400;700&family=${encodeURIComponent(body_font)}:wght@400;500;600&display=swap`
+        const tokensCss = `@import url('${googleFontsUrl}');
+
+:root {
+  --color-primary: ${primary_color};
+  --color-accent: ${accent_color};
+  --color-bg: ${bg_color};
+  --color-text: ${text_color};
+  --color-text-muted: ${text_muted};
+  --font-display: '${display_font}', Georgia, serif;
+  --font-body: '${body_font}', system-ui, sans-serif;
+  --radius: 8px;
+  --radius-lg: 16px;
+  --section-padding: 80px 20px;
+  --container-max: 1200px;
+}
+
+/* Base layout */
+.section-container { max-width: var(--container-max); margin: 0 auto; width: 100%; }
+.section-pad { padding: var(--section-padding); }
+
+/* Typography */
+.heading-xl { font-family: var(--font-display); font-size: clamp(2.5rem, 6vw, 4rem); color: var(--color-primary); line-height: 1.15; font-weight: 700; }
+.heading-lg { font-family: var(--font-display); font-size: clamp(1.8rem, 4vw, 3rem); color: var(--color-primary); line-height: 1.25; font-weight: 700; }
+.heading-md { font-family: var(--font-display); font-size: clamp(1.2rem, 2.5vw, 1.75rem); color: var(--color-primary); line-height: 1.35; font-weight: 700; }
+.body-text { font-family: var(--font-body); color: var(--color-text-muted); line-height: 1.75; font-size: 1.05rem; }
+
+/* Buttons */
+.btn { display: inline-block; font-family: var(--font-body); font-weight: 600; text-decoration: none; border: none; cursor: pointer; transition: all 0.25s ease; letter-spacing: 0.3px; }
+.btn-primary { background: var(--color-primary); color: var(--color-bg); padding: 14px 40px; border-radius: 50px; }
+.btn-primary:hover { filter: brightness(1.1); transform: translateY(-2px); }
+.btn-accent { background: var(--color-accent); color: #fff; padding: 16px 48px; border-radius: 50px; font-size: 1.1rem; }
+.btn-accent:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+/* Cards */
+.card { background: #fff; border-radius: var(--radius-lg); padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+.card-bordered { border-top: 4px solid var(--color-accent); }
+
+/* Grid */
+.grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+.grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .grid-2col { grid-template-columns: 1fr; gap: 32px; }
+  :root { --section-padding: 48px 16px; }
+}`
+        await writeFile(projectId, null, 'design/tokens.css', tokensCss, db)
+      }
 
       const insertedIds: string[] = []
       for (let i = 0; i < rawTasks.length; i++) {

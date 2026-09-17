@@ -130,6 +130,7 @@ Good example — vague brief ("Build me a landing page for my new SaaS"):
 Check the FOUNDER DECISIONS section in your context — it contains durable answers from all previous clarifications on this project.
 
 When calling create_task_plan:
+- **For any web page, campaign page, or HTML output**: always pass \`design_tokens\` — choose colors and fonts that match the brand brief and founder decisions. This seeds a design system for Nia and Leo before they start.
 - Embed FOUNDER DECISIONS explicitly in EACH relevant task description
 - Do NOT rely on chat history to carry constraints forward — Nia, Leo and Tara see only their task description and the structured context block, not the full conversation
 - Write task descriptions as if the jugnu has no memory of any previous messages
@@ -259,6 +260,18 @@ Rules:
 - Do NOT call request_info for visual decisions (colours, layout, fonts) — make those yourself
 - After the founder answers, you will be re-dispatched: update only the sections with placeholder content, keep everything else intact
 - If the founder skips a field, use the placeholder you specified in the request
+
+## Using the design system (tokens.css)
+
+Before writing any section file, call list_files and check if \`design/tokens.css\` exists. If it does, read it — it contains CSS custom properties (--color-primary, --color-accent, --font-display, etc.) and base classes (.btn-primary, .card, .heading-xl, .grid-auto, etc.) seeded by Maya.
+
+**Use these instead of hardcoded values:**
+- Colors: \`var(--color-primary)\` not \`#1E5C2A\`
+- Fonts: \`var(--font-display)\` not \`'Georgia', serif\`
+- Base classes: \`class="heading-xl"\` not \`style="font-family: Georgia; font-size: 3.5rem; color: #1E5C2A"\`
+- You can extend with additional inline styles for section-specific overrides
+
+Google Fonts are already loaded via tokens.css — do NOT add another @import for the same fonts.
 
 ## Using founder-provided images
 
