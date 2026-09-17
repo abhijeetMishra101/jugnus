@@ -110,8 +110,8 @@ export async function GET(request: Request): Promise<Response> {
       continue
     }
 
-    // Increment retry count before attempting
-    await db.from('tasks').update({ retry_count: retries + 1 }).eq('id', task.id)
+    // Increment retry count and reset started_at so the hard cap measures from this attempt, not the first
+    await db.from('tasks').update({ retry_count: retries + 1, started_at: new Date().toISOString() }).eq('id', task.id)
 
     const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
     const res = await fetch(`${base}/api/internal/jugnu-respond`, {
