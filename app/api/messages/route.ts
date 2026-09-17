@@ -43,6 +43,23 @@ export async function POST(request: Request) {
     .limit(1)
     .single()
 
+  // Persist image attachments to project constraints so jugnus can embed them with correct URLs
+  if (attachments?.some((a) => a.isImage)) {
+    const { data: projData } = await db.from('projects').select('constraints').eq('id', projectId).single()
+    const existing = ((projData?.constraints ?? {}) as Record<string, unknown>)
+    const priorAtts = Array.isArray(existing.attachments)
+      ? (existing.attachments as Array<{ url: string; name: string; isImage: boolean }>)
+      : []
+    const newAtts = attachments
+      .filter((a) => a.isImage && !priorAtts.some((p) => p.url === a.url))
+      .map((a) => ({ url: a.url, name: a.name, isImage: a.isImage }))
+    if (newAtts.length > 0) {
+      await db.from('projects').update({
+        constraints: { ...existing, attachments: [...priorAtts, ...newAtts] },
+      }).eq('id', projectId)
+    }
+  }
+
   if (escalation) {
     await db.from('escalations').update({ status: 'resolved', resolution: content.trim(), resolved_at: new Date().toISOString() })
       .eq('id', escalation.id)

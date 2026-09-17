@@ -28,17 +28,32 @@ export async function runPipeline(
   db: SupabaseClient,
   nudge?: string
 ): Promise<void> {
-  try {
-    await dispatchJugnu({ projectId, taskId, jugnuKey, db, nudge })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+  // Try once, then retry after 3s before giving up — handles transient Anthropic API errors
+  // that previously left tasks stuck in_progress for 2+ minutes until the watchdog fired.
+  let dispatchError: Error | null = null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 3000))
+      await dispatchJugnu({ projectId, taskId, jugnuKey, db, nudge })
+      dispatchError = null
+      break
+    } catch (err) {
+      dispatchError = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+
+  if (dispatchError) {
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'system',
       author_key: 'system',
-      content: `❌ ${jugnuKey} hit an error: ${msg}`,
-      metadata: { event_type: 'REVIEW_FAILED', jugnu_key: jugnuKey, error: msg },
+      content: `❌ ${jugnuKey} hit an error: ${dispatchError.message}`,
+      metadata: { event_type: 'REVIEW_FAILED', jugnu_key: jugnuKey, error: dispatchError.message },
     })
+    // Reset task to pending so the watchdog can re-dispatch quickly (not stuck in_progress)
+    if (taskId) {
+      await db.from('tasks').update({ status: 'pending', started_at: null }).eq('id', taskId)
+    }
     await resetJugnuIdle(projectId, jugnuKey, db)
     return
   }

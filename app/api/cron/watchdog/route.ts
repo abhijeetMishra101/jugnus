@@ -10,7 +10,7 @@ export const maxDuration = 60
 //   2. Mid-generation hang — jugnu started but stopped producing output
 // Leo writing a large HTML file keeps file_snapshots.updated_at fresh every few seconds,
 // so the 2-min check won't fire on genuine work even for long-running turns.
-const NO_ACTIVITY_THRESHOLD_MINUTES = 2
+const NO_ACTIVITY_THRESHOLD_MINUTES = 1
 // Hard ceiling — anything in_progress > 10 min is killed regardless of activity
 const HARD_CAP_MINUTES = 10
 const MAX_RETRIES = 3
@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
 
   // Also catch orphaned pending tasks — all deps completed but jugnu was never dispatched
   // (happens when the void fetch from submit_for_review/approve silently drops)
-  const ORPHAN_PENDING_MINUTES = 2
+  const ORPHAN_PENDING_MINUTES = 1
   const orphanCutoff = new Date(Date.now() - ORPHAN_PENDING_MINUTES * 60 * 1000).toISOString()
   const { data: allTasks } = await db
     .from('tasks')
