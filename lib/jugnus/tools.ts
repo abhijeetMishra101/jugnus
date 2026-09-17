@@ -449,12 +449,13 @@ ${body}
   if (jugnuKey === 'nia' || jugnuKey === 'leo') {
     definitions.push({
       name: 'search_photos',
-      description: 'Search Unsplash for high-quality stock photos. Call this before writing any section that needs images. Returns real URLs to use as <img src="..."> tags.',
+      description: 'Search Unsplash for high-quality stock photos. Call this before writing any section that needs images. Returns real URLs to use as <img src="..."> tags. Pass exclude_urls when retrying after a rejection to guarantee a fresh result.',
       input_schema: {
         type: 'object' as const,
         properties: {
           query: { type: 'string', description: 'Specific search terms, e.g. "yoga studio sunrise" or "indian sweet shop interior colourful"' },
           count: { type: 'number', description: 'Number of photos to return (1–5, default 3)' },
+          exclude_urls: { type: 'array', items: { type: 'string' }, description: 'URLs already used that must not appear in results — pass every previously embedded image URL for this section when retrying after a rejection' },
         },
         required: ['query'],
       },
@@ -463,29 +464,39 @@ ${body}
     handlers['search_photos'] = async (input) => {
       const query = input.query as string
       const count = Math.min(Math.max(Number(input.count ?? 3), 1), 5)
+      const excludeUrls = new Set<string>((input.exclude_urls as string[] | undefined) ?? [])
       const key = process.env.UNSPLASH_ACCESS_KEY
 
-      // Picsum fallback — real photos, consistent per query, no API key needed
-      const picsumFallback = (n: number) =>
-        Array.from({ length: n }, (_, i) => ({
-          url: `https://picsum.photos/seed/${encodeURIComponent(query)}-${i}/1200/630`,
-          alt: query,
-          photographer: 'Picsum Photos',
-        }))
+      // Picsum fallback — real photos, consistent per query+offset, no API key needed
+      const picsumFallback = (n: number) => {
+        const photos = []
+        let seed = 0
+        while (photos.length < n) {
+          const url = `https://picsum.photos/seed/${encodeURIComponent(query)}-${seed}/1200/630`
+          if (!excludeUrls.has(url)) photos.push({ url, alt: query, photographer: 'Picsum Photos' })
+          seed++
+          if (seed > n + excludeUrls.size + 10) break // safety
+        }
+        return photos
+      }
 
       if (!key) return { photos: picsumFallback(count) }
 
       try {
+        // Fetch extra results so we have room to exclude already-used URLs
+        const fetchCount = count + excludeUrls.size + 2
         const res = await fetch(
-          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${count}&orientation=landscape&client_id=${key}`
+          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${Math.min(fetchCount, 30)}&orientation=landscape&client_id=${key}`
         )
         const data = await res.json() as { results: Array<{ urls: { regular: string }; alt_description: string | null; user: { name: string } }> }
-        const photos = (data.results ?? []).map((p) => ({
-          url: p.urls.regular,
-          alt: p.alt_description ?? query,
-          photographer: p.user.name,
-        }))
-        // Fall back to picsum if Unsplash returns nothing
+        const photos = (data.results ?? [])
+          .filter((p) => !excludeUrls.has(p.urls.regular))
+          .slice(0, count)
+          .map((p) => ({
+            url: p.urls.regular,
+            alt: p.alt_description ?? query,
+            photographer: p.user.name,
+          }))
         return { photos: photos.length > 0 ? photos : picsumFallback(count) }
       } catch (e) {
         return { photos: picsumFallback(count) }
