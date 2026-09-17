@@ -515,22 +515,57 @@ ${body}
       },
     })
 
-    handlers['generate_image'] = async (_input) => {
-      // Only post the upgrade card once per project — skip if already shown
-      const { count } = await db.from('messages')
+    handlers['generate_image'] = async (input) => {
+      const { generateImage } = await import('../engines/image')
+      const { flags } = await import('../feature-flags')
+
+      if (!flags.OPENAI_IMAGE_25 || !process.env.OPENAI_API_KEY) {
+        // Only post the upgrade card once per project
+        const { count } = await db.from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', projectId)
+          .contains('metadata', { event_type: 'UPGRADE_REQUIRED' })
+        if ((count ?? 0) === 0) {
+          await db.from('messages').insert({
+            project_id: projectId,
+            author_type: 'system',
+            author_key: 'system',
+            content: '✨ AI image generation is not yet enabled for this workspace.',
+            metadata: { event_type: 'UPGRADE_REQUIRED', feature: 'ai_image_generation' },
+          })
+        }
+        return { upgrade_required: true, message: 'Image generation is not enabled. Call search_photos immediately as a fallback.' }
+      }
+
+      // Count how many AI images have already been generated for this project
+      const { count: generatedCount } = await db.from('messages')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', projectId)
-        .contains('metadata', { event_type: 'UPGRADE_REQUIRED' })
-      if ((count ?? 0) === 0) {
+        .contains('metadata', { event_type: 'IMAGE_GENERATED' })
+
+      const result = await generateImage({
+        prompt: input.prompt as string,
+        alt: (input.alt as string) ?? (input.prompt as string),
+        quality: (input.quality as 'standard' | 'premium') ?? 'standard',
+        generatedCount: generatedCount ?? 0,
+      })
+
+      if (result.source === 'generated') {
         await db.from('messages').insert({
           project_id: projectId,
-          author_type: 'system',
-          author_key: 'system',
-          content: '✨ AI image generation is a Pro feature.',
-          metadata: { event_type: 'UPGRADE_REQUIRED', feature: 'ai_image_generation' },
+          author_type: 'activity',
+          author_key: jugnuKey,
+          content: `🎨 Generated image`,
+          metadata: { event_type: 'IMAGE_GENERATED', url: result.url, cost_usd: result.costUsd, model: result.model },
         })
+        return { url: result.url, alt: result.alt, source: 'generated' }
       }
-      return { upgrade_required: true, message: 'AI image generation requires a Pro account. Call search_photos immediately as a fallback.' }
+
+      if (result.source === 'unavailable') {
+        return { upgrade_required: false, message: result.reason, fallback: 'call search_photos' }
+      }
+
+      return { upgrade_required: false, message: 'Image unavailable', fallback: 'call search_photos' }
     }
   }
 
@@ -813,13 +848,16 @@ ${body}
     })
 
     handlers['request_changes'] = async (input) => {
-      // Count how many Leo tasks are already completed — cap at 1 revision cycle
+      // Count only Leo REVISION tasks (sort_order >= 100), not the initial build.
+      // This was previously >= 2 on ALL Leo completed tasks, which meant Tara could only
+      // ever request one correction (initial build counted as 1, revision as 2 = escalate).
       const { count: leoRevisions } = await db
         .from('tasks')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .eq('jugnu_key', 'leo')
         .eq('status', 'completed')
+        .gte('sort_order', 100)
 
       if ((leoRevisions ?? 0) >= 2) {
         // Correction loop bound reached — escalate instead of another revision

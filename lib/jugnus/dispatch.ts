@@ -1,35 +1,60 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getJugnu, type JugnuKey } from './registry'
 import { buildProjectContext, formatContextBlock } from './context'
 import { buildToolsForJugnu } from './tools'
+import { createAnthropicAdapter } from '../providers/anthropic'
+import { createOpenAIChatAdapter } from '../providers/openai-chat'
+import { flags } from '../feature-flags'
+import type { UnifiedMessage, ProviderAdapter } from '../providers/types'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  ...(process.env.ANTHROPIC_WORKSPACE_ID
-    ? { defaultHeaders: { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } }
-    : {}),
-})
+// ── Model routing ──────────────────────────────────────────────────────────────
 
 const MODEL_SONNET = 'claude-sonnet-4-6'
 const MODEL_HAIKU  = 'claude-haiku-4-5-20251001'
-const MAX_TOKENS = 8192
+const MODEL_ASTRA  = 'gpt-6-astra'
+const MODEL_GPT41  = 'gpt-4.1'
 
-// Haiku for Nia, Leo, Tara: 4x cheaper input, sufficient for HTML generation and mechanical verification
-// Maya stays on Sonnet — she makes planning decisions where mistakes cascade through the entire pipeline
+// Default model per jugnu — provider is determined by model prefix
 const MODEL_FOR_JUGNU: Partial<Record<JugnuKey, string>> = {
-  nia: MODEL_HAIKU,
-  leo: MODEL_HAIKU,
+  nia:  MODEL_HAIKU,
+  leo:  MODEL_HAIKU,
   tara: MODEL_HAIKU,
+  // maya falls through to MODEL_SONNET (planning quality matters)
 }
 
 // Pricing per 1M tokens
 const PRICING: Record<string, { input: number; cacheRead: number; output: number }> = {
-  [MODEL_SONNET]: { input: 3.00, cacheRead: 0.30, output: 15.00 },
-  [MODEL_HAIKU]:  { input: 0.80, cacheRead: 0.08, output: 4.00  },
+  [MODEL_SONNET]: { input: 3.00,  cacheRead: 0.30,  output: 15.00 },
+  [MODEL_HAIKU]:  { input: 0.80,  cacheRead: 0.08,  output: 4.00  },
+  [MODEL_ASTRA]:  { input: 15.00, cacheRead: 1.50,  output: 60.00 },
+  [MODEL_GPT41]:  { input: 2.00,  cacheRead: 0.50,  output: 8.00  },
 }
-// Flush streaming content to DB every N characters to keep UI live without hammering Supabase
+
+function isOpenAIModel(model: string) {
+  return model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')
+}
+
+function getAdapter(model: string): ProviderAdapter {
+  if (isOpenAIModel(model)) return createOpenAIChatAdapter()
+  return createAnthropicAdapter()
+}
+
+/**
+ * Resolve the model to use for this jugnu/retry combination.
+ * On retry ≥ 2 with ASTRA_EXPERT_ESCALATION enabled, escalate to gpt-6-astra.
+ */
+function resolveModel(jugnuKey: JugnuKey, retryCount = 0): string {
+  if (flags.ASTRA_EXPERT_ESCALATION && retryCount >= 2) {
+    return MODEL_ASTRA
+  }
+  return MODEL_FOR_JUGNU[jugnuKey] ?? MODEL_SONNET
+}
+
+// ── Streaming flush interval ───────────────────────────────────────────────────
+
 const STREAM_FLUSH_INTERVAL = 150
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface DispatchInput {
   projectId: string
@@ -37,18 +62,35 @@ export interface DispatchInput {
   jugnuKey: JugnuKey
   db: SupabaseClient
   nudge?: string
+  retryCount?: number
 }
 
 export interface DispatchResult {
   posted: boolean
   toolsUsed: string[]
   finalMessage: string | null
+  escalatedToAstra?: boolean
 }
 
+// ── Main dispatch function ─────────────────────────────────────────────────────
+
 export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResult> {
-  const { projectId, taskId, jugnuKey, db } = input
+  const { projectId, taskId, jugnuKey, db, retryCount = 0 } = input
   const jugnu = getJugnu(jugnuKey)
-  const MODEL = MODEL_FOR_JUGNU[jugnuKey] ?? MODEL_SONNET
+  const MODEL = resolveModel(jugnuKey, retryCount)
+  const escalatedToAstra = MODEL === MODEL_ASTRA
+
+  if (escalatedToAstra) {
+    await db.from('messages').insert({
+      project_id: projectId,
+      author_type: 'system',
+      author_key: 'system',
+      content: `🧠 Escalating to expert model (Astra) after ${retryCount} retries…`,
+      metadata: { event_type: 'ASTRA_ESCALATION', jugnu_key: jugnuKey, retry_count: retryCount },
+    })
+  }
+
+  const adapter = getAdapter(MODEL)
 
   const ctx = await buildProjectContext(projectId, taskId, db)
   if (!ctx) return { posted: false, toolsUsed: [], finalMessage: null }
@@ -73,29 +115,21 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         ? `[${m.author_key.toUpperCase()}]: ${m.content}`
         : m.content
 
-      const imageAtts: Att[] = []
+      const imageBlocks: { type: 'image'; url: string }[] = []
 
       if (m.author_type === 'user' && m.metadata?.attachments) {
-        const atts = (m.metadata.attachments as Att[])
-        // Append text file contents inline
+        const atts = m.metadata.attachments as Att[]
         const textParts = atts
           .filter((a) => !a.isImage && a.textContent)
           .map((a) => `\n\n[Attached file: ${a.name}]\n\`\`\`\n${a.textContent}\n\`\`\``)
         if (textParts.length) text += textParts.join('')
-        // Collect images for Claude vision content blocks
-        imageAtts.push(...atts.filter((a) => a.isImage && a.url))
+        imageBlocks.push(...atts.filter((a) => a.isImage && a.url).map((a) => ({ type: 'image' as const, url: a.url })))
       }
 
-      if (imageAtts.length > 0) {
+      if (imageBlocks.length > 0) {
         return {
           role: 'user' as const,
-          content: [
-            ...imageAtts.map((a) => ({
-              type: 'image' as const,
-              source: { type: 'url' as const, url: a.url },
-            })),
-            { type: 'text' as const, text },
-          ] as Anthropic.ContentBlockParam[],
+          content: [...imageBlocks, { type: 'text' as const, text }],
         }
       }
 
@@ -105,39 +139,61 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       }
     })
 
+  // Strip trailing assistant messages (provider requirement)
   let endIdx = rawHistory.length - 1
   while (endIdx >= 0 && rawHistory[endIdx].role === 'assistant') endIdx--
   const history = rawHistory.slice(0, endIdx + 1)
 
   const tools = buildToolsForJugnu(jugnuKey, projectId, taskId, db)
 
-  // System prompt with prompt caching on the large context block
-  const systemContent: Anthropic.TextBlockParam[] = [
-    {
-      type: 'text',
-      text: contextBlock,
-      cache_control: { type: 'ephemeral' },
-    },
-    { type: 'text', text: jugnu.systemPrompt },
-  ]
+  // Convert tool definitions to unified format
+  const unifiedTools = tools.definitions.map((t) => ({
+    name: t.name,
+    description: t.description ?? '',
+    inputSchema: (t.input_schema ?? {}) as Record<string, unknown>,
+  }))
 
-  let messages: Anthropic.MessageParam[] = history.length > 0
+  let messages: UnifiedMessage[] = history.length > 0
     ? history
-    : [{ role: 'user', content: 'Begin your assigned task.' }]
+    : [{ role: 'user', content: input.nudge ?? 'Begin your assigned task.' }]
+
+  if (input.nudge && history.length > 0) {
+    messages = [...messages, { role: 'user', content: input.nudge }]
+  }
 
   const toolsUsed: string[] = []
   let finalMessage: string | null = null
   let done = false
 
-  // Telemetry accumulators for this dispatch run
+  // Telemetry
   let totalInputTokens = 0
   let totalCachedTokens = 0
   let totalOutputTokens = 0
   let totalModelCalls = 0
   let totalCost = 0
 
+  const turn0Label: Partial<Record<JugnuKey, string>> = {
+    maya: '📋 Planning the project…',
+    nia:  '🎨 Starting design…',
+    leo:  '⚙️ Starting build…',
+    tara: '🔍 Starting review…',
+  }
+
+  const earlyActivityLabel: Record<string, string> = {
+    write_file:        '📝 Writing file…',
+    read_file:         '👁️ Reading file…',
+    create_task_plan:  '📋 Building task plan…',
+    complete_task:     '✅ Wrapping up…',
+    submit_for_review: '🔍 Preparing review…',
+    approve:           '✅ Reviewing output…',
+    request_changes:   '✏️ Preparing feedback…',
+    ask_founder:       '💬 Composing question…',
+    generate_image:    '🎨 Generating image…',
+    search_photos:     '🖼️ Searching photos…',
+  }
+
   for (let turn = 0; turn < 25 && !done; turn++) {
-    // Budget ceiling check before each model call
+    // Budget ceiling check
     if (taskId) {
       const { data: budgetProj } = await db
         .from('projects')
@@ -159,61 +215,43 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       }
     }
 
-    // Activity indicator while waiting for first token
-    const turn0Label: Partial<Record<JugnuKey, string>> = {
-      maya: '📋 Planning the project…',
-      nia:  '🎨 Starting design…',
-      leo:  '⚙️ Starting build…',
-      tara: '🔍 Starting review…',
-    }
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'activity',
       author_key: jugnuKey,
       content: turn === 0 ? (turn0Label[jugnuKey] ?? '💭 Starting…') : `💭 Continuing (turn ${turn + 1})…`,
-      metadata: { event_type: 'JUGNU_THINKING', jugnu_key: jugnuKey, turn },
+      metadata: { event_type: 'JUGNU_THINKING', jugnu_key: jugnuKey, turn, model: MODEL },
     })
 
-    // Streaming API call — tool_choice:'any' forces Claude to always emit a tool call,
-    // preventing pure-reasoning turns that consume the full 300s Vercel timeout
-    const stream = anthropic.messages.stream({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      system: systemContent as Anthropic.MessageCreateParams['system'],
-      tools: tools.definitions,
-      tool_choice: { type: 'any' },
-      messages,
-    })
+    // ── Stream a single turn via the provider adapter ──────────────────────────
 
-    // Stream text tokens to DB in batches
     let liveRowId: string | null = null
     let textBuffer = ''
     let lastFlushedLen = 0
 
-    // Tool input streaming — surfaces write_file content as it generates (terminal feel)
+    // Tool input streaming state
     let activeToolName: string | null = null
+    let activeToolId: string | null = null
     let toolInputBuffer = ''
     let toolStreamRowId: string | null = null
     let toolStreamPath: string | null = null
     let toolStreamLastFlush = 0
 
-    const earlyActivityLabel: Record<string, string> = {
-      write_file:        `📝 Writing file…`,
-      read_file:         `👁️ Reading file…`,
-      create_task_plan:  `📋 Building task plan…`,
-      complete_task:     `✅ Wrapping up…`,
-      submit_for_review: `🔍 Preparing review…`,
-      approve:           `✅ Reviewing output…`,
-      request_changes:   `✏️ Preparing feedback…`,
-      ask_founder:       `💬 Composing question…`,
-    }
+    // Completed tool calls this turn (name → input) for handler dispatch
+    const completedTools: Array<{ name: string; id: string; input: Record<string, unknown> }> = []
 
-    for await (const event of stream) {
-      // Emit activity the moment Claude begins generating a tool call — not after it finishes.
-      // This closes the silent gap where Nia generates a large HTML file for several minutes.
-      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
-        const toolName = event.content_block.name
-        activeToolName = toolName
+    for await (const event of adapter.streamTurn({
+      model: MODEL,
+      systemPrompt: jugnu.systemPrompt,
+      contextBlock,
+      messages,
+      tools: unifiedTools,
+      forceToolUse: true,
+    })) {
+
+      if (event.type === 'tool_start') {
+        activeToolName = event.name
+        activeToolId = event.id
         toolInputBuffer = ''
         toolStreamRowId = null
         toolStreamPath = null
@@ -222,14 +260,49 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
           project_id: projectId,
           author_type: 'activity',
           author_key: jugnuKey,
-          content: earlyActivityLabel[toolName] ?? `🔧 ${toolName}…`,
-          metadata: { event_type: 'JUGNU_THINKING', tool: toolName, jugnu_key: jugnuKey },
+          content: earlyActivityLabel[event.name] ?? `🔧 ${event.name}…`,
+          metadata: { event_type: 'JUGNU_THINKING', tool: event.name, jugnu_key: jugnuKey },
         })
       }
 
-      if (event.type === 'content_block_stop') {
-        // Finalize the tool stream row when the block closes
-        if (activeToolName === 'write_file' && toolStreamRowId) {
+      if (event.type === 'tool_input_delta') {
+        toolInputBuffer += event.partialJson
+
+        // Stream write_file content in real-time
+        if (activeToolName === 'write_file') {
+          if (!toolStreamPath) {
+            const m = toolInputBuffer.match(/"path"\s*:\s*"([^"]+)"/)
+            if (m) toolStreamPath = m[1]
+          }
+          const contentMatch = toolInputBuffer.match(/"content":"((?:[^"\\]|\\[\s\S])*)/)
+          if (contentMatch && toolStreamPath) {
+            const partial = contentMatch[1]
+              .replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+              .replace(/\\r/g, '\r').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+
+            if (partial.length - toolStreamLastFlush >= STREAM_FLUSH_INTERVAL * 2) {
+              if (!toolStreamRowId) {
+                const { data: row } = await db.from('messages').insert({
+                  project_id: projectId,
+                  author_type: 'jugnu',
+                  author_key: jugnuKey,
+                  content: partial,
+                  task_id: taskId,
+                  metadata: { event_type: 'FILE_STREAM', streaming: true, jugnu_key: jugnuKey, file_path: toolStreamPath },
+                }).select('id').single()
+                toolStreamRowId = row?.id ?? null
+              } else {
+                await db.from('messages').update({ content: partial }).eq('id', toolStreamRowId)
+              }
+              toolStreamLastFlush = partial.length
+            }
+          }
+        }
+      }
+
+      if (event.type === 'tool_end') {
+        // Finalize write_file stream row
+        if (event.name === 'write_file' && toolStreamRowId) {
           try {
             const parsed = JSON.parse(toolInputBuffer) as { path?: string; content?: string }
             if (parsed.content) {
@@ -238,59 +311,21 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
                 metadata: { event_type: 'FILE_STREAM', streaming: false, jugnu_key: jugnuKey, file_path: toolStreamPath ?? parsed.path },
               }).eq('id', toolStreamRowId)
             }
-          } catch { /* partial buffer on edge case — leave as-is */ }
+          } catch { /* partial buffer */ }
         }
+
+        completedTools.push({ name: event.name, id: event.id, input: event.input })
         activeToolName = null
+        activeToolId = null
         toolInputBuffer = ''
         toolStreamRowId = null
         toolStreamPath = null
         toolStreamLastFlush = 0
       }
 
-      // Stream write_file tool input so users see the file content generating in real-time
-      if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta' && activeToolName === 'write_file') {
-        toolInputBuffer += event.delta.partial_json
-
-        // Extract path once we have it
-        if (!toolStreamPath) {
-          const m = toolInputBuffer.match(/"path"\s*:\s*"([^"]+)"/)
-          if (m) toolStreamPath = m[1]
-        }
-
-        // Extract content field using regex — handles partial JSON strings safely
-        const contentMatch = toolInputBuffer.match(/"content":"((?:[^"\\]|\\[\s\S])*)/)
-        if (contentMatch && toolStreamPath) {
-          const partial = contentMatch[1]
-            .replace(/\\n/g, '\n')
-            .replace(/\\t/g, '\t')
-            .replace(/\\r/g, '\r')
-            .replace(/\\"/g, '"')
-            .replace(/\\\\/g, '\\')
-
-          if (partial.length - toolStreamLastFlush >= STREAM_FLUSH_INTERVAL * 2) {
-            if (!toolStreamRowId) {
-              const { data: row } = await db.from('messages').insert({
-                project_id: projectId,
-                author_type: 'jugnu',
-                author_key: jugnuKey,
-                content: partial,
-                task_id: taskId,
-                metadata: { event_type: 'FILE_STREAM', streaming: true, jugnu_key: jugnuKey, file_path: toolStreamPath },
-              }).select('id').single()
-              toolStreamRowId = row?.id ?? null
-            } else {
-              await db.from('messages').update({ content: partial }).eq('id', toolStreamRowId)
-            }
-            toolStreamLastFlush = partial.length
-          }
-        }
-      }
-
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        textBuffer += event.delta.text
-
+      if (event.type === 'text_delta') {
+        textBuffer += event.text
         if (!liveRowId && textBuffer.length > 0) {
-          // Create the live row on first text so UI shows something immediately
           const { data: row } = await db.from('messages').insert({
             project_id: projectId,
             author_type: 'jugnu',
@@ -306,104 +341,95 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
           lastFlushedLen = textBuffer.length
         }
       }
-    }
 
-    // Finalize the streaming row with complete text + correct event_type
-    if (liveRowId) {
-      const finalText = textBuffer.trim()
-      if (finalText) {
-        await db.from('messages').update({
-          content: finalText,
-          metadata: { event_type: 'JUGNU_SPOKE', jugnu_key: jugnuKey },
-        }).eq('id', liveRowId)
-        finalMessage = finalText
-      } else {
-        // No text was generated (tool-only turn) — delete the placeholder row
-        await db.from('messages').delete().eq('id', liveRowId)
+      if (event.type === 'turn_done') {
+        // Finalize streaming text row
+        if (liveRowId) {
+          const finalText = textBuffer.trim()
+          if (finalText) {
+            await db.from('messages').update({
+              content: finalText,
+              metadata: { event_type: 'JUGNU_SPOKE', jugnu_key: jugnuKey },
+            }).eq('id', liveRowId)
+            finalMessage = finalText
+          } else {
+            await db.from('messages').delete().eq('id', liveRowId)
+          }
+        }
+
+        // Accumulate telemetry
+        const p = PRICING[MODEL] ?? PRICING[MODEL_SONNET]
+        const { inputTokens, cachedTokens, outputTokens } = event.usage
+        const turnCost = (inputTokens * p.input + cachedTokens * p.cacheRead + outputTokens * p.output) / 1_000_000
+        totalInputTokens += inputTokens
+        totalCachedTokens += cachedTokens
+        totalOutputTokens += outputTokens
+        totalModelCalls += 1
+        totalCost += turnCost
+
+        if (event.stopReason === 'end_turn') { done = true; break }
+        if (event.stopReason !== 'tool_use') break
       }
     }
 
-    const response = await stream.finalMessage()
+    // ── Dispatch tool handlers ─────────────────────────────────────────────────
 
-    // Accumulate token usage with per-model pricing
-    if (response.usage) {
-      const inputTok = response.usage.input_tokens ?? 0
-      const cacheTok = (response.usage as unknown as Record<string, unknown>).cache_read_input_tokens as number ?? 0
-      const outputTok = response.usage.output_tokens ?? 0
-      const p = PRICING[MODEL] ?? PRICING[MODEL_SONNET]
-      const turnCost = (inputTok * p.input + cacheTok * p.cacheRead + outputTok * p.output) / 1_000_000
-      totalInputTokens += inputTok
-      totalCachedTokens += cacheTok
-      totalOutputTokens += outputTok
-      totalModelCalls += 1
-      totalCost += turnCost
-    }
+    if (completedTools.length === 0) break
 
-    if (response.stop_reason === 'end_turn') {
-      done = true
-      break
-    }
+    const toolResults: Array<{ toolUseId: string; content: string; isError?: boolean }> = []
 
-    if (response.stop_reason !== 'tool_use') break
+    for (const toolCall of completedTools) {
+      toolsUsed.push(toolCall.name)
+      const handler = tools.handlers[toolCall.name]
 
-    const toolUseBlocks = response.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
-    )
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = []
-
-    for (const toolUse of toolUseBlocks) {
-      toolsUsed.push(toolUse.name)
-      const handler = tools.handlers[toolUse.name]
-      if (!handler) {
-        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: 'Unknown tool' })
-        continue
-      }
-
-      const inp = toolUse.input as Record<string, unknown>
       const activityLabel: Record<string, string> = {
-        write_file:        `📝 Writing \`${inp.path ?? 'file'}\``,
-        read_file:         `👁️ Reading \`${inp.path ?? 'file'}\``,
-        search_photos:     `🖼️ Searching photos for "${inp.query ?? ''}"…`,
-        generate_image:    `🎨 Checking image generation…`,
+        write_file:        `📝 Writing \`${(toolCall.input.path as string) ?? 'file'}\``,
+        read_file:         `👁️ Reading \`${(toolCall.input.path as string) ?? 'file'}\``,
+        search_photos:     `🖼️ Searching photos for "${(toolCall.input.query as string) ?? ''}"…`,
+        generate_image:    `🎨 Generating image…`,
         create_task_plan:  `📋 Building task plan`,
         complete_task:     `✅ Wrapping up`,
         submit_for_review: `🔍 Submitting for review`,
         approve:           `✅ Approving`,
         request_changes:   `✏️ Requesting changes`,
         ask_founder:       `💬 Asking for your input`,
+        call_api:          `🌐 Testing API…`,
+        browse_app:        `🌐 Running browser test…`,
       }
+
       await db.from('messages').insert({
         project_id: projectId,
         author_type: 'activity',
         author_key: jugnuKey,
-        content: activityLabel[toolUse.name] ?? `🔧 ${toolUse.name}`,
-        metadata: { event_type: 'JUGNU_THINKING', tool: toolUse.name, jugnu_key: jugnuKey },
+        content: activityLabel[toolCall.name] ?? `🔧 ${toolCall.name}`,
+        metadata: { event_type: 'JUGNU_THINKING', tool: toolCall.name, jugnu_key: jugnuKey },
       })
 
-      try {
-        const result = await handler(toolUse.input as Record<string, unknown>)
-        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) })
+      if (!handler) {
+        toolResults.push({ toolUseId: toolCall.id, content: 'Unknown tool' })
+        continue
+      }
 
-        // Terminal tools — stop the agentic loop and skip any remaining tools in this response
-        if (['complete_task', 'submit_for_review', 'approve', 'request_changes', 'ask_founder'].includes(toolUse.name)) {
+      try {
+        const result = await handler(toolCall.input)
+        toolResults.push({ toolUseId: toolCall.id, content: JSON.stringify(result) })
+
+        const terminalTools = ['complete_task', 'submit_for_review', 'approve', 'request_changes', 'ask_founder', 'join_v2_waitlist', 'request_info']
+        if (terminalTools.includes(toolCall.name)) {
           done = true
           break
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: `Error: ${msg}`, is_error: true })
+        toolResults.push({ toolUseId: toolCall.id, content: msg, isError: true })
       }
     }
 
-    messages = [
-      ...messages,
-      { role: 'assistant', content: response.content },
-      { role: 'user', content: toolResults },
-    ]
+    messages = adapter.appendToolResults(messages, adapter.lastAssistantContent, toolResults)
   }
 
-  // Write telemetry to DB after the loop completes
+  // ── Write telemetry ────────────────────────────────────────────────────────
+
   if (taskId && totalModelCalls > 0) {
     const { data: rawTask } = await db
       .from('tasks')
@@ -413,25 +439,19 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
     await db.from('tasks').update({
       model: MODEL,
-      input_tokens: (rawTask?.input_tokens ?? 0) + totalInputTokens,
-      cached_tokens: (rawTask?.cached_tokens ?? 0) + totalCachedTokens,
-      output_tokens: (rawTask?.output_tokens ?? 0) + totalOutputTokens,
-      model_calls: (rawTask?.model_calls ?? 0) + totalModelCalls,
+      input_tokens:      (rawTask?.input_tokens  ?? 0) + totalInputTokens,
+      cached_tokens:     (rawTask?.cached_tokens  ?? 0) + totalCachedTokens,
+      output_tokens:     (rawTask?.output_tokens  ?? 0) + totalOutputTokens,
+      model_calls:       (rawTask?.model_calls    ?? 0) + totalModelCalls,
       estimated_cost_usd: ((rawTask?.estimated_cost_usd as number) ?? 0) + totalCost,
     }).eq('id', taskId)
   }
 
-  // Increment project total cost using a raw SQL increment to avoid read-modify-write race
   if (totalCost > 0) {
     await db.rpc('increment_project_cost', { p_project_id: projectId, p_cost: totalCost }).maybeSingle()
       .then(({ error }) => {
         if (error) {
-          // Fallback: read-modify-write if rpc not available
-          return db
-            .from('projects')
-            .select('total_cost_usd')
-            .eq('id', projectId)
-            .single()
+          return db.from('projects').select('total_cost_usd').eq('id', projectId).single()
             .then(({ data }) => {
               const current = (data?.total_cost_usd as number) ?? 0
               return db.from('projects').update({ total_cost_usd: current + totalCost }).eq('id', projectId)
@@ -440,5 +460,5 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       })
   }
 
-  return { posted: true, toolsUsed, finalMessage }
+  return { posted: true, toolsUsed, finalMessage, escalatedToAstra }
 }
