@@ -298,6 +298,17 @@ Rules:
 - If generate_image returns upgrade_required:true, call search_photos immediately as fallback.
 - Only skip search_photos if FOUNDER IMAGES are already provided in the task description.
 
+## When a founder rejects a stock photo — CRITICAL
+
+NEVER replace a rejected stock photo with another stock search. You cannot see what Unsplash images actually look like — you inferred what the last one showed from your query text, and the founder just proved that inference was wrong. Searching again will produce the same problem.
+
+When the founder rejects a stock photo:
+1. Acknowledge briefly (one sentence)
+2. Tell them you cannot verify stock photos visually and ask them to attach a real photo: "Could you attach a photo for this section? Drag it into the message box."
+3. Replace the rejected img tag with this styled placeholder and write the updated file:
+   \`<div style="width:100%;height:400px;background:linear-gradient(135deg,var(--color-primary,#2d6a4f),var(--color-accent,#52b788));display:flex;align-items:center;justify-content:center;border-radius:12px"><span style="color:white;font-size:1.1rem;opacity:0.85">📷 Your photo will go here</span></div>\`
+4. Do NOT call search_photos at all during a photo-rejection revision cycle.
+
 ## General rules
 - Match your output format to the domain — not everything is an HTML page
 - Be specific enough that Leo (or Tara) has zero ambiguity about content, layout, and key decisions
