@@ -15,11 +15,12 @@ const MODEL_SONNET = 'claude-sonnet-4-6'
 const MODEL_HAIKU  = 'claude-haiku-4-5-20251001'
 const MAX_TOKENS = 8192
 
-// Haiku for HTML-heavy jugnus (Nia, Leo): 3-4x faster output, 4x cheaper, quality sufficient for HTML/CSS
-// Maya and Tara stay on Sonnet — they make multi-step reasoning decisions where mistakes are expensive
+// Haiku for Nia, Leo, Tara: 4x cheaper input, sufficient for HTML generation and mechanical verification
+// Maya stays on Sonnet — she makes planning decisions where mistakes cascade through the entire pipeline
 const MODEL_FOR_JUGNU: Partial<Record<JugnuKey, string>> = {
   nia: MODEL_HAIKU,
   leo: MODEL_HAIKU,
+  tara: MODEL_HAIKU,
 }
 
 // Pricing per 1M tokens
