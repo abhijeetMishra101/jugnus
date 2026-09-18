@@ -19,13 +19,21 @@ function toAnthropicMessages(messages: UnifiedMessage[]): Anthropic.MessageParam
     if (typeof m.content === 'string') {
       return { role: m.role, content: m.content }
     }
-    const blocks: Anthropic.ContentBlockParam[] = m.content
-      .filter((b) => b.type !== 'text' || (b.text ?? '').length > 0)
-      .map((b) => {
-        if (b.type === 'image') {
-          return { type: 'image' as const, source: { type: 'url' as const, url: b.url } }
+    // Content may be UnifiedContentBlock[] (text/image from history) OR native Anthropic
+    // ContentBlock[] / ToolResultBlockParam[] injected by appendToolResults. Cast to a
+    // generic shape so we can inspect the `type` discriminant at runtime.
+    type AnyBlock = { type: string; [k: string]: unknown }
+    const raw = m.content as unknown as AnyBlock[]
+    const blocks = raw
+      .filter((b) => b.type !== 'text' || String(b['text'] ?? '').length > 0)
+      .map((b): Anthropic.ContentBlockParam => {
+        if (b.type === 'image' && 'url' in b) {
+          // UnifiedImageBlock { type:'image', url } → Anthropic image block
+          return { type: 'image', source: { type: 'url', url: b['url'] as string } }
         }
-        return { type: 'text' as const, text: b.text }
+        // tool_use, tool_result, and properly-formed text blocks are already
+        // in Anthropic wire format — pass them through unchanged.
+        return b as unknown as Anthropic.ContentBlockParam
       })
     return { role: m.role, content: blocks }
   })
