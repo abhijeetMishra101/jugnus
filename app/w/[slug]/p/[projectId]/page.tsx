@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { ProjectPageClient } from '../../components/ProjectPageClient'
+import { flags } from '@/lib/feature-flags'
 
 interface Props {
   params: Promise<{ slug: string; projectId: string }>
@@ -35,7 +36,7 @@ export default async function ProjectPage({ params }: Props) {
   const initialFiles = (filesRes.data ?? []) as { path: string; content: string; updated_at: string }[]
 
   const activeJugnuKey = (jugnusRes.data ?? []).find((j) => j.status === 'working')?.key ?? null
-  const singleFrontDoor = process.env.NEXTGEN_SINGLE_FRONT_DOOR_UI === 'true'
+  const singleFrontDoor = flags.SINGLE_FRONT_DOOR_UI
 
   return (
     <ProjectPageClient
