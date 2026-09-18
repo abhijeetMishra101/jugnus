@@ -1,8 +1,8 @@
 import OpenAI from 'openai'
 import { flags } from '../feature-flags'
 
-const MODEL_STANDARD = 'gpt-image-2.5-flare'
-const MODEL_PREMIUM  = 'gpt-image-2.5-sunburst'
+const MODEL_STANDARD = 'dall-e-3'
+const MODEL_PREMIUM  = 'dall-e-3'
 
 // Conservative budget: max 2 generated images per project to cap cost
 const MAX_GENERATED_IMAGES_PER_PROJECT = 2

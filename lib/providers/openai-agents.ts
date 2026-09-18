@@ -12,7 +12,7 @@
 import OpenAI from 'openai'
 import type { ExecutionEvidence } from './types'
 
-const MODEL_CODEX = 'gpt-5.3-codex'
+const MODEL_CODEX = 'gpt-4o'
 
 export interface AgentsBuildParams {
   taskDescription: string
