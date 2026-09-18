@@ -98,7 +98,7 @@ async function callJevDecision(
         role: 'user',
         content: `Decision: ${type}\nContext: ${contextSummary}\nObjective: ${ctx.objective.slice(0, 200)}`,
       }],
-    })
+    }, { timeout: 8000 })
 
     const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
     const parsed = JSON.parse(text) as { decision: string; confidence: number }
@@ -106,7 +106,10 @@ async function callJevDecision(
       return { decision: parsed.decision as DecisionOutcome, confidence: parsed.confidence }
     }
     return null
-  } catch { return null }
+  } catch (err) {
+    console.error('[Jev] decision call failed:', err instanceof Error ? err.message : String(err))
+    return null
+  }
 }
 
 /**
