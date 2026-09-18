@@ -60,10 +60,53 @@ function deterministicDecision(type: string, ctx: DecisionContext): DecisionOutc
   return null
 }
 
+/** Call Claude Haiku to make a routing decision when deterministic rules are ambiguous. */
+async function callJevDecision(
+  type: string,
+  ctx: DecisionContext
+): Promise<{ decision: DecisionOutcome; confidence: number } | null> {
+  if (!process.env.ANTHROPIC_API_KEY) return null
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    const optionsMap: Record<string, string[]> = {
+      needs_clarification: ['ASK_CLARIFICATION', 'PROCEED'],
+      needs_nia:           ['SKIP_NIA', 'PROCEED'],
+      should_escalate:     ['RETRY', 'ESCALATE_ASTRA', 'STOP'],
+    }
+    const options = optionsMap[type] ?? ['PROCEED']
+
+    const contextSummary = [
+      `Brief length: ${ctx.briefLength} chars`,
+      ctx.hasAttachments ? 'Has attachments' : 'No attachments',
+      ctx.previousClarificationCount > 0 ? `Prior clarifications: ${ctx.previousClarificationCount}` : '',
+      ctx.retryCount > 0 ? `Retry count: ${ctx.retryCount}` : '',
+      ctx.taskFailureCount > 0 ? `Task failures: ${ctx.taskFailureCount}` : '',
+    ].filter(Boolean).join('. ')
+
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 64,
+      system: `You are Jev, a routing decision engine for an AI product team. Output ONLY valid JSON with no explanation: {"decision":"<one of: ${options.join(', ')}>","confidence":<float 0-1>}`,
+      messages: [{
+        role: 'user',
+        content: `Decision: ${type}\nContext: ${contextSummary}\nObjective: ${ctx.objective.slice(0, 200)}`,
+      }],
+    })
+
+    const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
+    const parsed = JSON.parse(text) as { decision: string; confidence: number }
+    if (options.includes(parsed.decision) && typeof parsed.confidence === 'number') {
+      return { decision: parsed.decision as DecisionOutcome, confidence: parsed.confidence }
+    }
+    return null
+  } catch { return null }
+}
+
 /**
- * DecisionEngine — shadow mode initially.
- * Phase 1: records Jev vs current disagreements but always uses deterministic/LLM decision.
- * Phase 6: progressively allows Jev to control low-risk decisions after evidence accumulates.
+ * DecisionEngine — deterministic rules first, Jev (Claude Haiku) for ambiguous cases.
+ * Every decision is logged to decision_log for analysis.
  */
 export async function decide(
   type: string,
@@ -74,15 +117,9 @@ export async function decide(
 ): Promise<DecisionOutcome> {
   const deterministic = deterministicDecision(type, ctx)
 
-  // Jev integration point — shadow mode. Returns null until TypeSafe endpoint is live.
-  const jevResult = (flags.JEV_DECISION_ENGINE && process.env.JEV_API_KEY)
-    ? await (async (): Promise<{ decision: DecisionOutcome; confidence: number } | null> => {
-        try {
-          // const r = await callJev({ type, ctx })
-          // return { decision: r.decision, confidence: r.confidence }
-          return null
-        } catch { return null }
-      })()
+  // Only call Jev when deterministic rules are ambiguous — keeps cost low
+  const jevResult = (flags.JEV_DECISION_ENGINE && deterministic === null)
+    ? await callJevDecision(type, ctx)
     : null
 
   const jevDecision: DecisionOutcome | null = jevResult?.decision ?? null

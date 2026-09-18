@@ -12,7 +12,7 @@ import { writeFile } from '../storage/files'
 
 const MODEL_SONNET = 'claude-sonnet-4-6'
 const MODEL_HAIKU  = 'claude-haiku-4-5-20251001'
-const MODEL_ASTRA  = 'gpt-6-astra'
+const MODEL_ASTRA  = 'claude-opus-4-8'
 const MODEL_GPT41  = 'gpt-4.1'
 
 // Default model per jugnu — provider is determined by model prefix
