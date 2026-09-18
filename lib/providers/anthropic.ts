@@ -19,12 +19,14 @@ function toAnthropicMessages(messages: UnifiedMessage[]): Anthropic.MessageParam
     if (typeof m.content === 'string') {
       return { role: m.role, content: m.content }
     }
-    const blocks: Anthropic.ContentBlockParam[] = m.content.map((b) => {
-      if (b.type === 'image') {
-        return { type: 'image' as const, source: { type: 'url' as const, url: b.url } }
-      }
-      return { type: 'text' as const, text: b.text }
-    })
+    const blocks: Anthropic.ContentBlockParam[] = m.content
+      .filter((b) => b.type !== 'text' || (b.text ?? '').length > 0)
+      .map((b) => {
+        if (b.type === 'image') {
+          return { type: 'image' as const, source: { type: 'url' as const, url: b.url } }
+        }
+        return { type: 'text' as const, text: b.text }
+      })
     return { role: m.role, content: blocks }
   })
 }
