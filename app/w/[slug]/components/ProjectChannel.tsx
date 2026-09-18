@@ -52,6 +52,13 @@ function AttachmentChip({ att, onRemove }: { att: Attachment; onRemove?: () => v
   )
 }
 
+const STARTER_PROMPTS = [
+  { icon: '🚀', label: 'Launch page', prompt: 'Build a launch page for my product. I want visitors to sign up for early access.' },
+  { icon: '🧮', label: 'ROI calculator', prompt: 'Build an ROI calculator that shows customers how much they save using my product.' },
+  { icon: '📅', label: 'Event campaign', prompt: 'Build a registration page for our upcoming webinar. The goal is maximum sign-ups.' },
+  { icon: '⏳', label: 'Waitlist page', prompt: "I'm building a new app and need a waitlist page to collect emails before launch." },
+]
+
 const JUGNU: Record<string, { name: string; color: string; bg: string; role: string; icon: string }> = {
   maya: { name: 'Maya', color: '#f9a8d4', bg: 'rgba(35, 12, 45, 0.82)', role: 'Planner',  icon: '🎯' },
   nia:  { name: 'Nia',  color: '#93c5fd', bg: 'rgba(10, 22, 50, 0.82)', role: 'Designer', icon: '🎨' },
@@ -992,6 +999,28 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto py-4 relative">
+          {feed.length === 0 && !activeJugnu && (
+            <div className="flex flex-col items-center justify-center h-full px-8 pb-16 pointer-events-auto">
+              <div className="text-center mb-8">
+                <div className="text-5xl mb-4">✨</div>
+                <h2 className="text-white/75 text-lg font-semibold mb-1.5">What are you building?</h2>
+                <p className="text-white/35 text-sm">Describe your project, or pick a starting point below.</p>
+              </div>
+              <div className="flex flex-col gap-2 w-full max-w-xs">
+                {STARTER_PROMPTS.map((p, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setInput(p.prompt)}
+                    className="text-left px-4 py-3 rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99]"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.11)', color: 'rgba(255,255,255,0.72)' }}
+                  >
+                    <span className="mr-2 text-base">{p.icon}</span>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {feed.map((item, i) => {
             const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
             const isLastActiveJugnu = item.type === 'jugnu' && item.authorKey === activeJugnu && i === feed.length - 1

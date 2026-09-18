@@ -6,6 +6,7 @@ import { createAnthropicAdapter } from '../providers/anthropic'
 import { createOpenAIChatAdapter } from '../providers/openai-chat'
 import { flags } from '../feature-flags'
 import type { UnifiedMessage, ProviderAdapter } from '../providers/types'
+import { writeFile } from '../storage/files'
 
 // ── Model routing ──────────────────────────────────────────────────────────────
 
@@ -72,6 +73,97 @@ export interface DispatchResult {
   escalatedToAstra?: boolean
 }
 
+// ── Leo Agents API sandbox path ────────────────────────────────────────────────
+
+async function dispatchLeoSandbox(input: DispatchInput): Promise<DispatchResult> {
+  const { projectId, taskId, db } = input
+
+  // Load design files for context (Nia's output)
+  const { data: snapshots } = await db
+    .from('file_snapshots')
+    .select('path, content')
+    .eq('project_id', projectId)
+
+  const designFiles: Record<string, string> = {}
+  for (const f of snapshots ?? []) {
+    designFiles[f.path as string] = f.content as string
+  }
+
+  // Task description from the task record
+  const { data: taskRow } = taskId
+    ? await db.from('tasks').select('description, title').eq('id', taskId).single()
+    : { data: null }
+  const taskDescription = (taskRow?.description as string | null)
+    ?? (taskRow?.title as string | null)
+    ?? 'Build the project according to the design specifications.'
+
+  const onProgress = async (msg: string) => {
+    await db.from('messages').insert({
+      project_id: projectId,
+      author_type: 'activity',
+      author_key: 'leo',
+      content: msg,
+      metadata: { event_type: 'JUGNU_THINKING', jugnu_key: 'leo' },
+    })
+  }
+
+  const { runAgentsSandbox } = await import('../providers/openai-agents')
+  const startMs = Date.now()
+  const result = await runAgentsSandbox({ taskDescription, designFiles, projectId, onProgress })
+  const durationMs = Date.now() - startMs
+
+  // Write output files to file_snapshots
+  for (const [path, content] of Object.entries(result.outputFiles)) {
+    await writeFile(projectId, taskId, path, content, db)
+  }
+
+  // Rough container cost: OpenAI charges ~$0.003/s for code_interpreter compute
+  const containerCostUsd = (durationMs / 1000) * 0.003
+
+  // Update task record
+  if (taskId) {
+    await db.from('tasks').update({
+      status: result.success ? 'completed' : 'failed',
+      result: result.success
+        ? `Sandbox build succeeded in ${Math.round(durationMs / 1000)}s. Files: ${result.evidence.filesCreated.join(', ')}`
+        : result.errorMessage ?? 'Build failed.',
+      completed_at: result.success ? new Date().toISOString() : null,
+      model: 'gpt-5.3-codex',
+      estimated_cost_usd: containerCostUsd,
+    }).eq('id', taskId)
+  }
+
+  if (containerCostUsd > 0) {
+    await db.rpc('increment_project_cost', { p_project_id: projectId, p_cost: containerCostUsd }).maybeSingle()
+  }
+
+  const evidenceLine = [
+    result.evidence.buildSucceeded ? '✅ Build' : '❌ Build failed',
+    result.evidence.testsPassed === true ? '· ✅ Tests' : result.evidence.testsPassed === false ? '· ❌ Tests failed' : '',
+    `· ⏱️ ${Math.round(durationMs / 1000)}s`,
+    result.evidence.filesCreated.length > 0 ? `· 📁 ${result.evidence.filesCreated.length} files` : '',
+  ].filter(Boolean).join(' ')
+
+  const messageContent = result.success
+    ? `✅ Built and tested in ${Math.round(durationMs / 1000)}s.\n\n${evidenceLine}`
+    : `Build encountered issues after ${Math.round(durationMs / 1000)}s. ${result.errorMessage ?? ''}\n\n${evidenceLine}`
+
+  await db.from('messages').insert({
+    project_id: projectId,
+    author_type: 'jugnu',
+    author_key: 'leo',
+    content: messageContent,
+    task_id: taskId,
+    metadata: {
+      event_type: result.success ? 'TASK_COMPLETED' : 'BUILD_FAILED',
+      jugnu_key: 'leo',
+      execution_evidence: result.evidence,
+    },
+  })
+
+  return { posted: true, toolsUsed: ['agents_sandbox'], finalMessage: messageContent, escalatedToAstra: false }
+}
+
 // ── Main dispatch function ─────────────────────────────────────────────────────
 
 export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResult> {
@@ -79,6 +171,11 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
   const jugnu = getJugnu(jugnuKey)
   const MODEL = resolveModel(jugnuKey, retryCount)
   const escalatedToAstra = MODEL === MODEL_ASTRA
+
+  // Phase 4: Leo Agents API sandbox — bypasses normal tool loop entirely
+  if (jugnuKey === 'leo' && flags.OPENAI_AGENTS_EXECUTION && process.env.OPENAI_API_KEY) {
+    return dispatchLeoSandbox(input)
+  }
 
   if (escalatedToAstra) {
     await db.from('messages').insert({
@@ -94,6 +191,36 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
   const ctx = await buildProjectContext(projectId, taskId, db)
   if (!ctx) return { posted: false, toolsUsed: [], finalMessage: null }
+
+  // Phase 7: dynamic routing decision for Maya — skip clarification for clear briefs
+  let dynamicNudge: string | undefined = input.nudge
+  if (jugnuKey === 'maya' && flags.DYNAMIC_AGENT_ROUTING) {
+    const { decide } = await import('../engines/decision')
+    const { data: proj } = await db.from('projects').select('objective').eq('id', projectId).single()
+    const objective = (proj?.objective as string) ?? ''
+    const { count: clarCount } = await db.from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .contains('metadata', { event_type: 'CLARIFICATION_REQUIRED' })
+    const { data: userMsgs } = await db.from('messages')
+      .select('metadata').eq('project_id', projectId).eq('author_type', 'user').limit(5)
+    const hasAttachments = (userMsgs ?? []).some(
+      (m) => Array.isArray((m.metadata as Record<string, unknown>)?.attachments)
+    )
+    const clarDec = await decide('needs_clarification', {
+      objective,
+      briefLength: objective.length,
+      hasAttachments,
+      previousClarificationCount: clarCount ?? 0,
+      retryCount,
+      taskFailureCount: 0,
+    }, db, projectId, taskId)
+    if (clarDec === 'PROCEED') {
+      // Brief is clear — nudge Maya to skip asking and go straight to planning
+      dynamicNudge = (dynamicNudge ? dynamicNudge + '\n\n' : '') +
+        '[ROUTING] The brief is sufficiently detailed. Skip clarification questions and call create_task_plan directly.'
+    }
+  }
 
   const contextBlock = formatContextBlock(ctx, jugnuKey)
 
@@ -155,10 +282,10 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
   let messages: UnifiedMessage[] = history.length > 0
     ? history
-    : [{ role: 'user', content: input.nudge ?? 'Begin your assigned task.' }]
+    : [{ role: 'user', content: dynamicNudge ?? 'Begin your assigned task.' }]
 
-  if (input.nudge && history.length > 0) {
-    messages = [...messages, { role: 'user', content: input.nudge }]
+  if (dynamicNudge && history.length > 0) {
+    messages = [...messages, { role: 'user', content: dynamicNudge }]
   }
 
   const toolsUsed: string[] = []

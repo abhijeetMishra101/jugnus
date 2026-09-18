@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from './registry'
 import { writeFile, readFile, listFiles } from '../storage/files'
+import { flags } from '../feature-flags'
 
 import { getPreviewUrl } from './deploy-static'
 
@@ -264,7 +265,7 @@ ${body}
     })
 
     handlers['create_task_plan'] = async (input) => {
-      const rawTasks = input.tasks as Array<{
+      let rawTasks = input.tasks as Array<{
         title: string; description: string; capability: string
         jugnu_key: string; eta?: string; depends_on_indices?: number[]
       }>
@@ -273,6 +274,43 @@ ${body}
         primary_color: string; accent_color: string; bg_color: string
         text_color?: string; text_muted?: string; display_font: string; body_font: string
       } | undefined
+
+      // Phase 7: dynamic routing — use DecisionEngine to decide which specialists to invoke
+      if (flags.DYNAMIC_AGENT_ROUTING) {
+        const { decide } = await import('../engines/decision')
+        const { data: proj } = await db.from('projects').select('objective').eq('id', projectId).single()
+        const objective = (proj?.objective as string) ?? ''
+        const { count: clarCount } = await db.from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', projectId)
+          .contains('metadata', { event_type: 'CLARIFICATION_REQUIRED' })
+        const { data: userMsgs } = await db.from('messages')
+          .select('metadata').eq('project_id', projectId).eq('author_type', 'user').limit(10)
+        const hasAttachments = (userMsgs ?? []).some(
+          (m) => Array.isArray((m.metadata as Record<string, unknown>)?.attachments)
+        )
+
+        const ctx = {
+          objective,
+          briefLength: objective.length,
+          hasAttachments,
+          previousClarificationCount: clarCount ?? 0,
+          retryCount: 0,
+          taskFailureCount: 0,
+        }
+
+        const niaDec = await decide('needs_nia', ctx, db, projectId, taskId)
+        if (niaDec === 'SKIP_NIA') {
+          rawTasks = rawTasks.filter((t) => t.jugnu_key !== 'nia')
+          await db.from('messages').insert({
+            project_id: projectId,
+            author_type: 'activity',
+            author_key: 'maya',
+            content: '⚡ Skipping design step — brief is clear enough to build directly.',
+            metadata: { event_type: 'ROUTING_DECISION', skipped: 'nia', reason: 'brief_sufficient' },
+          })
+        }
+      }
 
       // Seed design/tokens.css so Nia and Leo have a consistent design system to reference
       if (design_tokens) {
