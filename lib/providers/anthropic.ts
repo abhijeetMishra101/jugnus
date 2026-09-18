@@ -7,7 +7,12 @@ import type {
   TokenUsage,
 } from './types'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  defaultHeaders: process.env.ANTHROPIC_WORKSPACE_ID
+    ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID }
+    : {},
+})
 
 function toAnthropicMessages(messages: UnifiedMessage[]): Anthropic.MessageParam[] {
   return messages.map((m) => {

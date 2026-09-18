@@ -68,7 +68,12 @@ async function callJevDecision(
   if (!process.env.ANTHROPIC_API_KEY) return null
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      defaultHeaders: process.env.ANTHROPIC_WORKSPACE_ID
+        ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID }
+        : {},
+    })
 
     const optionsMap: Record<string, string[]> = {
       needs_clarification: ['ASK_CLARIFICATION', 'PROCEED'],
