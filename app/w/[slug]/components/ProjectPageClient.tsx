@@ -57,6 +57,7 @@ interface Props {
   tasks: Parameters<typeof JugnuPanel>[0]['tasks']
   activeJugnuKey: string | null
   jugnuRoles: Record<string, { display_role: string; focus: string }>
+  singleFrontDoor?: boolean
 }
 
 export function ProjectPageClient({
@@ -68,6 +69,7 @@ export function ProjectPageClient({
   tasks,
   activeJugnuKey,
   jugnuRoles,
+  singleFrontDoor,
 }: Props) {
   const [view, setView] = useState<'chat' | 'world'>('chat')
   const [worldEverMounted, setWorldEverMounted] = useState(false)
@@ -134,6 +136,7 @@ export function ProjectPageClient({
             userId={workspace.owner_id}
             initialMessages={initialMessages}
             activeJugnuKey={activeJugnuKey}
+            singleFrontDoor={singleFrontDoor}
           />
         </div>
 

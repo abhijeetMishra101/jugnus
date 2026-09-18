@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from './registry'
 import { writeFile, readFile, listFiles } from '../storage/files'
+import { flags } from '../feature-flags'
 
 import { getPreviewUrl } from './deploy-static'
 
@@ -264,7 +265,7 @@ ${body}
     })
 
     handlers['create_task_plan'] = async (input) => {
-      const rawTasks = input.tasks as Array<{
+      let rawTasks = input.tasks as Array<{
         title: string; description: string; capability: string
         jugnu_key: string; eta?: string; depends_on_indices?: number[]
       }>
@@ -273,6 +274,48 @@ ${body}
         primary_color: string; accent_color: string; bg_color: string
         text_color?: string; text_muted?: string; display_font: string; body_font: string
       } | undefined
+
+      // Phase 7: dynamic routing — use DecisionEngine to decide which specialists to invoke
+      if (flags.DYNAMIC_AGENT_ROUTING) {
+        const { decide } = await import('../engines/decision')
+        const { data: proj } = await db.from('projects').select('objective').eq('id', projectId).single()
+        const objective = (proj?.objective as string) ?? ''
+        const { count: clarCount } = await db.from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', projectId)
+          .contains('metadata', { event_type: 'CLARIFICATION_REQUIRED' })
+        const { data: userMsgs } = await db.from('messages')
+          .select('metadata').eq('project_id', projectId).eq('author_type', 'user').limit(10)
+        const hasAttachments = (userMsgs ?? []).some(
+          (m) => Array.isArray((m.metadata as Record<string, unknown>)?.attachments)
+        )
+
+        const ctx = {
+          objective,
+          briefLength: objective.length,
+          hasAttachments,
+          previousClarificationCount: clarCount ?? 0,
+          retryCount: 0,
+          taskFailureCount: 0,
+        }
+
+        const niaDec = await decide('needs_nia', ctx, db, projectId, taskId)
+        if (niaDec === 'SKIP_NIA') {
+          rawTasks = rawTasks.filter((t) => t.jugnu_key !== 'nia')
+          if (taskId) {
+            await db.from('tasks').update({ routing_decision: 'SKIP_NIA' }).eq('id', taskId)
+          }
+          await db.from('messages').insert({
+            project_id: projectId,
+            author_type: 'activity',
+            author_key: 'maya',
+            content: '⚡ Skipping design step — brief is clear enough to build directly.',
+            metadata: { event_type: 'ROUTING_DECISION', skipped: 'nia', reason: 'brief_sufficient' },
+          })
+        } else if (taskId) {
+          await db.from('tasks').update({ routing_decision: niaDec }).eq('id', taskId)
+        }
+      }
 
       // Seed design/tokens.css so Nia and Leo have a consistent design system to reference
       if (design_tokens) {
@@ -515,22 +558,57 @@ ${body}
       },
     })
 
-    handlers['generate_image'] = async (_input) => {
-      // Only post the upgrade card once per project — skip if already shown
-      const { count } = await db.from('messages')
+    handlers['generate_image'] = async (input) => {
+      const { generateImage } = await import('../engines/image')
+      const { flags } = await import('../feature-flags')
+
+      if (!flags.OPENAI_IMAGE_25 || !process.env.OPENAI_API_KEY) {
+        // Only post the upgrade card once per project
+        const { count } = await db.from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', projectId)
+          .contains('metadata', { event_type: 'UPGRADE_REQUIRED' })
+        if ((count ?? 0) === 0) {
+          await db.from('messages').insert({
+            project_id: projectId,
+            author_type: 'system',
+            author_key: 'system',
+            content: '✨ AI image generation is not yet enabled for this workspace.',
+            metadata: { event_type: 'UPGRADE_REQUIRED', feature: 'ai_image_generation' },
+          })
+        }
+        return { upgrade_required: true, message: 'Image generation is not enabled. Call search_photos immediately as a fallback.' }
+      }
+
+      // Count how many AI images have already been generated for this project
+      const { count: generatedCount } = await db.from('messages')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', projectId)
-        .contains('metadata', { event_type: 'UPGRADE_REQUIRED' })
-      if ((count ?? 0) === 0) {
+        .contains('metadata', { event_type: 'IMAGE_GENERATED' })
+
+      const result = await generateImage({
+        prompt: input.prompt as string,
+        alt: (input.alt as string) ?? (input.prompt as string),
+        quality: (input.quality as 'standard' | 'premium') ?? 'standard',
+        generatedCount: generatedCount ?? 0,
+      })
+
+      if (result.source === 'generated') {
         await db.from('messages').insert({
           project_id: projectId,
-          author_type: 'system',
-          author_key: 'system',
-          content: '✨ AI image generation is a Pro feature.',
-          metadata: { event_type: 'UPGRADE_REQUIRED', feature: 'ai_image_generation' },
+          author_type: 'activity',
+          author_key: jugnuKey,
+          content: `🎨 Generated image`,
+          metadata: { event_type: 'IMAGE_GENERATED', url: result.url, cost_usd: result.costUsd, model: result.model },
         })
+        return { url: result.url, alt: result.alt, source: 'generated' }
       }
-      return { upgrade_required: true, message: 'AI image generation requires a Pro account. Call search_photos immediately as a fallback.' }
+
+      if (result.source === 'unavailable') {
+        return { upgrade_required: false, message: result.reason, fallback: 'call search_photos' }
+      }
+
+      return { upgrade_required: false, message: 'Image unavailable', fallback: 'call search_photos' }
     }
   }
 
@@ -813,13 +891,16 @@ ${body}
     })
 
     handlers['request_changes'] = async (input) => {
-      // Count how many Leo tasks are already completed — cap at 1 revision cycle
+      // Count only Leo REVISION tasks (sort_order >= 100), not the initial build.
+      // This was previously >= 2 on ALL Leo completed tasks, which meant Tara could only
+      // ever request one correction (initial build counted as 1, revision as 2 = escalate).
       const { count: leoRevisions } = await db
         .from('tasks')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .eq('jugnu_key', 'leo')
         .eq('status', 'completed')
+        .gte('sort_order', 100)
 
       if ((leoRevisions ?? 0) >= 2) {
         // Correction loop bound reached — escalate instead of another revision

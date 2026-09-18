@@ -52,6 +52,13 @@ function AttachmentChip({ att, onRemove }: { att: Attachment; onRemove?: () => v
   )
 }
 
+const STARTER_PROMPTS = [
+  { icon: '🚀', label: 'Launch page', prompt: 'Build a launch page for my product. I want visitors to sign up for early access.' },
+  { icon: '🧮', label: 'ROI calculator', prompt: 'Build an ROI calculator that shows customers how much they save using my product.' },
+  { icon: '📅', label: 'Event campaign', prompt: 'Build a registration page for our upcoming webinar. The goal is maximum sign-ups.' },
+  { icon: '⏳', label: 'Waitlist page', prompt: "I'm building a new app and need a waitlist page to collect emails before launch." },
+]
+
 const JUGNU: Record<string, { name: string; color: string; bg: string; role: string; icon: string }> = {
   maya: { name: 'Maya', color: '#f9a8d4', bg: 'rgba(35, 12, 45, 0.82)', role: 'Planner',  icon: '🎯' },
   nia:  { name: 'Nia',  color: '#93c5fd', bg: 'rgba(10, 22, 50, 0.82)', role: 'Designer', icon: '🎨' },
@@ -107,7 +114,7 @@ const THINKING_PHRASES: Record<string, string[]> = {
   tara: ['Reading the code…', 'Running checks…', 'Verifying the app…', 'Wrapping up review…'],
 }
 
-function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: string[] }) {
+function TypingBubble({ jugnuKey, activities, singleFrontDoor }: { jugnuKey: string; activities: string[]; singleFrontDoor?: boolean }) {
   const j = JUGNU[jugnuKey]
   const [phraseIdx, setPhraseIdx] = useState(0)
 
@@ -137,12 +144,24 @@ function TypingBubble({ jugnuKey, activities }: { jugnuKey: string; activities: 
         <JugnuIllustration jugnuKey={jugnuKey} size={80} />
       </div>
       <div className="mb-2 max-w-sm">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-sm font-bold" style={{ color: j.color }}>{j.name}</span>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: j.color + '28', color: j.color }}>
-            {j.role}
-          </span>
-          <span className="text-xs" style={{ color: j.color }}>{j.icon}</span>
+        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          {singleFrontDoor ? (
+            <>
+              <span className="text-sm font-bold" style={{ color: '#fcd34d' }}>Jugnus</span>
+              <span className="text-xs" style={{ color: '#fcd34d', opacity: 0.6 }}>✨</span>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: j.color, background: j.color + '1a', border: `1px solid ${j.color}33` }}>
+                {j.icon} {j.name} · {j.role}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-sm font-bold" style={{ color: j.color }}>{j.name}</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: j.color + '28', color: j.color }}>
+                {j.role}
+              </span>
+              <span className="text-xs" style={{ color: j.color }}>{j.icon}</span>
+            </>
+          )}
         </div>
         <div className="rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm" style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}>
           {lastActivity && (
@@ -288,10 +307,10 @@ function MessageContent({ msg, color, bg }: { msg: Message; color: string; bg: s
 
 // ─── Jugnu section — illustration sticky on the left ─────────────────────────
 
-function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, userId, isActive, activities }: {
+function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, userId, isActive, activities, singleFrontDoor }: {
   authorKey: string; messages: Message[]; isNew: boolean
   pendingMsgId: string | null; projectId: string; userId: string
-  isActive?: boolean; activities?: string[]
+  isActive?: boolean; activities?: string[]; singleFrontDoor?: boolean
 }) {
   const j = JUGNU[authorKey]
   if (!j) return null
@@ -316,14 +335,26 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
       {/* Right column: name + role shown once, then all messages stacked */}
       <div className="flex-1 min-w-0 max-w-lg mt-8">
         <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span className="text-base font-bold" style={{ color: j.color }}>{j.name}</span>
-          <span
-            className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
-            style={{ backgroundColor: j.color + '28', color: j.color }}
-          >
-            {j.role}
-          </span>
-          <span className="text-sm" style={{ color: j.color }}>{j.icon}</span>
+          {singleFrontDoor ? (
+            <>
+              <span className="text-base font-bold" style={{ color: '#fcd34d' }}>Jugnus</span>
+              <span className="text-sm" style={{ color: '#fcd34d', opacity: 0.6 }}>✨</span>
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full" style={{ color: j.color, background: j.color + '1a', border: `1px solid ${j.color}33` }}>
+                {j.icon} {j.name} · {j.role}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-base font-bold" style={{ color: j.color }}>{j.name}</span>
+              <span
+                className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                style={{ backgroundColor: j.color + '28', color: j.color }}
+              >
+                {j.role}
+              </span>
+              <span className="text-sm" style={{ color: j.color }}>{j.icon}</span>
+            </>
+          )}
           <span className="text-xs text-gray-400">
             {new Date(messages[0].created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
@@ -768,9 +799,10 @@ interface Props {
   userId: string
   initialMessages: Message[]
   activeJugnuKey: string | null
+  singleFrontDoor?: boolean
 }
 
-export function ProjectChannel({ projectId, userId, initialMessages, activeJugnuKey: initialActive }: Props) {
+export function ProjectChannel({ projectId, userId, initialMessages, activeJugnuKey: initialActive, singleFrontDoor }: Props) {
   const [messages, setMessages]         = useState<Message[]>(initialMessages)
   const [activities, setActivities]     = useState<string[]>([])
   const [input, setInput]               = useState('')
@@ -967,6 +999,28 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto py-4 relative">
+          {feed.length === 0 && !activeJugnu && (
+            <div className="flex flex-col items-center justify-center h-full px-8 pb-16 pointer-events-auto">
+              <div className="text-center mb-8">
+                <div className="text-5xl mb-4">✨</div>
+                <h2 className="text-white/75 text-lg font-semibold mb-1.5">What are you building?</h2>
+                <p className="text-white/35 text-sm">Describe your project, or pick a starting point below.</p>
+              </div>
+              <div className="flex flex-col gap-2 w-full max-w-xs">
+                {STARTER_PROMPTS.map((p, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setInput(p.prompt)}
+                    className="text-left px-4 py-3 rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99]"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.11)', color: 'rgba(255,255,255,0.72)' }}
+                  >
+                    <span className="mr-2 text-base">{p.icon}</span>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {feed.map((item, i) => {
             const key = item.type === 'jugnu' ? `${item.authorKey}-${i}` : item.message.id
             const isLastActiveJugnu = item.type === 'jugnu' && item.authorKey === activeJugnu && i === feed.length - 1
@@ -978,6 +1032,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
                   projectId={projectId} userId={userId}
                   isActive={isLastActiveJugnu}
                   activities={isLastActiveJugnu ? activities : undefined}
+                  singleFrontDoor={singleFrontDoor}
                 />
               }
               if (item.type === 'system') return <SystemItem msg={item.message} />
@@ -999,7 +1054,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
             // TypingBubble if the active jugnu hasn't spoken yet in this section.
             const lastFeedItem = feed[feed.length - 1]
             const sameJugnuIsLast = lastFeedItem?.type === 'jugnu' && lastFeedItem.authorKey === activeJugnu
-            return sameJugnuIsLast ? null : <TypingBubble jugnuKey={activeJugnu} activities={activities} />
+            return sameJugnuIsLast ? null : <TypingBubble jugnuKey={activeJugnu} activities={activities} singleFrontDoor={singleFrontDoor} />
           })()}
 
           <div ref={bottomRef} />

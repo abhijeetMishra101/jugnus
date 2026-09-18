@@ -35,6 +35,7 @@ export default async function ProjectPage({ params }: Props) {
   const initialFiles = (filesRes.data ?? []) as { path: string; content: string; updated_at: string }[]
 
   const activeJugnuKey = (jugnusRes.data ?? []).find((j) => j.status === 'working')?.key ?? null
+  const singleFrontDoor = process.env.NEXTGEN_SINGLE_FRONT_DOOR_UI === 'true'
 
   return (
     <ProjectPageClient
@@ -46,6 +47,7 @@ export default async function ProjectPage({ params }: Props) {
       tasks={(tasksRes.data ?? []) as Parameters<typeof ProjectPageClient>[0]['tasks']}
       activeJugnuKey={activeJugnuKey}
       jugnuRoles={jugnuRoles}
+      singleFrontDoor={singleFrontDoor}
     />
   )
 }
