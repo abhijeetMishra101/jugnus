@@ -120,7 +120,7 @@ async function dispatchLeoSandbox(input: DispatchInput): Promise<DispatchResult>
   // Rough container cost: OpenAI charges ~$0.003/s for code_interpreter compute
   const containerCostUsd = (durationMs / 1000) * 0.003
 
-  // Update task record
+  // Update task record with execution evidence
   if (taskId) {
     await db.from('tasks').update({
       status: result.success ? 'completed' : 'failed',
@@ -130,6 +130,7 @@ async function dispatchLeoSandbox(input: DispatchInput): Promise<DispatchResult>
       completed_at: result.success ? new Date().toISOString() : null,
       model: 'gpt-5.3-codex',
       estimated_cost_usd: containerCostUsd,
+      build_evidence: result.evidence as unknown as Record<string, unknown>,
     }).eq('id', taskId)
   }
 

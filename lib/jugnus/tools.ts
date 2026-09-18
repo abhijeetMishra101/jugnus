@@ -302,6 +302,9 @@ ${body}
         const niaDec = await decide('needs_nia', ctx, db, projectId, taskId)
         if (niaDec === 'SKIP_NIA') {
           rawTasks = rawTasks.filter((t) => t.jugnu_key !== 'nia')
+          if (taskId) {
+            await db.from('tasks').update({ routing_decision: 'SKIP_NIA' }).eq('id', taskId)
+          }
           await db.from('messages').insert({
             project_id: projectId,
             author_type: 'activity',
@@ -309,6 +312,8 @@ ${body}
             content: '⚡ Skipping design step — brief is clear enough to build directly.',
             metadata: { event_type: 'ROUTING_DECISION', skipped: 'nia', reason: 'brief_sufficient' },
           })
+        } else if (taskId) {
+          await db.from('tasks').update({ routing_decision: niaDec }).eq('id', taskId)
         }
       }
 
