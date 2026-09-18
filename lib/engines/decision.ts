@@ -74,18 +74,19 @@ export async function decide(
 ): Promise<DecisionOutcome> {
   const deterministic = deterministicDecision(type, ctx)
 
-  let jevDecision: DecisionOutcome | null = null
-  let jevConfidence: number | null = null
+  // Jev integration point — shadow mode. Returns null until TypeSafe endpoint is live.
+  const jevResult = (flags.JEV_DECISION_ENGINE && process.env.JEV_API_KEY)
+    ? await (async (): Promise<{ decision: DecisionOutcome; confidence: number } | null> => {
+        try {
+          // const r = await callJev({ type, ctx })
+          // return { decision: r.decision, confidence: r.confidence }
+          return null
+        } catch { return null }
+      })()
+    : null
 
-  // Jev integration point — shadow mode when flag is on
-  if (flags.JEV_DECISION_ENGINE && process.env.JEV_API_KEY) {
-    try {
-      // TODO: replace with real Jev API call when TypeSafe provides the endpoint
-      // const jevResult = await callJev({ type, ctx })
-      // jevDecision = jevResult.decision
-      // jevConfidence = jevResult.confidence
-    } catch { /* shadow mode — never block on Jev failure */ }
-  }
+  const jevDecision: DecisionOutcome | null = jevResult?.decision ?? null
+  const jevConfidence: number | null = jevResult?.confidence ?? null
 
   const applied = deterministic ?? jevDecision ?? 'PROCEED'
   const agreement = jevDecision !== null ? jevDecision === applied : null
