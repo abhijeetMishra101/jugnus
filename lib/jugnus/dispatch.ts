@@ -217,9 +217,9 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       taskFailureCount: 0,
     }, db, projectId, taskId)
     if (clarDec === 'PROCEED') {
-      // Brief is clear — nudge Maya to skip asking and go straight to planning
+      // Brief is clear enough — allow one design question but don't interrogate
       dynamicNudge = (dynamicNudge ? dynamicNudge + '\n\n' : '') +
-        '[ROUTING] The brief is sufficiently detailed. Skip clarification questions and call create_task_plan directly.'
+        '[ROUTING] The brief is clear enough to plan. Ask at most ONE concise design preference question (e.g. style, colour palette, or a single key feature choice), then call create_task_plan immediately after the founder answers. Do not ask multiple questions.'
     }
   }
 

@@ -38,10 +38,10 @@ export interface DecisionRecord {
 function deterministicDecision(type: string, ctx: DecisionContext): DecisionOutcome | null {
   if (type === 'needs_clarification') {
     // Full brief: long, has attachments, or has prior answers → proceed
-    if (ctx.briefLength > 300 || ctx.hasAttachments || ctx.previousClarificationCount > 0) return 'PROCEED'
-    // Very short brief → always ask
-    if (ctx.briefLength < 50) return 'ASK_CLARIFICATION'
-    return null // ambiguous — let Jev/LLM decide
+    if (ctx.briefLength > 500 || ctx.hasAttachments || ctx.previousClarificationCount > 0) return 'PROCEED'
+    // Short brief (under 150 chars) — always ask at least one question
+    if (ctx.briefLength < 150) return 'ASK_CLARIFICATION'
+    return null // ambiguous (150–500 chars) — let Jev decide
   }
 
   if (type === 'needs_nia') {

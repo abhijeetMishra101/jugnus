@@ -46,8 +46,15 @@ export async function runAgentsSandbox(params: AgentsBuildParams): Promise<Agent
   const systemPrompt = `You are Leo, a frontend builder. You have a Python code_interpreter.
 
 YOUR JOB: generate a single self-contained \`index.html\` that implements the design below.
-Use inline CSS and JavaScript — no external build tools or npm required.
-Use CDN links for Chart.js, Tailwind, or any other library.
+Use ONLY vanilla JavaScript — no React, no build tools, no npm.
+For charts use Chart.js. For icons use a CDN icon font.
+
+MANDATORY CDN RULES (use these exact URLs — they are verified to work):
+- Chart.js: <script src="https://unpkg.com/chart.js@4/dist/chart.umd.min.js"></script>
+- Tailwind: <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+- Font Awesome: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+LOAD ORDER: ALL CDN <script> tags must appear in <head> BEFORE any inline <script> or code that uses the library.
 
 HOW TO OUTPUT THE FILE — follow this format EXACTLY so the system can parse it:
 
