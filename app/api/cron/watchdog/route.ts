@@ -88,6 +88,14 @@ export async function GET(request: Request): Promise<Response> {
   const failed: string[] = []
 
   for (const task of tasks) {
+    // Skip tasks that are waiting for founder input (pending escalation = not actually stuck)
+    const { count: pendingEscalations } = await db
+      .from('escalations')
+      .select('id', { count: 'exact', head: true })
+      .eq('task_id', task.id)
+      .eq('status', 'pending')
+    if ((pendingEscalations ?? 0) > 0) continue
+
     const retries = (task.retry_count as number) ?? 0
 
     if (retries >= MAX_RETRIES) {
