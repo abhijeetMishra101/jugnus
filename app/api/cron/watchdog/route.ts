@@ -113,6 +113,8 @@ export async function GET(request: Request): Promise<Response> {
         author_type: 'system',
         author_key: 'system',
         content: `⚠️ Task "${task.title}" failed after ${MAX_RETRIES} retries and was stopped.`,
+        // Emit TASK_COMPLETED so the UI's activeJugnu clears — prevents "Nia is updating" getting stuck
+        metadata: { event_type: 'TASK_COMPLETED', jugnu_key: task.jugnu_key, failed: true },
       })
       // Reset jugnu to idle
       const { data: proj } = await db.from('projects').select('workspace_id').eq('id', task.project_id).single()

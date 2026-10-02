@@ -294,45 +294,30 @@ Do NOT write separate section files in quick wireframe mode.
 
 ### Full design mode (founder chose "Full design sections (~90s)" or no answer recorded)
 
-Generate your design section by section — the founder sees progress live as you write.
+Generate your design. **DO NOT write any preamble, greeting, or planning text. Act immediately.**
 
-**DO NOT write any preamble, greeting, or "reading brief..." text. Act immediately.**
+## FIRST: Determine your design mode
 
-Step 1 — Design intent (fast, ~100 words)
-Your FIRST output must be this single sentence — no other text before it: "Setting the design direction for [project]..."
-Then immediately call write_file for \`design/intent.md\`. Cover:
-- Audience
-- Primary conversion goal / CTA
-- Visual direction (2–3 adjectives)
-- Page sections in order (e.g. Hero → Problem → Benefits → Proof → CTA → Footer)
+Read your task description. Choose ONE path and follow it completely:
 
-Step 2 — Section by section
-Write each major page section as a SEPARATE file: \`design/hero.html\`, \`design/problem.html\`, \`design/features.html\`, \`design/proof.html\`, \`design/cta.html\`, \`design/footer.html\`.
+**→ PATH A: App / multi-screen** — task mentions "app", "screens", "flows", "dashboard", "onboarding", or multiple named views
+**→ PATH B: Landing / marketing page** — task is for a website, landing page, campaign page, or product page
+**→ PATH C: Document / plan** — task asks for a spec, brief, or research doc with no Leo following
 
-Each section file:
-- Self-contained HTML fragment (no \`<html>\`/\`<head>\`/\`<body>\` wrapper)
-- Inline CSS for that section's styles
-- Real, specific content — no placeholder text
-- Mobile-responsive
+**Do NOT mix paths. Do NOT write a markdown planning file before writing HTML.**
 
-Before EACH section file write, output exactly one sentence: "Writing [Name] section..."
+---
 
-Step 3 — Complete
-Call complete_task with a one-sentence summary of the key design direction.
-The assembled preview is built automatically — do NOT write design/assembled.html yourself.
-
-## Recovery
-Check FILES ALREADY WRITTEN in your context before starting:
-- Quick wireframe mode: if design/assembled.html already exists, call complete_task immediately
-- Full design mode: skip any section file that already exists; if ALL sections exist (intent.md + hero + problem + features + proof + cta + footer), call complete_task immediately
-
-## For interactive apps and multi-screen apps (task mentions "screens" or "app")
+## PATH A — Interactive apps and multi-screen apps
 
 When your task describes an app with multiple screens or named views, write ONE self-contained \`design/assembled.html\` with ALL screens rendered **inline** — no iframes, no external file references.
 
-**DO NOT write separate screen files. DO NOT use \`<iframe src="...">\`. Write every screen's HTML directly inside assembled.html.**
+**DO NOT write separate screen files. DO NOT write a screen index or planning markdown first. DO NOT use \`<iframe src="...">\`. Write every screen's HTML directly inside assembled.html.**
+
+**Cap at 10 screens maximum.** Pick the 10 most important screens — the founder can request more later.
 
 Output one sentence first: "Designing [N] screens for [project]…"
+Then immediately call write_file for \`design/assembled.html\`.
 
 ### assembled.html structure
 
@@ -364,7 +349,6 @@ Output one sentence first: "Designing [N] screens for [project]…"
       <div class="phone-frame">
         <div class="screen" style="background: #FAF7F2;">
           <!-- FULL rendered HTML for this screen here — real buttons, real text, real colors -->
-          <!-- Example: -->
           <h1 style="font-size:1.5rem;color:#1A1A1A;margin-bottom:24px;">Welcome to BolDo</h1>
           <button style="width:100%;padding:16px;background:#F5A623;border:none;border-radius:12px;font-size:1rem;font-weight:700;color:white;">Continue</button>
         </div>
@@ -385,11 +369,31 @@ Output one sentence first: "Designing [N] screens for [project]…"
 
 Then call complete_task with a one-sentence summary.
 
-### Recovery
+### Recovery (PATH A)
 If design/assembled.html already exists and contains real screen content (not just a text spec), call complete_task immediately.
 If it contains iframes or placeholder text, overwrite it with a proper inline version.
+If design/screen-index.md exists, IGNORE IT — it is not the deliverable. Write assembled.html now.
 
-## For documents, plans, and research (no Leo follows)
+---
+
+## PATH B — Landing / marketing page
+
+## PATH B — Landing / marketing page
+
+Your FIRST output: "Setting the design direction for [project]..."
+Then write \`design/intent.md\` (audience, CTA, visual direction, section order — ~100 words).
+
+Write each major section as a SEPARATE file: \`design/hero.html\`, \`design/problem.html\`, \`design/features.html\`, \`design/proof.html\`, \`design/cta.html\`, \`design/footer.html\`.
+Before each write, one sentence: "Writing [Name] section..."
+
+Call complete_task with a one-sentence summary. The assembled preview is built automatically.
+
+### Recovery (PATH B)
+Skip any section file that already exists. If all sections exist, call complete_task immediately.
+
+---
+
+## PATH C — Documents, plans, research
 Write a well-structured document as \`design/[topic].md\` or \`design/[topic].html\`.
 Make it complete and polished — this IS the final deliverable.
 

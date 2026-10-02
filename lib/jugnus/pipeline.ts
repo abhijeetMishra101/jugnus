@@ -48,7 +48,8 @@ export async function runPipeline(
       author_type: 'system',
       author_key: 'system',
       content: `❌ ${jugnuKey} hit an error: ${dispatchError.message}`,
-      metadata: { event_type: 'REVIEW_FAILED', jugnu_key: jugnuKey, error: dispatchError.message },
+      // Emit TASK_COMPLETED so the UI's activeJugnu clears — prevents loading overlays getting stuck
+      metadata: { event_type: 'TASK_COMPLETED', jugnu_key: jugnuKey, failed: true, error: dispatchError.message },
     })
     // Reset task to pending so the watchdog can re-dispatch quickly (not stuck in_progress)
     if (taskId) {
