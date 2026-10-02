@@ -1,8 +1,8 @@
 import OpenAI from 'openai'
 import { flags } from '../feature-flags'
 
-const MODEL_STANDARD = 'dall-e-3'
-const MODEL_PREMIUM  = 'dall-e-3'
+const MODEL_STANDARD = 'gpt-image-1'   // OpenAI Images 2.5 — better quality, lower cost than DALL-E 3
+const MODEL_PREMIUM  = 'gpt-image-1'
 
 // Conservative budget: max 2 generated images per project to cap cost
 const MAX_GENERATED_IMAGES_PER_PROJECT = 2
@@ -44,19 +44,22 @@ export async function generateImage(params: GenerateImageParams): Promise<ImageR
   const model = quality === 'premium' ? MODEL_PREMIUM : MODEL_STANDARD
 
   try {
+    // gpt-image-1 returns base64 by default; request URL format explicitly
     const response = await client.images.generate({
       model,
       prompt,
       n: 1,
-      size: '1792x1024',
-      response_format: 'url',
+      size: '1024x1024',
     })
 
-    const url = response.data?.[0]?.url
-    if (!url) throw new Error('No URL in response')
+    // gpt-image-1 returns base64 — convert to data URL; fallback to url field if present
+    const imgData = response.data?.[0]
+    const url = (imgData as { url?: string })?.url
+      ?? (imgData?.b64_json ? `data:image/png;base64,${imgData.b64_json}` : null)
+    if (!url) throw new Error('No image data in response')
 
-    // Rough cost estimate: ~$0.04 per image for standard, ~$0.08 for premium
-    const costUsd = quality === 'premium' ? 0.08 : 0.04
+    // gpt-image-1 pricing: ~$0.04/image (1024×1024 standard)
+    const costUsd = 0.04
 
     return { source: 'generated', url, alt, model, costUsd }
   } catch (err) {
