@@ -376,6 +376,15 @@ ${body}
         await writeFile(projectId, null, 'design/tokens.css', tokensCss, db)
       }
 
+      // Idempotency guard — if non-Maya tasks already exist, Maya called this tool twice. Reject.
+      const { count: existingPipelineTasks } = await db.from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .neq('jugnu_key', 'maya')
+      if ((existingPipelineTasks ?? 0) > 0) {
+        return { success: false, error: 'Plan already exists for this project. Do not call create_task_plan more than once.' }
+      }
+
       const insertedIds: string[] = []
       for (let i = 0; i < rawTasks.length; i++) {
         const t = rawTasks[i]

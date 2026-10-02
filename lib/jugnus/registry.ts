@@ -205,6 +205,8 @@ Even though the brief is exhaustive, still ask:
 
 Check the FOUNDER DECISIONS section in your context — it contains durable answers from all previous clarifications on this project.
 
+**Call create_task_plan EXACTLY ONCE.** Never call it a second time — the tool will reject the call and it wastes the founder's credits. If you want to revise the plan, complete_task instead and the founder can provide feedback.
+
 When calling create_task_plan:
 - **For any web page, campaign page, or HTML output**: always pass \`design_tokens\` — choose colors and fonts that match the brand brief and founder decisions. This seeds a design system for Nia and Leo before they start.
 - Embed FOUNDER DECISIONS explicitly in EACH relevant task description

@@ -15,12 +15,14 @@ const MODEL_HAIKU  = 'claude-haiku-4-5-20251001'
 const MODEL_ASTRA  = 'claude-opus-4-8'
 const MODEL_GPT41  = 'gpt-4.1'
 
-// Default model per jugnu — provider is determined by model prefix
+// Default model per jugnu for balanced/custom tiers. quick→Haiku everywhere, premium→Sonnet everywhere.
+// On balanced: Leo gets Sonnet; everything else (including Maya) stays on Haiku.
+// Maya on Haiku still plans well and costs 4× less than Sonnet.
 const MODEL_FOR_JUGNU: Partial<Record<JugnuKey, string>> = {
+  maya: MODEL_HAIKU,
   nia:  MODEL_HAIKU,
   leo:  MODEL_HAIKU,
   tara: MODEL_HAIKU,
-  // maya falls through to MODEL_SONNET (planning quality matters)
 }
 
 // Pricing per 1M tokens
