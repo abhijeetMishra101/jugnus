@@ -879,35 +879,42 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       }, (payload: any) => {
         const msg = payload.new as Message
         if (msg.author_type !== 'jugnu') return
-        // Streaming: update content of an existing live row in place
-        setMessages((prev) =>
-          prev.map((m) => m.id === msg.id ? { ...m, content: msg.content } : m)
-        )
+        // Upsert: if INSERT was dropped by Realtime, the UPDATE adds the message instead of silently skipping it
+        setMessages((prev) => {
+          const exists = prev.find((m) => m.id === msg.id)
+          if (exists) return prev.map((m) => m.id === msg.id ? { ...m, content: msg.content, metadata: msg.metadata } : m)
+          return [...prev, msg].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        })
       })
       .subscribe()
 
-    db.from('messages')
-      .select('id,project_id,author_type,author_key,content,created_at,metadata')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: true })
-      .limit(100)
-      .then(({ data }) => {
-        if (data?.length) {
-          // Mark gap-fill results as initial before the re-render so they
-          // don't trigger fly-in animations (they already existed in the DB).
-          ;(data as Message[]).forEach((m) => initialIds.current.add(m.id))
-          setMessages((prev) => {
-            const seen = new Set(prev.map((m) => m.id))
-            const merged = [
-              ...prev,
-              ...(data as Message[]).filter((m) => !seen.has(m.id)),
-            ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-            return merged.length === prev.length ? prev : merged
-          })
-        }
-      })
+    const fetchMessages = () =>
+      db.from('messages')
+        .select('id,project_id,author_type,author_key,content,created_at,metadata')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true })
+        .limit(200)
+        .then(({ data }) => {
+          if (data?.length) {
+            ;(data as Message[]).forEach((m) => initialIds.current.add(m.id))
+            setMessages((prev) => {
+              const seen = new Set(prev.map((m) => m.id))
+              const merged = [
+                ...prev,
+                ...(data as Message[]).filter((m) => !seen.has(m.id)),
+              ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+              return merged.length === prev.length ? prev : merged
+            })
+          }
+        })
 
-    return () => { void db.removeChannel(msgSub) }
+    // Initial gap-fill on mount
+    void fetchMessages()
+
+    // Poll every 10s while page is open — catches Realtime INSERT drops during burst writes (e.g. Nia writing 15 screens)
+    const pollId = setInterval(() => { void fetchMessages() }, 10_000)
+
+    return () => { void db.removeChannel(msgSub); clearInterval(pollId) }
   }, [projectId])
 
   useEffect(() => {
