@@ -41,13 +41,21 @@ function getAdapter(model: string): ProviderAdapter {
 }
 
 /**
- * Resolve the model to use for this jugnu/retry combination.
- * On retry ≥ 2 with ASTRA_EXPERT_ESCALATION enabled, escalate to gpt-6-astra.
+ * Resolve the model to use for this jugnu/tier/retry combination.
+ *
+ * Tier routing:
+ *   quick    → all Haiku  (cheapest, fastest)
+ *   balanced → Haiku for Nia/Tara, Sonnet for Leo  (recommended)
+ *   premium  → Sonnet everywhere  (highest quality)
+ *
+ * On retry ≥ 2 with ASTRA_EXPERT_ESCALATION enabled, escalate to Astra regardless of tier.
  */
-function resolveModel(jugnuKey: JugnuKey, retryCount = 0): string {
-  if (flags.ASTRA_EXPERT_ESCALATION && retryCount >= 2) {
-    return MODEL_ASTRA
-  }
+function resolveModel(jugnuKey: JugnuKey, tier: string, retryCount = 0): string {
+  if (flags.ASTRA_EXPERT_ESCALATION && retryCount >= 2) return MODEL_ASTRA
+  if (tier === 'quick')   return MODEL_HAIKU
+  if (tier === 'premium') return MODEL_SONNET
+  // balanced: Leo gets Sonnet, Nia/Tara stay on Haiku
+  if (jugnuKey === 'leo') return MODEL_SONNET
   return MODEL_FOR_JUGNU[jugnuKey] ?? MODEL_SONNET
 }
 
@@ -170,11 +178,17 @@ async function dispatchLeoSandbox(input: DispatchInput): Promise<DispatchResult>
 export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResult> {
   const { projectId, taskId, jugnuKey, db, retryCount = 0 } = input
   const jugnu = getJugnu(jugnuKey)
-  const MODEL = resolveModel(jugnuKey, retryCount)
+
+  // Read build_tier from project constraints — determines model quality for this run
+  const { data: projData } = await db.from('projects').select('constraints').eq('id', projectId).single()
+  const tier = ((projData?.constraints as Record<string, unknown>)?.build_tier as string) ?? 'balanced'
+
+  const MODEL = resolveModel(jugnuKey, tier, retryCount)
   const escalatedToAstra = MODEL === MODEL_ASTRA
 
-  // Phase 4: Leo Agents API sandbox — bypasses normal tool loop entirely
-  if (jugnuKey === 'leo' && flags.OPENAI_AGENTS_EXECUTION && process.env.OPENAI_API_KEY) {
+  // Phase 4: Leo Agents API sandbox — only active on quick tier (single-file HTML fast path)
+  // Balanced/premium tiers use the normal Sonnet tool loop for higher-quality multi-screen builds
+  if (jugnuKey === 'leo' && flags.OPENAI_AGENTS_EXECUTION && process.env.OPENAI_API_KEY && tier === 'quick') {
     return dispatchLeoSandbox(input)
   }
 
@@ -217,9 +231,10 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       taskFailureCount: 0,
     }, db, projectId, taskId)
     if (clarDec === 'PROCEED') {
-      // Brief is clear enough — allow one design question but don't interrogate
+      // Brief is clear enough — Jev says proceed, but Maya still runs her full question protocol
+      // (tier selection + priority + constraints). Do not restrict question count here.
       dynamicNudge = (dynamicNudge ? dynamicNudge + '\n\n' : '') +
-        '[ROUTING] The brief is clear enough to plan. Ask at most ONE concise design preference question (e.g. style, colour palette, or a single key feature choice), then call create_task_plan immediately after the founder answers. Do not ask multiple questions.'
+        '[ROUTING] Brief is well-specified. Run your standard question protocol (tier + priority + constraints). Do not add questions beyond the mandatory 3.'
     }
   }
 

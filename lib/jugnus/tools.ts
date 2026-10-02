@@ -245,6 +245,11 @@ ${body}
               tara: { type: 'object', properties: { display_role: { type: 'string' }, focus: { type: 'string' } }, required: ['display_role', 'focus'] },
             },
           },
+          build_tier: {
+            type: 'string',
+            enum: ['quick', 'balanced', 'premium'],
+            description: 'Build quality tier selected by the founder. quick = all Haiku (~10–20 min, from ₹10), balanced = Haiku design + Sonnet build (~25–40 min, from ₹50), premium = Sonnet everywhere (~40–60 min, from ₹120). Always set this from the founder\'s tier question answer.',
+          },
           design_tokens: {
             type: 'object',
             description: 'Brand design tokens for web page projects. Provide these for any landing page, campaign page, or HTML output — Nia and Leo will use them as CSS custom properties instead of hardcoded values.',
@@ -270,6 +275,7 @@ ${body}
         jugnu_key: string; eta?: string; depends_on_indices?: number[]
       }>
       const jugnu_roles = input.jugnu_roles as Record<string, { display_role: string; focus: string }> | undefined
+      const build_tier = (input.build_tier as string | undefined) ?? 'balanced'
       const design_tokens = input.design_tokens as {
         primary_color: string; accent_color: string; bg_color: string
         text_color?: string; text_muted?: string; display_font: string; body_font: string
@@ -383,16 +389,18 @@ ${body}
         insertedIds.push(data?.id ?? '')
       }
 
-      // Store jugnu_roles in project constraints for context injection
-      if (jugnu_roles) {
+      // Store jugnu_roles and build_tier in project constraints for context injection
+      {
         const { data: proj } = await db.from('projects').select('constraints').eq('id', projectId).single()
         const existing = (proj?.constraints ?? {}) as Record<string, unknown>
         await db.from('projects').update({
           status: 'building',
-          constraints: { ...existing, jugnu_roles },
+          constraints: {
+            ...existing,
+            build_tier,
+            ...(jugnu_roles ? { jugnu_roles } : {}),
+          },
         }).eq('id', projectId)
-      } else {
-        await db.from('projects').update({ status: 'building' }).eq('id', projectId)
       }
 
       await db.from('messages').insert({
