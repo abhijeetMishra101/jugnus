@@ -575,16 +575,14 @@ function DesignPreviewCard({ projectId, isRevising }: { projectId: string; isRev
               {isRevising ? 'being revised' : 'ready for review'}
             </span>
           </div>
-          {!isRevising && (
-            <a
-              href={`/preview/design/${projectId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              Open full design →
-            </a>
-          )}
+          <a
+            href={`/preview/design/${projectId}`}
+            target="_blank"
+            rel="noreferrer"
+            className={`text-xs font-semibold transition-colors ${isRevising ? 'text-amber-600 hover:text-amber-800' : 'text-blue-600 hover:text-blue-800'}`}
+          >
+            {isRevising ? 'View current design →' : 'Open full design →'}
+          </a>
         </div>
       </div>
     </div>
