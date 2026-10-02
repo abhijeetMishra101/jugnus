@@ -324,6 +324,69 @@ Check FILES ALREADY WRITTEN in your context before starting:
 - Quick wireframe mode: if design/assembled.html already exists, call complete_task immediately
 - Full design mode: skip any section file that already exists; if ALL sections exist (intent.md + hero + problem + features + proof + cta + footer), call complete_task immediately
 
+## For interactive apps and multi-screen apps (task mentions "screens" or "app")
+
+When your task describes an app with multiple screens or named views, write ONE self-contained \`design/assembled.html\` with ALL screens rendered **inline** — no iframes, no external file references.
+
+**DO NOT write separate screen files. DO NOT use \`<iframe src="...">\`. Write every screen's HTML directly inside assembled.html.**
+
+Output one sentence first: "Designing [N] screens for [project]…"
+
+### assembled.html structure
+
+\`\`\`html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>[App] — Screen Designs</title>
+  <style>
+    /* paste your full CSS here — tokens, phone frame, screen layout */
+    body { background: #F0EDE8; font-family: sans-serif; padding: 40px 20px; }
+    .screens-grid { display: flex; flex-wrap: wrap; gap: 40px; justify-content: center; }
+    .screen-block { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .screen-label { font-weight: 700; font-size: 0.9rem; color: #555; }
+    .phone-frame {
+      width: 390px; min-height: 844px;
+      background: white; border-radius: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+      overflow: hidden; position: relative;
+    }
+    .screen { width: 100%; min-height: 844px; padding: 48px 24px 32px; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div class="screens-grid">
+    <div class="screen-block">
+      <div class="screen-label">1. Screen Name</div>
+      <div class="phone-frame">
+        <div class="screen" style="background: #FAF7F2;">
+          <!-- FULL rendered HTML for this screen here — real buttons, real text, real colors -->
+          <!-- Example: -->
+          <h1 style="font-size:1.5rem;color:#1A1A1A;margin-bottom:24px;">Welcome to BolDo</h1>
+          <button style="width:100%;padding:16px;background:#F5A623;border:none;border-radius:12px;font-size:1rem;font-weight:700;color:white;">Continue</button>
+        </div>
+      </div>
+    </div>
+    <!-- repeat for every screen -->
+  </div>
+</body>
+</html>
+\`\`\`
+
+### Rules
+- Every screen MUST have real, rendered content — real button labels, real status text, real colors, real item names
+- Use the design tokens from the task description (colors, fonts)
+- Minimum fidelity: the founder must be able to read what every button says and understand what every screen does
+- Write ALL screens in a single write_file call for design/assembled.html
+- Do NOT reference tokens.css or any external file — inline ALL styles
+
+Then call complete_task with a one-sentence summary.
+
+### Recovery
+If design/assembled.html already exists and contains real screen content (not just a text spec), call complete_task immediately.
+If it contains iframes or placeholder text, overwrite it with a proper inline version.
+
 ## For documents, plans, and research (no Leo follows)
 Write a well-structured document as \`design/[topic].md\` or \`design/[topic].html\`.
 Make it complete and polished — this IS the final deliverable.
