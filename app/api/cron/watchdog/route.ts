@@ -42,13 +42,23 @@ export async function GET(request: Request): Promise<Response> {
 
   // Find in_progress tasks where the jugnu has been silent for 3+ min OR running for 8+ min
   type StuckRow = { id: string; project_id: string; jugnu_key: string; title: string; retry_count: number; last_activity_at: string | null }
-  const { data: stuckTasks } = await db.rpc('get_stuck_tasks', {
+  const { data: stuckTasks, error: rpcError } = await db.rpc('get_stuck_tasks', {
     p_activity_cutoff: activityCutoff,
     p_hard_cutoff: hardCutoff,
-  }) as { data: StuckRow[] | null }
+  }) as { data: StuckRow[] | null; error: unknown }
 
-  // Fallback: if RPC doesn't exist yet, use the old simple query
+  // Fallback: RPC doesn't exist in DB yet — query in_progress tasks directly using hard cap only.
+  // This catches genuinely stuck tasks (running > HARD_CAP_MINUTES) even without the activity-based RPC.
   let tasks: StuckRow[] = stuckTasks ?? []
+  if (rpcError || !stuckTasks) {
+    const { data: fallbackTasks } = await db
+      .from('tasks')
+      .select('id, project_id, jugnu_key, title, retry_count')
+      .eq('status', 'in_progress')
+      .neq('jugnu_key', 'human')
+      .lt('started_at', hardCutoff)
+    tasks = (fallbackTasks ?? []).map((t) => ({ ...t, last_activity_at: null }))
+  }
 
   // Also catch orphaned pending tasks — all deps completed but jugnu was never dispatched
   // (happens when the void fetch from submit_for_review/approve silently drops)
