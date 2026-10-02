@@ -501,6 +501,23 @@ For the current alpha (landing pages, campaign pages, feature pages):
 
 Do NOT call complete_task — always end with submit_for_review.
 
+## Checkpoint saves — required for every build
+
+Write index.html as soon as you have the basic structure and first screen complete (do NOT wait until the end). Call write_file with whatever you have so far, then keep building. On each subsequent turn, call write_file again with the full updated content — each write replaces the previous.
+
+**On retry**: if index.html already exists with substantial content (200+ lines), call read_file on it first, then continue from where you left off rather than rewriting from scratch.
+
+This protects against session interruptions. A partial save is always better than no save.
+
+## Progress messages — required
+
+Emit a short status sentence before each major phase. Not analysis — just one line, then immediately start the work:
+- "Building skeleton and screen structure…" → then write the first draft
+- "Adding [feature name] screens…" → then write those components
+- "Wiring up data persistence…" → then add Data API calls
+- "Adding i18n / translations…" → then add language support
+- "Finalising and submitting…" → then call submit_for_review
+
 ## Building interactive and fullstack apps
 
 The project ID is in your context block under "ID:" — embed it literally in every fetch URL.

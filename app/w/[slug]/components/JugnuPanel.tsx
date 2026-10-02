@@ -3,12 +3,30 @@
 import { useEffect, useState } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
 
+function parseEtaUpperMin(eta: string | null | undefined): number | null {
+  if (!eta) return null
+  const nums = eta.match(/\d+/g)
+  if (!nums?.length) return null
+  return parseInt(nums[nums.length - 1], 10)
+}
+
+function useNow(intervalMs: number) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(id)
+  }, [intervalMs])
+  return now
+}
+
 interface Task {
   id: string
   title: string
   status: string
   jugnu_key: string
   sort_order: number
+  started_at?: string | null
+  eta?: string | null
 }
 
 interface Jugnu {
@@ -59,6 +77,7 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
   const [jugnus, setJugnus] = useState<Jugnu[]>(initialJugnus)
   const [tasks, setTasks]   = useState<Task[]>(initialTasks)
   const [submissions, setSubmissions] = useState<Submission[]>([])
+  const now = useNow(15_000)
 
   useEffect(() => {
     const db = createBrowserClient()
@@ -83,7 +102,7 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
 
     // Fresh snapshot on mount so we never miss tasks created before the subscription fires
     void db.from('tasks')
-      .select('id,title,status,jugnu_key,sort_order')
+      .select('id,title,status,jugnu_key,sort_order,started_at,eta')
       .eq('project_id', projectId)
       .order('sort_order', { ascending: true })
       .then(({ data }) => {
@@ -145,6 +164,18 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
             // Fall back to jugnus.status for jugnus that bypass task rows (e.g. Maya during planning)
             const derivedStatus = currentTask ? 'working' : hasDone && !hasPending ? 'done' : j.status === 'working' ? 'working' : 'idle'
             const badge = STATUS_BADGE[derivedStatus] ?? STATUS_BADGE.idle
+
+            // Remaining time estimate
+            let timeLeft: string | null = null
+            if (derivedStatus === 'working' && currentTask?.started_at) {
+              const upperMin = parseEtaUpperMin(currentTask.eta)
+              if (upperMin != null) {
+                const elapsedMin = (now - new Date(currentTask.started_at).getTime()) / 60_000
+                const rem = Math.round(Math.max(0, upperMin - elapsedMin))
+                timeLeft = rem <= 0 ? 'wrapping up' : `~${rem}m left`
+              }
+            }
+
             return (
               <div key={j.key} className="flex items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -162,9 +193,11 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
                     </span>
                   </div>
                   <p className="text-xs text-white/40 truncate">
-                    {currentTask
-                      ? currentTask.title
-                      : jugnuRoles?.[j.key]?.display_role ?? JUGNU_ROLE[j.key] ?? j.role}
+                    {timeLeft
+                      ? timeLeft
+                      : currentTask
+                        ? currentTask.title
+                        : jugnuRoles?.[j.key]?.display_role ?? JUGNU_ROLE[j.key] ?? j.role}
                   </p>
                 </div>
               </div>

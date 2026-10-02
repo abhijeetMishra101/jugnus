@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { advanceProject } from '@/lib/orchestration/executor'
 
 export const maxDuration = 60
 
@@ -80,10 +81,6 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
-  if (!tasks.length) {
-    return NextResponse.json({ recovered: 0, failed: 0 })
-  }
-
   const recovered: string[] = []
   const failed: string[] = []
 
@@ -143,6 +140,39 @@ export async function GET(request: Request): Promise<Response> {
       await db.from('tasks').update({ status: 'pending', started_at: null }).eq('id', task.id)
       await db.from('jugnus').update({ status: 'idle' }).eq('key', task.jugnu_key)
       console.error(`[watchdog] jugnu-respond returned ${res.status} for task ${task.id}`)
+    }
+  }
+
+  // Phase 2 — re-kick building projects that have pending tasks but no active jugnu.
+  // This covers: task failure → reset to pending → nothing in_progress → project stalls silently.
+  const IDLE_BUILD_MINUTES = 2
+  const idleBuildCutoff = new Date(Date.now() - IDLE_BUILD_MINUTES * 60 * 1000).toISOString()
+  const { data: stalledProjects } = await db
+    .from('projects')
+    .select('id')
+    .eq('status', 'building')
+    .lt('updated_at', idleBuildCutoff)
+
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
+  for (const proj of stalledProjects ?? []) {
+    const { count: inProgressCount } = await db.from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', proj.id).eq('status', 'in_progress')
+    if ((inProgressCount ?? 0) > 0) continue
+
+    const { count: pendingNonHuman } = await db.from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', proj.id).eq('status', 'pending').neq('jugnu_key', 'human')
+    if ((pendingNonHuman ?? 0) === 0) continue
+
+    const { dispatched, jugnuKey, taskId } = await advanceProject(proj.id, db)
+    if (dispatched && jugnuKey && taskId) {
+      await fetch(`${base}/api/internal/jugnu-respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}` },
+        body: JSON.stringify({ projectId: proj.id, taskId, jugnuKey }),
+      })
+      recovered.push(taskId)
     }
   }
 

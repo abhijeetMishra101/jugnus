@@ -114,18 +114,15 @@ export async function POST(
     return NextResponse.json({ ok: false, reason: 'revision_limit_reached' }, { status: 409 })
   }
 
-  // Feedback — insert a Nia revision task before the human approval task
-  await db.from('tasks').update({
-    status: 'pending',
-    started_at: null,
-  }).eq('id', humanTask.id)
-
+  // Feedback — insert a Nia revision task, then re-wire the human task to depend on it.
+  // This prevents stacked approval gates: the old human task stays in the dep chain for
+  // Leo/Tara but won't fire again until Nia's revision is complete.
   const imageRefs = (attachments ?? []).filter((a) => a.isImage)
   const imageBlock = imageRefs.length > 0
     ? `\n\nFOUNDER REFERENCE IMAGES (use these as real img tags in revised sections):\n${imageRefs.map((a) => `- ${a.name}: ${a.url}`).join('\n')}`
     : ''
 
-  await db.from('tasks').insert({
+  const { data: newNiaTask } = await db.from('tasks').insert({
     project_id: projectId,
     title: 'Revise alignment artifact based on founder feedback',
     description: `The founder reviewed your alignment artifact and requested changes:\n\n${feedback}${imageBlock}\n\nUpdate your artifact using write_file to reflect this feedback, then call complete_task.`,
@@ -134,7 +131,14 @@ export async function POST(
     depends_on: [],
     sort_order: -1,
     status: 'pending',
-  })
+  }).select('id').single()
+
+  // Human task now depends on the new Nia revision — it won't fire until Nia is done
+  await db.from('tasks').update({
+    status: 'pending',
+    started_at: null,
+    depends_on: newNiaTask ? [newNiaTask.id] : [],
+  }).eq('id', humanTask.id)
 
   await db.from('messages').insert({
     project_id: projectId,

@@ -322,6 +322,27 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
     tara: '🔍 Starting review…',
   }
 
+  const turnLabel = (key: JugnuKey, turn: number): string => {
+    if (key === 'leo') {
+      if (turn < 3)  return '⚙️ Writing structure…'
+      if (turn < 7)  return '⚙️ Building screens…'
+      if (turn < 11) return '⚙️ Adding functionality…'
+      if (turn < 16) return '⚙️ Wiring data & logic…'
+      if (turn < 20) return '⚙️ Polishing…'
+      return '⚙️ Finalising…'
+    }
+    if (key === 'nia') {
+      return turn < 4 ? '🎨 Designing screens…' : '🎨 Refining design…'
+    }
+    if (key === 'maya') {
+      return '📋 Thinking through the plan…'
+    }
+    if (key === 'tara') {
+      return turn < 3 ? '🔍 Checking flows…' : '🔍 Writing feedback…'
+    }
+    return '💭 Working…'
+  }
+
   const earlyActivityLabel: Record<string, string> = {
     write_file:        '📝 Writing file…',
     read_file:         '👁️ Reading file…',
@@ -362,7 +383,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       project_id: projectId,
       author_type: 'activity',
       author_key: jugnuKey,
-      content: turn === 0 ? (turn0Label[jugnuKey] ?? '💭 Starting…') : `💭 Continuing (turn ${turn + 1})…`,
+      content: turn === 0 ? (turn0Label[jugnuKey] ?? '💭 Starting…') : turnLabel(jugnuKey, turn),
       metadata: { event_type: 'JUGNU_THINKING', jugnu_key: jugnuKey, turn, model: MODEL },
     })
 
