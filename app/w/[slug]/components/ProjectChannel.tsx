@@ -488,6 +488,7 @@ function SystemItem({ msg }: { msg: Message }) {
   const deployUrl = meta.deploy_url as string | null | undefined
   const isCompleted = meta.event_type === 'PROJECT_COMPLETED' && deployUrl
   const isUpgradeRequired = meta.event_type === 'UPGRADE_REQUIRED'
+  const isBudgetPaused = meta.event_type === 'BUDGET_PAUSED'
 
   if (isUpgradeRequired) return <ProUpgradeCard />
 
@@ -510,6 +511,15 @@ function SystemItem({ msg }: { msg: Message }) {
             <path d="M6 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3M10 2h4m0 0v4m0-4L7 9" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           View Preview
+        </a>
+      )}
+      {isBudgetPaused && (
+        <a
+          href="./settings"
+          className="flex items-center gap-1.5 text-xs font-medium px-4 py-1.5 rounded-full transition-opacity hover:opacity-80"
+          style={{ background: 'rgba(245,158,11,0.3)', color: '#fcd34d', backdropFilter: 'blur(6px)', border: '1px solid rgba(245,158,11,0.4)' }}
+        >
+          ⚙️ Increase budget to resume
         </a>
       )}
     </div>

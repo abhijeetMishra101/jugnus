@@ -43,19 +43,53 @@ export async function runPipeline(
   }
 
   if (dispatchError) {
+    // Emit TASK_COMPLETED so the UI clears the active-jugnu overlay
     await db.from('messages').insert({
       project_id: projectId,
       author_type: 'system',
       author_key: 'system',
       content: `❌ ${jugnuKey} hit an error: ${dispatchError.message}`,
-      // Emit TASK_COMPLETED so the UI's activeJugnu clears — prevents loading overlays getting stuck
       metadata: { event_type: 'TASK_COMPLETED', jugnu_key: jugnuKey, failed: true, error: dispatchError.message },
     })
-    // Reset task to pending so the watchdog can re-dispatch quickly (not stuck in_progress)
-    if (taskId) {
-      await db.from('tasks').update({ status: 'pending', started_at: null }).eq('id', taskId)
-    }
+
     await resetJugnuIdle(projectId, jugnuKey, db)
+
+    if (taskId) {
+      // Increment retry count and reset to pending
+      const { data: current } = await db.from('tasks').select('retry_count').eq('id', taskId).single()
+      const retries = ((current?.retry_count as number) ?? 0) + 1
+      const MAX_PIPELINE_RETRIES = 3
+
+      if (retries >= MAX_PIPELINE_RETRIES) {
+        await db.from('tasks').update({ status: 'failed', retry_count: retries }).eq('id', taskId)
+        return
+      }
+
+      await db.from('tasks').update({ status: 'pending', started_at: null, retry_count: retries }).eq('id', taskId)
+
+      // Self-kick — don't wait for the daily Vercel Hobby cron; re-dispatch immediately.
+      // jugnu-respond responds 202 instantly so this await resolves in < 1s.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+      if (appUrl) {
+        try {
+          await fetch(`${appUrl}/api/internal/jugnu-respond`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
+            },
+            body: JSON.stringify({
+              projectId,
+              taskId,
+              jugnuKey,
+              nudge: `Your previous attempt failed (retry ${retries}/${MAX_PIPELINE_RETRIES}): ${dispatchError.message}. Pick up where you left off.`,
+            }),
+          })
+        } catch (e) {
+          console.error('[pipeline] self-kick after failure failed:', e)
+        }
+      }
+    }
     return
   }
 

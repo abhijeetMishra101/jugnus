@@ -77,7 +77,7 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
   const [jugnus, setJugnus] = useState<Jugnu[]>(initialJugnus)
   const [tasks, setTasks]   = useState<Task[]>(initialTasks)
   const [submissions, setSubmissions] = useState<Submission[]>([])
-  const now = useNow(15_000)
+  const now = useNow(10_000)
 
   useEffect(() => {
     const db = createBrowserClient()

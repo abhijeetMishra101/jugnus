@@ -136,6 +136,31 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
     return { dispatched: false, jugnuKey: null, taskId: next.id }
   }
 
+  // Credit pre-check — block dispatch if budget headroom is too thin.
+  // Prevents mid-run ceiling hits that waste tokens and leave tasks stuck.
+  const { data: projBudget } = await db
+    .from('projects')
+    .select('total_cost_usd, credit_ceiling_usd')
+    .eq('id', projectId)
+    .single()
+  const spent = (projBudget?.total_cost_usd as number) ?? 0
+  const ceiling = (projBudget?.credit_ceiling_usd as number) ?? Infinity
+  const headroom = ceiling - spent
+  // Minimum headroom required per jugnu (rough lower-bound cost per run)
+  const MIN_HEADROOM: Record<string, number> = { leo: 0.40, nia: 0.10, tara: 0.08, maya: 0.05 }
+  const required = MIN_HEADROOM[next.jugnu_key] ?? 0.10
+  if (headroom < required) {
+    await db.from('projects').update({ status: 'paused' }).eq('id', projectId)
+    await db.from('messages').insert({
+      project_id: projectId,
+      author_type: 'system',
+      author_key: 'system',
+      content: `⏸️ Build paused — $${spent.toFixed(2)} of $${ceiling.toFixed(2)} used. Increase your budget in project settings to continue.`,
+      metadata: { event_type: 'BUDGET_PAUSED', spent, ceiling, jugnu_blocked: next.jugnu_key },
+    })
+    return { dispatched: false, jugnuKey: null, taskId: null }
+  }
+
   // Atomic claim — only succeeds if task is still 'pending', preventing double-dispatch
   const { data: claimed } = await db
     .from('tasks')
