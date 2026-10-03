@@ -16,24 +16,34 @@ export async function writeFile(
   const now = new Date().toISOString()
   const row = { project_id: projectId, task_id: taskId, path, content, updated_at: now }
 
-  // Try upsert first; if that fails (e.g. missing unique constraint in some DB configs),
-  // fall back to INSERT then UPDATE to guarantee idempotency.
-  const { error: upsertErr } = await db.from('file_snapshots').upsert(row, { onConflict: 'project_id,path' })
-  if (!upsertErr) return { ok: true }
+  // Strategy 1: upsert
+  const { error: upsertErr, status: upsertStatus } = await (db.from('file_snapshots').upsert(row, { onConflict: 'project_id,path' }) as unknown as Promise<{ error: { message: string } | null; status: number }>)
 
-  // Upsert failed — try plain INSERT
+  // Verify the row actually landed (upsert silently no-ops in some PostgREST configs)
+  if (!upsertErr) {
+    const { data: check } = await db.from('file_snapshots').select('path').eq('project_id', projectId).eq('path', path).maybeSingle()
+    if (check) return { ok: true }
+  }
+
+  // Strategy 2: plain INSERT (handles case where upsert silently did nothing)
   const { error: insertErr } = await db.from('file_snapshots').insert(row)
   if (!insertErr) return { ok: true }
 
-  // INSERT failed (likely duplicate) — try UPDATE instead
-  const { error: updateErr } = await db.from('file_snapshots')
+  // Strategy 3: UPDATE in case the row exists but upsert/insert both failed
+  const { error: updateErr, count } = await db.from('file_snapshots')
     .update({ content, updated_at: now, task_id: taskId })
     .eq('project_id', projectId)
     .eq('path', path)
-  if (!updateErr) return { ok: true }
+    .select('path')
+  if (!updateErr && count && count > 0) return { ok: true }
 
-  // All three strategies failed — surface the original upsert error for debugging
-  throw new Error(`write_file failed [upsert: ${upsertErr.message}] [insert: ${insertErr.message}] [update: ${updateErr.message}]`)
+  // All strategies failed — throw with full debug info
+  const detail = [
+    `upsert: ${upsertErr?.message ?? `status ${upsertStatus} no-op`}`,
+    `insert: ${insertErr?.message ?? 'no error but failed'}`,
+    `update: ${updateErr?.message ?? `matched ${count ?? 0} rows`}`,
+  ].join(' | ')
+  throw new Error(`write_file failed for ${path} — ${detail}`)
 }
 
 export async function readFile(
