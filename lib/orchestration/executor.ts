@@ -81,10 +81,27 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       }
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-      const previewUrl = appUrl ? `${appUrl}/preview/${projectId}` : null
 
+      // Generate a URL-safe slug from the project title for a branded preview link.
+      // Stored in constraints.preview_slug (works without migration) and preview_slug
+      // column (used after 011_project_slug migration is applied).
+      const { data: projTitle } = await db.from('projects').select('title, constraints').eq('id', projectId).single()
+      const rawTitle = ((projTitle?.title as string) ?? '').split('\n')[0].replace(/^#+\s*/, '').replace(/Project Name:\s*/i, '').trim()
+      const slug = rawTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .slice(0, 40)
+        || projectId.slice(0, 8)
+
+      const previewUrl = appUrl ? `${appUrl}/preview/${slug}` : null
+
+      const existingConstraints = ((projTitle?.constraints ?? {}) as Record<string, unknown>)
       await db.from('projects').update({
         status: 'completed',
+        preview_slug: slug,
+        constraints: { ...existingConstraints, preview_slug: slug },
         ...(previewUrl ? { deploy_url: previewUrl } : {}),
       }).eq('id', projectId)
 
