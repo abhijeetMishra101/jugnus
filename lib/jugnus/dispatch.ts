@@ -317,6 +317,73 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
   let totalModelCalls = 0
   let totalCost = 0
 
+  // ── Leo pre-planning turn ──────────────────────────────────────────────────
+  // Force Leo to commit to a build plan before any tool calls.
+  // Eliminates drift: photo searches, re-reading files every turn, scope creep.
+  // Costs ~200 output tokens. Competitors (Devin, Bolt, Lovable) all do this.
+  if (jugnuKey === 'leo') {
+    const planPrompt = [
+      'Before writing any code, output your build plan in bullet points:',
+      '1. Every file you will write + approximate line count',
+      '2. Every screen or section, listed by name',
+      '3. Routing and state strategy (one sentence)',
+      '4. Images/photos needed? (yes or no — if no, do NOT call search_photos)',
+      '5. What you will NOT build (scope boundary)',
+      '',
+      'Short and specific. No code blocks. This commits you — you will follow it exactly.',
+    ].join('\n')
+
+    await db.from('messages').insert({
+      project_id: projectId,
+      author_type: 'activity',
+      author_key: 'leo',
+      content: '📋 Planning the build…',
+      metadata: { event_type: 'JUGNU_THINKING', jugnu_key: 'leo', turn: -1 },
+    })
+
+    let planText = ''
+    for await (const event of adapter.streamTurn({
+      model: MODEL,
+      systemPrompt: jugnu.systemPrompt,
+      contextBlock,
+      messages: [...messages, { role: 'user', content: planPrompt }],
+      tools: [],         // no tools — pure text commitment
+      forceToolUse: false,
+    })) {
+      if (event.type === 'text_delta') planText += event.text
+      if (event.type === 'turn_done') {
+        const p = PRICING[MODEL] ?? PRICING[MODEL_SONNET]
+        const { inputTokens, cachedTokens, outputTokens } = event.usage
+        totalInputTokens  += inputTokens
+        totalCachedTokens += cachedTokens
+        totalOutputTokens += outputTokens
+        totalModelCalls   += 1
+        totalCost += (inputTokens * p.input + cachedTokens * p.cacheRead + outputTokens * p.output) / 1_000_000
+        break
+      }
+    }
+
+    planText = planText.trim()
+    if (planText) {
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'jugnu',
+        author_key: 'leo',
+        content: `📋 **Build plan**\n\n${planText}`,
+        task_id: taskId,
+        metadata: { event_type: 'BUILD_PLAN', jugnu_key: 'leo' },
+      })
+
+      // Commit Leo to his plan — this context carries through every subsequent turn
+      messages = [
+        ...messages,
+        { role: 'user',      content: planPrompt },
+        { role: 'assistant', content: planText   },
+        { role: 'user',      content: 'Good. Execute that plan now. Write the first file immediately — no reading, no searching, just write.' },
+      ]
+    }
+  }
+
   const turn0Label: Partial<Record<JugnuKey, string>> = {
     maya: '📋 Planning the project…',
     nia:  '🎨 Starting design…',
