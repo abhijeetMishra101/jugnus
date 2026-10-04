@@ -300,7 +300,11 @@ When Leo is in the plan, his task description MUST include:
 
 **Always embed:**
 - The chosen framework: "Build with React via CDN (no build step). Use script type text/babel and ReactDOM.createRoot." — for any interactive app
-- The file rule: derive from build_tier in project constraints. Quick tier → "Write ONE file: index.html, under 500 lines." Balanced tier → "Write ONE file: index.html, under 1000 lines." Premium tier → "Write ONE file: index.html, under 1500 lines. For simple tools and calculators: under 400 lines regardless of tier."
+- The file rule: derive from build_tier and app complexity. Simple tools and calculators: always ONE file: index.html, under 400 lines regardless of tier. Otherwise:
+  · Quick tier → "Write ONE file: index.html, under 600 lines."
+  · Balanced tier → "Write ONE file: index.html, under 1200 lines."
+  · Premium tier with 5+ screens OR multiple user roles → "Write THREE files: (1) index.html — shell only: CDN script tags, root div, load app.js and styles.css, under 200 lines. (2) app.js — ALL React components and logic, under 1800 lines. (3) styles.css — ALL styles, under 500 lines. index.html must include <script src=\"app.js\"></script> and <link rel=\"stylesheet\" href=\"styles.css\">."
+  · Premium tier simple app (fewer than 5 screens, single user) → "Write ONE file: index.html, under 1800 lines."
 - The design reference: "Read Nia's design files before writing — especially design/assembled.html or the section files."
 - For multi-screen apps (apps with multiple views/pages): "Use hash-based routing: read window.location.hash to determine the current screen, and set it on navigation. Each screen is a separate React component. Pattern: const screen = window.location.hash.slice(1) || 'home'; render the matching component."
 
