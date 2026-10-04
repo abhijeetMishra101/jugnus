@@ -971,7 +971,18 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const feed = buildFeed(messages, initialIds.current)
 
   // Show inline design preview after Nia's last message group once she completes
-  const niaCompleted = events.some((e) => e.event_type === 'TASK_COMPLETED' && e.jugnu_key === 'nia')
+  // Derive from polled messages so a dropped WS event never permanently hides the design preview.
+  // Also triggers on FILE_WRITTEN for assembled.html so the preview shows during Nia's visual
+  // checkpoint (ask_founder before complete_task) — founder sees design while answering questions.
+  const niaCompleted = useMemo(
+    () => messages.some((m) => {
+      const meta = m.metadata as Record<string, unknown>
+      if (meta?.event_type === 'TASK_COMPLETED' && meta?.jugnu_key === 'nia') return true
+      if (meta?.event_type === 'FILE_WRITTEN' && meta?.jugnu_key === 'nia' && meta?.path === 'design/assembled.html') return true
+      return false
+    }),
+    [messages],
+  )
   const lastNiaFeedIndex = feed.reduce((acc, item, i) =>
     item.type === 'jugnu' && item.authorKey === 'nia' ? i : acc, -1)
 

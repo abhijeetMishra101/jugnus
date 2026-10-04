@@ -34,49 +34,78 @@ export function buildToolsForJugnu(
   })
 
   handlers['complete_task'] = async (input) => {
-    // Nia: auto-assemble design/assembled.html from section files if not already written
+    // Nia: auto-assemble design/assembled.html from section files if not already written.
+    // Wrapped in try/catch so a transient storage error never prevents task completion.
     if (jugnuKey === 'nia') {
-      const { data: existingAssembled } = await db
-        .from('file_snapshots')
-        .select('id')
-        .eq('project_id', projectId)
-        .eq('path', 'design/assembled.html')
-        .maybeSingle()
-
-      if (!existingAssembled) {
-        const { data: sections } = await db
+      try {
+        const { data: existingAssembled } = await db
           .from('file_snapshots')
-          .select('path, content')
+          .select('id')
           .eq('project_id', projectId)
-          .ilike('path', 'design/%.html')
-          .order('path', { ascending: true })
+          .eq('path', 'design/assembled.html')
+          .maybeSingle()
 
-        if (sections && sections.length > 0) {
-          // Footer always last; everything else ordered by logical page flow
-          const SECTION_ORDER = ['hero', 'what', 'about', 'benefits', 'features', 'product', 'proof', 'testimonial', 'why', 'how', 'process', 'pricing', 'cta', 'order', 'contact']
-          const sorted = [...sections].sort((a, b) => {
-            if (a.path.includes('footer')) return 1
-            if (b.path.includes('footer')) return -1
-            const ai = SECTION_ORDER.findIndex((s) => a.path.includes(s))
-            const bi = SECTION_ORDER.findIndex((s) => b.path.includes(s))
-            return (ai === -1 ? 50 : ai) - (bi === -1 ? 50 : bi)
-          })
-          const body = sorted.map((f) => f.content).join('\n\n')
+        if (!existingAssembled) {
+          const { data: sections } = await db
+            .from('file_snapshots')
+            .select('path, content')
+            .eq('project_id', projectId)
+            .ilike('path', 'design/%.html')
+            .order('path', { ascending: true })
 
-          // Read tokens.css if Maya seeded it — inline into <style> so CSS vars work across all sections
-          const { data: tokensFile } = await db.from('file_snapshots')
-            .select('content').eq('project_id', projectId).eq('path', 'design/tokens.css').maybeSingle()
-          const tokensStyle = tokensFile?.content
-            ? `\n<style>\n${tokensFile.content}\n</style>`
-            : ''
+          if (sections && sections.length > 0) {
+            // Read tokens.css if Maya seeded it
+            const { data: tokensFile } = await db.from('file_snapshots')
+              .select('content').eq('project_id', projectId).eq('path', 'design/tokens.css').maybeSingle()
+            const tokensStyle = tokensFile?.content ? `\n<style>\n${tokensFile.content}\n</style>` : ''
+            const fontsImportMatch = tokensFile?.content?.match(/@import url\(['"]([^'"]+)['"]\);?/)
+            const fontsLink = fontsImportMatch
+              ? `\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="${fontsImportMatch[1]}" rel="stylesheet">`
+              : ''
 
-          // Extract Google Fonts @import from tokens.css to put in a <link> (browsers load it faster)
-          const fontsImportMatch = tokensFile?.content?.match(/@import url\(['"]([^'"]+)['"]\);?/)
-          const fontsLink = fontsImportMatch
-            ? `\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="${fontsImportMatch[1]}" rel="stylesheet">`
-            : ''
+            // PATH A: screen files (design/screen-NN-*.html) — wrap each fragment in phone-grid layout
+            const isPathA = sections.some((f) => /design\/screen-\d/.test(f.path))
 
-          const assembled = `<!DOCTYPE html>
+            let assembled: string
+            if (isPathA) {
+              const screenFiles = sections
+                .filter((f) => /design\/screen-\d/.test(f.path))
+                .sort((a, b) => a.path.localeCompare(b.path))
+              const screenBlocks = screenFiles.map((f) => f.content).join('\n\n')
+              assembled = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Screen Designs</title>${fontsLink}
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: #F0EDE8; font-family: sans-serif; padding: 40px 20px; }
+.screens-grid { display: flex; flex-wrap: wrap; gap: 40px; justify-content: center; }
+.screen-block { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.screen-label { font-weight: 700; font-size: 0.9rem; color: #555; letter-spacing: 0.02em; }
+.phone-frame { width: 390px; min-height: 844px; background: white; border-radius: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); overflow: hidden; position: relative; }
+.screen { width: 100%; min-height: 844px; padding: 48px 24px 32px; }
+</style>${tokensStyle}
+</head>
+<body>
+<div class="screens-grid">
+${screenBlocks}
+</div>
+</body>
+</html>`
+            } else {
+              // PATH B: landing page sections — sort by logical flow, concatenate
+              const SECTION_ORDER = ['hero', 'what', 'about', 'benefits', 'features', 'product', 'proof', 'testimonial', 'why', 'how', 'process', 'pricing', 'cta', 'order', 'contact']
+              const sorted = [...sections].sort((a, b) => {
+                if (a.path.includes('footer')) return 1
+                if (b.path.includes('footer')) return -1
+                const ai = SECTION_ORDER.findIndex((s) => a.path.includes(s))
+                const bi = SECTION_ORDER.findIndex((s) => b.path.includes(s))
+                return (ai === -1 ? 50 : ai) - (bi === -1 ? 50 : bi)
+              })
+              const body = sorted.map((f) => f.content).join('\n\n')
+              assembled = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -90,8 +119,13 @@ export function buildToolsForJugnu(
 ${body}
 </body>
 </html>`
-          await writeFile(projectId, taskId, 'design/assembled.html', assembled, db)
+            }
+
+            await writeFile(projectId, taskId, 'design/assembled.html', assembled, db)
+          }
         }
+      } catch {
+        // Transient write failure — skip assembled.html; task completion must not be blocked
       }
     }
 
@@ -117,13 +151,14 @@ ${body}
   if (jugnuKey === 'maya') {
     definitions.push({
       name: 'ask_founder',
-      description: 'Ask the founder clarifying questions with structured MCQ options. Call this IMMEDIATELY without any text output — the tool posts your question. Ask all questions in one call.',
+      description: 'Ask the founder ONE clarifying question with structured MCQ options. Call this IMMEDIATELY without any text output — the tool posts your question. ONE question per call — never batch multiple questions.',
       input_schema: {
         type: 'object' as const,
         properties: {
           questions: {
             type: 'array',
-            description: 'List of clarifying questions with answer choices',
+            description: 'Exactly one question. maxItems: 1 — never include more than one entry.',
+            maxItems: 1,
             items: {
               type: 'object' as const,
               properties: {
@@ -132,6 +167,11 @@ ${body}
                   type: 'array',
                   items: { type: 'string' },
                   description: 'Answer choices. Always include "Something else" as the last option.',
+                },
+                category: {
+                  type: 'string',
+                  enum: ['build_tier', 'core_action', 'all_features', 'data', 'empty_error', 'users_access', 'explicit_exclusions', 'wrap_up'],
+                  description: 'Quiz category this question belongs to. Required for Maya quiz questions — used to verify all categories are covered before planning.',
                 },
               },
               required: ['text', 'options'],
@@ -249,6 +289,22 @@ ${body}
             type: 'string',
             enum: ['quick', 'balanced', 'premium'],
             description: 'Build quality tier selected by the founder. quick = all Haiku (~10–20 min, from ₹10), balanced = Haiku design + Sonnet build (~25–40 min, from ₹50), premium = Sonnet everywhere (~40–60 min, from ₹120). Always set this from the founder\'s tier question answer.',
+          },
+          acceptance_criteria: {
+            type: 'array',
+            description: 'Acceptance criteria compiled from the requirements quiz. Each item is something Tara will verify against the final build.',
+            items: {
+              type: 'object',
+              properties: {
+                id:             { type: 'string', description: 'Short unique id e.g. "ac-001"' },
+                description:    { type: 'string', description: 'Clear, testable statement: "User can [action]" or "System must [behaviour]"' },
+                category:       { type: 'string', description: 'flow | data | ux | constraint | access' },
+                question:       { type: 'string', description: 'The exact question that was asked' },
+                founder_answer: { type: 'string', description: 'Founder answer verbatim, or null if skipped' },
+                source:         { type: 'string', enum: ['founder', 'inferred'] },
+              },
+              required: ['id', 'description', 'source'],
+            },
           },
           design_tokens: {
             type: 'object',
@@ -376,13 +432,68 @@ ${body}
         await writeFile(projectId, null, 'design/tokens.css', tokensCss, db)
       }
 
-      // Idempotency guard — if non-Maya tasks already exist, Maya called this tool twice. Reject.
-      const { count: existingPipelineTasks } = await db.from('tasks')
+      // Idempotency guard — only block if active (pending/in_progress) non-Maya tasks exist.
+      // Completed tasks from a previous run (e.g. revision mode) are fine to coexist.
+      const { count: activePipelineTasks } = await db.from('tasks')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .neq('jugnu_key', 'maya')
-      if ((existingPipelineTasks ?? 0) > 0) {
-        return { success: false, error: 'Plan already exists for this project. Do not call create_task_plan more than once.' }
+        .in('status', ['pending', 'in_progress'])
+      if ((activePipelineTasks ?? 0) > 0) {
+        return { success: false, error: 'Active pipeline tasks already exist. Do not call create_task_plan more than once.' }
+      }
+
+      // Fetch project constraints once — used for both revision mode and quiz gate.
+      const { data: projForRevision } = await db.from('projects').select('constraints').eq('id', projectId).single()
+      const isRevision = ((projForRevision?.constraints as Record<string, unknown>) ?? {})?.revision_mode === true
+      const sortBase = isRevision ? 10000 : 0
+
+      type FounderQA = { question: string; answer: string; category?: string; is_revision?: boolean }
+      const allFounderQAs = ((projForRevision?.constraints as Record<string, unknown>)?.founder_constraints as FounderQA[]) ?? []
+      const incomingCriteria = input.acceptance_criteria as Array<unknown> | undefined
+
+      if (!isRevision) {
+        // Full quiz gate — all 6 required categories must be covered and criteria depth met.
+        const coveredCategories = new Set(allFounderQAs.map((q) => q.category).filter(Boolean))
+        const REQUIRED_CATEGORIES = ['core_action', 'all_features', 'data', 'empty_error', 'users_access', 'explicit_exclusions'] as const
+        const missing = REQUIRED_CATEGORIES.filter((c) => !coveredCategories.has(c))
+
+        if (missing.length > 0) {
+          const labels: Record<string, string> = {
+            core_action: 'Core action', all_features: 'All features', data: 'Data',
+            empty_error: 'Empty & error states', users_access: 'Users & access',
+            explicit_exclusions: 'Explicit exclusions',
+          }
+          return {
+            success: false,
+            error: `Quiz incomplete — the following categories have not been asked yet: ${missing.map((c) => labels[c]).join(', ')}. Ask a question for each missing category with ask_founder before calling create_task_plan.`,
+          }
+        }
+
+        if (!incomingCriteria || incomingCriteria.length < 10) {
+          return {
+            success: false,
+            error: `Quiz incomplete — only ${incomingCriteria?.length ?? 0} acceptance criteria provided (minimum 10 required). Compile specific, testable criteria from all the founder's answers.`,
+          }
+        }
+      } else {
+        // Revision gate — core_action must be covered in the revision quiz and criteria must be present.
+        const revisionQAs = allFounderQAs.filter((q) => q.is_revision)
+        const revisionCategories = new Set(revisionQAs.map((q) => q.category).filter(Boolean))
+
+        if (!revisionCategories.has('core_action')) {
+          return {
+            success: false,
+            error: `Revision quiz incomplete — no core_action question asked yet. Start with ask_founder to clarify exactly what changes: every screen, button, and interaction affected. Tag the question with category: "core_action".`,
+          }
+        }
+
+        if (!incomingCriteria || incomingCriteria.length < 3) {
+          return {
+            success: false,
+            error: `Revision quiz incomplete — only ${incomingCriteria?.length ?? 0} acceptance criteria provided (minimum 3 required for a revision). Compile testable criteria from the revision Q&As.`,
+          }
+        }
       }
 
       const insertedIds: string[] = []
@@ -393,13 +504,14 @@ ${body}
           project_id: projectId, title: t.title, description: t.description,
           capability: t.capability, jugnu_key: t.jugnu_key,
           eta: t.eta ?? null,
-          depends_on: dependsOn, sort_order: i, status: 'pending',
+          depends_on: dependsOn, sort_order: sortBase + i, status: 'pending',
         }).select('id').single()
         insertedIds.push(data?.id ?? '')
       }
 
-      // Store jugnu_roles and build_tier in project constraints for context injection
+      // Store jugnu_roles, build_tier, and acceptance_criteria in project constraints
       {
+        const acceptance_criteria = input.acceptance_criteria as Array<Record<string, unknown>> | undefined
         const { data: proj } = await db.from('projects').select('constraints').eq('id', projectId).single()
         const existing = (proj?.constraints ?? {}) as Record<string, unknown>
         await db.from('projects').update({
@@ -408,8 +520,19 @@ ${body}
             ...existing,
             build_tier,
             ...(jugnu_roles ? { jugnu_roles } : {}),
+            ...(acceptance_criteria?.length ? { acceptance_criteria } : {}),
           },
         }).eq('id', projectId)
+      }
+
+      // Auto-complete Maya's own task — prevents a second dispatch and eliminates
+      // the need for Maya to call complete_task separately (which caused the double-run window)
+      if (taskId) {
+        await db.from('tasks').update({
+          status: 'completed',
+          result: `Plan assembled — ${rawTasks.length} tasks queued.`,
+          completed_at: new Date().toISOString(),
+        }).eq('id', taskId)
       }
 
       await db.from('messages').insert({
@@ -644,14 +767,99 @@ ${body}
       },
     })
     handlers['write_file'] = async (input) => {
-      const result = await writeFile(projectId, taskId, input.path as string, input.content as string, db)
+      // Hard size gate — prevent multi-thousand-line writes that hang mid-inference.
+      // Tiers: quick=500, balanced=1000, premium=1500 lines. Nia PATH A writes
+      // one screen per file (~100–200 lines each), so this only triggers on genuine over-writes.
+      const content = input.content as string
+      const lineCount = content.split('\n').length
+      const { data: tierProj } = await db.from('projects').select('constraints').eq('id', projectId).single()
+      const tier = ((tierProj?.constraints as Record<string, unknown>)?.build_tier as string) ?? 'balanced'
+      const LINE_LIMITS: Record<string, number> = { quick: 600, balanced: 1200, premium: 1800 }
+      const limit = LINE_LIMITS[tier] ?? 1200
+      if (lineCount > limit) {
+        return { ok: false, error: `File too large: ${lineCount} lines exceeds the ${tier} tier limit of ${limit} lines. Split into smaller files or reduce content.` }
+      }
+
+      const result = await writeFile(projectId, taskId, input.path as string, content, db)
+      // Nia's section writes are meaningful progress events — show as jugnu messages so they
+      // appear in the chat thread. Leo's writes stay as activity (he updates one file many times).
+      const niaSectionLabels: Record<string, string> = {
+        'design/assembled.html': '🖼️ Screens designed — ready for your review',
+        'design/intent.md':      '📝 Design direction set',
+        'design/hero.html':      '🎨 Hero section designed',
+        'design/problem.html':   '🎨 Problem / pain section designed',
+        'design/features.html':  '🎨 Features section designed',
+        'design/proof.html':     '🎨 Social proof section designed',
+        'design/cta.html':       '🎨 CTA section designed',
+        'design/footer.html':    '🎨 Footer designed',
+      }
+      const path = input.path as string
+      const isNiaSection = jugnuKey === 'nia' && (path.startsWith('design/') || niaSectionLabels[path])
       await db.from('messages').insert({
-        project_id: projectId, author_type: 'activity', author_key: jugnuKey,
-        content: `📄 Wrote \`${input.path}\``,
+        project_id: projectId,
+        author_type: isNiaSection ? 'jugnu' : 'activity',
+        author_key: jugnuKey,
+        content: isNiaSection
+          ? (niaSectionLabels[path] ?? `🎨 Designed \`${path}\``)
+          : `📄 Wrote \`${path}\``,
         task_id: taskId,
         metadata: { event_type: 'FILE_WRITTEN', file_write: true, path: input.path, jugnu_key: jugnuKey },
       })
       return result
+    }
+  }
+
+  // ── run_sql — Leo only ───────────────────────────────────────────────────────
+  // Executes DDL and DML against the shared Jugnus Postgres instance so Leo can
+  // provision real tables (CREATE TABLE, GRANT, RLS policies) without any founder credentials.
+  // Tables must follow the naming convention: p_{shortProjectId}_{tablename}
+  if (jugnuKey === 'leo') {
+    definitions.push({
+      name: 'run_sql',
+      description: 'Execute a SQL statement on the shared Jugnus database. Use this to CREATE TABLE, enable RLS, create policies, and GRANT access. All table names MUST start with p_{shortProjectId}_ where shortProjectId is the first 8 characters of the project UUID with hyphens removed. Call once per statement. Do NOT use for SELECT queries — the built app fetches data via the Supabase anon key directly.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          sql: {
+            type: 'string',
+            description: 'A single SQL statement. Example: "CREATE TABLE IF NOT EXISTS public.p_0c4bc599_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, created_at timestamptz DEFAULT now())"',
+          },
+          description: {
+            type: 'string',
+            description: 'One-line human description of what this SQL does, shown as a progress message.',
+          },
+        },
+        required: ['sql', 'description'],
+      },
+    })
+
+    handlers['run_sql'] = async (input) => {
+      const sql = input.sql as string
+      const desc = (input.description as string) ?? 'Running SQL…'
+
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'jugnu',
+        author_key: 'leo',
+        content: `🗄️ ${desc}`,
+        task_id: taskId,
+        metadata: { event_type: 'SQL_EXECUTED', jugnu_key: 'leo' },
+      })
+
+      const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      const res = await fetch(`${base}/api/internal/run-sql`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
+        },
+        body: JSON.stringify({ sql, projectId }),
+      })
+      const data = await res.json() as { ok: boolean; rows?: unknown[]; rowCount?: number; error?: string }
+      if (!data.ok) {
+        return { ok: false, error: data.error ?? 'SQL failed' }
+      }
+      return { ok: true, rowCount: data.rowCount ?? 0 }
     }
   }
 

@@ -130,6 +130,16 @@ export async function GET(request: Request): Promise<Response> {
     // Increment retry count and reset started_at so the hard cap measures from this attempt, not the first
     await db.from('tasks').update({ retry_count: retries + 1, started_at: new Date().toISOString() }).eq('id', task.id)
 
+    // Emit a visible signal so the UI doesn't show frozen dots for up to 1 minute
+    const jugnuName = task.jugnu_key.charAt(0).toUpperCase() + task.jugnu_key.slice(1)
+    await db.from('messages').insert({
+      project_id: task.project_id,
+      author_type: 'system',
+      author_key: 'system',
+      content: `🔄 ${jugnuName} is resuming (retry ${retries + 1}/${MAX_RETRIES})…`,
+      metadata: { event_type: 'TASK_ASSIGNED', jugnu_key: task.jugnu_key },
+    })
+
     const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
     const res = await fetch(`${base}/api/internal/jugnu-respond`, {
       method: 'POST',

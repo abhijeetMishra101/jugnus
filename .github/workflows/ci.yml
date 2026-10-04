@@ -21,7 +21,7 @@ jobs:
       - run: npx tsc --noEmit
 
   test:
-    name: Test & Coverage
+    name: Unit Tests & Coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,3 +37,31 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
           INTERNAL_API_SECRET: placeholder-secret
           NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+  integration-test:
+    name: Integration Test (Mock Pipeline)
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck, test]
+    # Only run on direct pushes to main — not on PRs from forks (no secret access)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Runs the mock pipeline against real Supabase with MOCK_DISPATCH=true.
+      # Tests skip automatically if secrets are not configured yet.
+      # To enable: add repository secrets in GitHub → Settings → Secrets → Actions
+      #   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+      #   NEXT_PUBLIC_SUPABASE_ANON_KEY, INTERNAL_API_SECRET
+      - name: Run mock pipeline integration test
+        run: npx vitest run __tests__/integration/pipeline.test.ts
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          MOCK_DISPATCH: "true"

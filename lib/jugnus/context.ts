@@ -94,7 +94,7 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
     : 'No current task assigned.'
 
   const constraintLines = Object.entries(ctx.constraints)
-    .filter(([k]) => k !== 'jugnu_roles' && k !== 'founder_constraints' && k !== 'approval_metrics' && k !== 'attachments')
+    .filter(([k]) => !['jugnu_roles', 'founder_constraints', 'approval_metrics', 'attachments', 'acceptance_criteria'].includes(k))
     .map(([k, v]) => `  ${k}: ${v}`)
     .join('\n')
 
@@ -144,6 +144,16 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
     ? `\nFILES ALREADY WRITTEN (skip these — do NOT overwrite unless fixing a specific issue):\n${ctx.existingFiles.map((f) => `  ${f}`).join('\n')}`
     : ''
 
+  type AcceptanceCriterion = { id: string; description: string; category?: string; question?: string; founder_answer?: string | null; source: string }
+  const rawCriteria = ctx.constraints.acceptance_criteria as AcceptanceCriterion[] | undefined
+  const acceptanceCriteriaBlock = rawCriteria?.length
+    ? `\nACCEPTANCE CRITERIA — verify EVERY item, report pass/fail for each:\n${
+        rawCriteria.map((c, i) =>
+          `  ${i + 1}. [${c.source === 'inferred' ? 'INFERRED' : 'FOUNDER'}] ${c.description}`
+        ).join('\n')
+      }`
+    : ''
+
   return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 JUGNUS PROJECT BRIEF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -156,6 +166,7 @@ ${ctx.objective}
 ${attachmentBlock}
 ${constraintLines ? `\nCONSTRAINTS:\n${constraintLines}` : ''}
 ${founderDecisionLines ? `\nFOUNDER DECISIONS (from clarification — apply these to your work):\n${founderDecisionLines}` : ''}
+${acceptanceCriteriaBlock}
 ${completed ? `\nCOMPLETED TASKS:\n${completed}` : ''}
 ${pending ? `\nUPCOMING TASKS:\n${pending}` : ''}
 ${filesBlock}

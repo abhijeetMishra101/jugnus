@@ -101,7 +101,7 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       await db.from('projects').update({
         status: 'completed',
         preview_slug: slug,
-        constraints: { ...existingConstraints, preview_slug: slug },
+        constraints: { ...existingConstraints, preview_slug: slug, revision_mode: false },
         ...(previewUrl ? { deploy_url: previewUrl } : {}),
       }).eq('id', projectId)
 

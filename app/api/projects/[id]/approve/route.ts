@@ -31,6 +31,16 @@ export async function POST(
     return NextResponse.json({ error: 'No pending approval task found' }, { status: 404 })
   }
 
+  // Prune stale duplicate human tasks — they accumulate when old pipeline runs created
+  // duplicate approval gates (before the Maya idempotency guard). Only one gate is valid;
+  // any other pending human tasks for this project can be safely skipped.
+  await db.from('tasks')
+    .update({ status: 'skipped', completed_at: new Date().toISOString() })
+    .eq('project_id', projectId)
+    .eq('jugnu_key', 'human')
+    .eq('status', 'pending')
+    .neq('id', humanTask.id)
+
   // Ensure task is in_progress (watchdog may have marked it failed before the human clicked)
   await db.from('tasks').update({ status: 'in_progress' }).eq('id', humanTask.id).eq('status', 'failed')
 

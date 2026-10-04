@@ -214,6 +214,65 @@ describe('formatContextBlock', () => {
     expect(block).not.toContain('FOUNDER DECISIONS')
   })
 
+  it('renders ACCEPTANCE CRITERIA block when criteria are present', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: {
+        acceptance_criteria: [
+          { id: 'ac-1', description: 'Task list renders with all tasks', category: 'Core action', source: 'founder' },
+          { id: 'ac-2', description: 'Empty state shown when no tasks exist', category: 'Empty & error states', source: 'inferred' },
+        ],
+      },
+    }
+    const block = formatContextBlock(ctx, 'tara')
+    expect(block).toContain('ACCEPTANCE CRITERIA')
+    expect(block).toContain('Task list renders with all tasks')
+    expect(block).toContain('Empty state shown when no tasks exist')
+  })
+
+  it('labels founder criteria as FOUNDER and inferred criteria as INFERRED', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: {
+        acceptance_criteria: [
+          { id: 'ac-1', description: 'Founder-confirmed feature', source: 'founder' },
+          { id: 'ac-2', description: 'Auto-inferred requirement', source: 'inferred' },
+        ],
+      },
+    }
+    const block = formatContextBlock(ctx, 'tara')
+    expect(block).toContain('[FOUNDER]')
+    expect(block).toContain('[INFERRED]')
+  })
+
+  it('omits ACCEPTANCE CRITERIA section when no criteria exist', () => {
+    const block = formatContextBlock(BASE_CTX, 'tara')
+    expect(block).not.toContain('ACCEPTANCE CRITERIA')
+  })
+
+  it('omits ACCEPTANCE CRITERIA section when acceptance_criteria is empty array', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: { acceptance_criteria: [] },
+    }
+    const block = formatContextBlock(ctx, 'tara')
+    expect(block).not.toContain('ACCEPTANCE CRITERIA')
+  })
+
+  it('excludes acceptance_criteria from raw CONSTRAINTS display', () => {
+    const ctx: ProjectContext = {
+      ...BASE_CTX,
+      constraints: {
+        timeline: '2 days',
+        acceptance_criteria: [{ id: 'ac-1', description: 'something', source: 'founder' }],
+      },
+    }
+    const block = formatContextBlock(ctx, 'tara')
+    // It should appear in the dedicated ACCEPTANCE CRITERIA block, not in the raw key dump
+    const constraintsSection = block.split('ACCEPTANCE CRITERIA')[0]
+    expect(constraintsSection).not.toContain('acceptance_criteria:')
+  })
+
   it('omits approval_metrics from the CONSTRAINTS display', () => {
     const ctx: ProjectContext = {
       ...BASE_CTX,
