@@ -355,7 +355,7 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
               <span className="text-sm" style={{ color: j.color }}>{j.icon}</span>
             </>
           )}
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-400" suppressHydrationWarning>
             {new Date(messages[0].created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>

@@ -34,14 +34,15 @@ export async function POST(request: Request) {
 
   const db = createServiceClient()
 
-  // If the project has ai_skip_quiz:true, always inject the skip nudge — even on
-  // watchdog retries that don't carry the original nudge payload.
+  // If the project has ai_skip_quiz:true, always prepend the skip instruction —
+  // even on retries that carry their own nudge, so the flag is never overridden.
   let effectiveNudge = nudge
-  if (jugnuKey === 'maya' && !effectiveNudge) {
+  if (jugnuKey === 'maya') {
     const { data: projData } = await db.from('projects').select('constraints').eq('id', projectId).single()
     const constraints = ((projData?.constraints ?? {}) as Record<string, unknown>)
     if (constraints.ai_skip_quiz === true) {
-      effectiveNudge = 'CRITICAL INSTRUCTION: ai_skip_quiz is true — the founder already chose "Let AI answer all remaining questions". Do NOT call ask_founder again. Infer reasonable answers for every uncovered category as source:"inferred". Do NOT output any announcement. Call create_task_plan immediately.'
+      const skipInstruction = 'CRITICAL INSTRUCTION: ai_skip_quiz is true — the founder already chose "Let AI answer all remaining questions". Do NOT call ask_founder again under any circumstances. Infer reasonable answers for every uncovered category as source:"inferred". Do NOT output any announcement. Call create_task_plan immediately.'
+      effectiveNudge = effectiveNudge ? `${skipInstruction}\n\n${effectiveNudge}` : skipInstruction
     }
   }
 
