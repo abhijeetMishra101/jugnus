@@ -34,9 +34,20 @@ export async function POST(request: Request) {
 
   const db = createServiceClient()
 
+  // If the project has ai_skip_quiz:true, always inject the skip nudge — even on
+  // watchdog retries that don't carry the original nudge payload.
+  let effectiveNudge = nudge
+  if (jugnuKey === 'maya' && !effectiveNudge) {
+    const { data: projData } = await db.from('projects').select('constraints').eq('id', projectId).single()
+    const constraints = ((projData?.constraints ?? {}) as Record<string, unknown>)
+    if (constraints.ai_skip_quiz === true) {
+      effectiveNudge = 'CRITICAL INSTRUCTION: ai_skip_quiz is true — the founder already chose "Let AI answer all remaining questions". Do NOT call ask_founder again. Infer reasonable answers for every uncovered category as source:"inferred". Do NOT output any announcement. Call create_task_plan immediately.'
+    }
+  }
+
   // Kick off the pipeline async — function stays alive via waitUntil
   waitUntil(
-    runPipeline(projectId, taskId, jugnuKey, db, nudge).catch((err) => {
+    runPipeline(projectId, taskId, jugnuKey, db, effectiveNudge).catch((err) => {
       console.error('[jugnu-respond] pipeline error:', err)
     })
   )
