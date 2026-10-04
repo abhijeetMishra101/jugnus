@@ -70,9 +70,6 @@ async function callJevDecision(
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const client = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-      defaultHeaders: process.env.ANTHROPIC_WORKSPACE_ID
-        ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID }
-        : {},
     })
 
     const optionsMap: Record<string, string[]> = {
@@ -100,7 +97,9 @@ async function callJevDecision(
       }],
     }, { timeout: 8000 })
 
-    const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
+    const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
+    // Strip markdown code fences the LLM occasionally adds despite the system prompt
+    const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
     const parsed = JSON.parse(text) as { decision: string; confidence: number }
     if (options.includes(parsed.decision) && typeof parsed.confidence === 'number') {
       return { decision: parsed.decision as DecisionOutcome, confidence: parsed.confidence }
