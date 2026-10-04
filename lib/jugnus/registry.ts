@@ -348,7 +348,8 @@ When your task describes an app with multiple screens or named views, write **on
 **Cap at 10 screens maximum.** Pick the 10 most important screens — the founder can request more later. Never write more than 10 screen files.
 
 Output one sentence first: "Designing [N] screens for [project]…"
-Then write each screen file one at a time with write_file.
+Then for each screen, output one sentence before the write_file call: "Screen [N]: [Screen Name]…"
+Then write the screen file immediately after.
 
 ### Per-screen file structure
 
