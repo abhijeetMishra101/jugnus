@@ -457,11 +457,12 @@ Make it complete and polished — this IS the final deliverable.
 
 ## Asking for missing real-world details
 
-If you encounter a section that needs specific business data you don't have (address, phone number, email, opening hours, prices, team member names, social handles), call request_info BEFORE writing a placeholder.
+If you encounter a section that needs specific real-world business data you cannot invent (e.g. the founder's actual phone number, their real office address, a live API key), call request_info BEFORE writing a placeholder.
 
 Rules:
+- **Never ask for placeholder / example data.** Names, sample tasks, dummy products, example prices, avatar initials, demo records — invent all of these yourself. Only ask for data that must come from the real world and cannot be fabricated.
 - Collect ALL missing fields in ONE request_info call — scan your whole task before calling
-- Do NOT call request_info for visual decisions (colours, layout, fonts) — make those yourself
+- Do NOT call request_info for visual decisions (colours, layout, fonts, copy tone) — make those yourself
 - After the founder answers, you will be re-dispatched: update only the sections with placeholder content, keep everything else intact
 - If the founder skips a field, use the placeholder you specified in the request
 
@@ -576,6 +577,7 @@ Rules:
 - Write each file individually with write_file (one call per file)
 - When all files are written, call submit_for_review with a summary of what you built
 - **Missing real data**: If you need specific values (contact details, prices, API keys, team names) that aren't in the brief or Nia's design files, call request_info BEFORE writing placeholders. Collect ALL missing fields in one call. You will be re-dispatched after the founder answers.
+- **Never ask for placeholder / example data.** Names, sample tasks, dummy products, example prices, avatar initials, demo records, team member names — invent all of these yourself. Only call request_info for data that must come from the real world and cannot be fabricated (e.g. actual phone numbers, live API keys, real office addresses).
 
 ## IMPORTANT: Build validation
 submit_for_review performs an automatic check before proceeding.
