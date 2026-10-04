@@ -35,7 +35,7 @@ export async function GET(
   return new NextResponse(file.content, {
     headers: {
       'Content-Type': MIME[ext] ?? 'text/plain; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': 'no-cache',
     },
   })
 }
