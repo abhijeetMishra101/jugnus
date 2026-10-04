@@ -67,6 +67,13 @@ export async function POST(request: Request) {
       .eq('id', escalation.id)
 
     const resumeJugnuKey = (escalation.jugnu_key ?? 'maya') as string
+    const resumeTaskId = escalation.task_id ?? null
+
+    // Reset started_at so the watchdog inactivity clock starts fresh — prevents a spurious
+    // retry firing in the 1-min window between escalation resolution and the first LLM output.
+    if (resumeTaskId) {
+      await db.from('tasks').update({ started_at: new Date().toISOString() }).eq('id', resumeTaskId)
+    }
 
     // Persist Q&A as a durable founder constraint so all downstream jugnus receive it
     if (escalation.question) {
@@ -115,9 +122,6 @@ export async function POST(request: Request) {
       content: resumeMsg,
       metadata: { event_type: 'TASK_ASSIGNED', jugnu_key: resumeJugnuKey },
     })
-
-    // Look up the jugnu's in-progress task (use escalation.task_id as the reliable source)
-    const resumeTaskId = escalation.task_id ?? null
 
     // If the founder chose "Let AI answer all remaining questions", post the completion
     // announcement immediately — before Maya's 10-second inference — so the UI never

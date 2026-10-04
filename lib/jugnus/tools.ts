@@ -456,28 +456,32 @@ ${body}
 
       // Fetch project constraints once — used for both revision mode and quiz gate.
       const { data: projForRevision } = await db.from('projects').select('constraints').eq('id', projectId).single()
-      const isRevision = ((projForRevision?.constraints as Record<string, unknown>) ?? {})?.revision_mode === true
+      const projConstraints = (projForRevision?.constraints ?? {}) as Record<string, unknown>
+      const isRevision = projConstraints?.revision_mode === true
+      const aiSkipQuiz = projConstraints?.ai_skip_quiz === true
       const sortBase = isRevision ? 10000 : 0
 
       type FounderQA = { question: string; answer: string; category?: string; is_revision?: boolean }
-      const allFounderQAs = ((projForRevision?.constraints as Record<string, unknown>)?.founder_constraints as FounderQA[]) ?? []
+      const allFounderQAs = (projConstraints?.founder_constraints as FounderQA[]) ?? []
       const incomingCriteria = input.acceptance_criteria as Array<unknown> | undefined
 
       if (!isRevision) {
-        // Full quiz gate — all 6 required categories must be covered and criteria depth met.
-        const coveredCategories = new Set(allFounderQAs.map((q) => q.category).filter(Boolean))
-        const REQUIRED_CATEGORIES = ['core_action', 'all_features', 'data', 'empty_error', 'users_access', 'explicit_exclusions'] as const
-        const missing = REQUIRED_CATEGORIES.filter((c) => !coveredCategories.has(c))
+        // Categories gate — skip when founder chose "Let AI answer all remaining questions"
+        if (!aiSkipQuiz) {
+          const coveredCategories = new Set(allFounderQAs.map((q) => q.category).filter(Boolean))
+          const REQUIRED_CATEGORIES = ['core_action', 'all_features', 'data', 'empty_error', 'users_access', 'explicit_exclusions'] as const
+          const missing = REQUIRED_CATEGORIES.filter((c) => !coveredCategories.has(c))
 
-        if (missing.length > 0) {
-          const labels: Record<string, string> = {
-            core_action: 'Core action', all_features: 'All features', data: 'Data',
-            empty_error: 'Empty & error states', users_access: 'Users & access',
-            explicit_exclusions: 'Explicit exclusions',
-          }
-          return {
-            success: false,
-            error: `Quiz incomplete — the following categories have not been asked yet: ${missing.map((c) => labels[c]).join(', ')}. Ask a question for each missing category with ask_founder before calling create_task_plan.`,
+          if (missing.length > 0) {
+            const labels: Record<string, string> = {
+              core_action: 'Core action', all_features: 'All features', data: 'Data',
+              empty_error: 'Empty & error states', users_access: 'Users & access',
+              explicit_exclusions: 'Explicit exclusions',
+            }
+            return {
+              success: false,
+              error: `Quiz incomplete — the following categories have not been asked yet: ${missing.map((c) => labels[c]).join(', ')}. Ask a question for each missing category with ask_founder before calling create_task_plan.`,
+            }
           }
         }
 

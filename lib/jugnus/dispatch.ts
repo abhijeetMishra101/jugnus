@@ -552,6 +552,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
     let toolStreamRowId: string | null = null
     let toolStreamPath: string | null = null
     let toolStreamLastFlush = 0
+    const seenCriteria = new Set<string>()
 
     // Completed tool calls this turn (name → input) for handler dispatch
     const completedTools: Array<{ name: string; id: string; input: Record<string, unknown> }> = []
@@ -583,6 +584,25 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
       if (event.type === 'tool_input_delta') {
         toolInputBuffer += event.partialJson
+
+        // Stream create_task_plan acceptance criteria as they appear
+        if (activeToolName === 'create_task_plan') {
+          const criteriaRe = /"description"\s*:\s*"((?:[^"\\]|\\.)*)"/g
+          let m: RegExpExecArray | null
+          while ((m = criteriaRe.exec(toolInputBuffer)) !== null) {
+            const desc = m[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim()
+            if (desc.length > 15 && !seenCriteria.has(desc)) {
+              seenCriteria.add(desc)
+              void db.from('messages').insert({
+                project_id: projectId,
+                author_type: 'activity',
+                author_key: jugnuKey,
+                content: `✓ ${desc}`,
+                metadata: { event_type: 'JUGNU_THINKING', jugnu_key: jugnuKey },
+              })
+            }
+          }
+        }
 
         // Stream write_file content in real-time
         if (activeToolName === 'write_file') {
