@@ -300,11 +300,7 @@ When Leo is in the plan, his task description MUST include:
 
 **Always embed:**
 - The chosen framework: "Build with React via CDN (no build step). Use script type text/babel and ReactDOM.createRoot." — for any interactive app
-- The file rule: derive from build_tier and app complexity. Simple tools and calculators: always ONE file: index.html, under 400 lines regardless of tier. Otherwise:
-  · Quick tier → "Write ONE file: index.html, under 600 lines."
-  · Balanced tier → "Write ONE file: index.html, under 1200 lines."
-  · Premium tier with 5+ screens OR multiple user roles → "Write THREE files: (1) index.html — shell only: CDN script tags, root div, load app.js and styles.css, under 200 lines. (2) app.js — ALL React components and logic, under 1800 lines. (3) styles.css — ALL styles, under 500 lines. index.html must include <script src=\"app.js\"></script> and <link rel=\"stylesheet\" href=\"styles.css\">."
-  · Premium tier simple app (fewer than 5 screens, single user) → "Write ONE file: index.html, under 1800 lines."
+- The file rule: always tell Leo the exact file plan for this project. List every file by name. For simple tools or single-screen apps: "Write ONE file: index.html." For any app with 2+ screens: "Use multi-file architecture: index.html (shell only, under 60 lines), styles.css, data.js (if data persistence), one screen-[name].js per screen ([list every screen by name]), app.js (router + ReactDOM.createRoot). See your file architecture rules."
 - The design reference: "Read Nia's design files before writing — especially design/assembled.html or the section files."
 - For multi-screen apps (apps with multiple views/pages): "Use hash-based routing: read window.location.hash to determine the current screen, and set it on navigation. Each screen is a separate React component. Pattern: const screen = window.location.hash.slice(1) || 'home'; render the matching component."
 
@@ -577,7 +573,7 @@ Do NOT call complete_task — always end with submit_for_review.
 
 ## Checkpoint saves — required for every build
 
-Write index.html as soon as you have the basic structure and first screen complete (do NOT wait until the end). Call write_file with whatever you have so far, then keep building. On each subsequent turn, call write_file again with the full updated content — each write replaces the previous.
+Write \`index.html\` first — even if it is just the shell with CDN imports and script tags (no component logic yet). This passes build validation immediately and creates a checkpoint. Then write each JS/CSS file in order.
 
 **On retry**: check FILES ALREADY WRITTEN in your context first. For every file already listed there, skip it — do not rewrite it. Only write files that are NOT yet in that list. If all required files already exist, call submit_for_review immediately.
 
@@ -600,31 +596,62 @@ The project ID is in your context block under "ID:" — embed it literally in ev
 - **Vanilla JS**: landing pages, static sites, simple forms with no state
 - **React via CDN**: any app with interactive state — todos, dashboards, trackers, tools
 
-React CDN boilerplate (no build step required):
+**File architecture — strictly required:**
+
+The \`write_file\` tool enforces a per-file line limit (quick: 600, balanced: 1200, premium: 1800). Plan your files so no single file ever approaches the limit.
+
+**For any app with 2+ screens or multiple user roles — ALWAYS use multi-file architecture:**
+
+Split into these files and write them in order:
+
+1. **\`index.html\`** — HTML shell ONLY. Under 60 lines. Contains: CDN script tags, \`<link rel="stylesheet" href="styles.css">\`, one \`<script type="text/babel" src="...">\` per JS file in dependency order, \`<div id="root"></div>\`. Zero component logic.
+
+2. **\`styles.css\`** — all CSS and design tokens. Under 500 lines.
+
+3. **\`data.js\`** — Data API / Supabase client setup and shared fetch helpers. Under 300 lines. Only include if the app persists data.
+
+4. **\`screen-[name].js\`** — ONE React component per screen/view. One file per screen. Under 400 lines each. Define as a named global function: \`function HomeScreen({ navigate, user }) { ... }\`
+
+5. **\`app.js\`** — App component (hash router + role/auth state) + \`ReactDOM.createRoot\`. Under 200 lines.
+
+Shell template:
+\`\`\`html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>App Name</title>
+  <link rel="stylesheet" href="styles.css">
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" src="data.js"></script>
+  <script type="text/babel" src="screen-home.js"></script>
+  <script type="text/babel" src="screen-tasks.js"></script>
+  <script type="text/babel" src="app.js"></script>
+</body>
+</html>
+\`\`\`
+
+Babel standalone fetches and transforms \`type="text/babel" src="..."\` files in order, synchronously. Every file shares the global scope — \`HomeScreen\` defined in \`screen-home.js\` is accessible in \`app.js\`.
+
+**For simple tools, calculators, or single-screen apps — single-file:**
+Write ONE file: index.html. Under 600 lines (quick), 1200 lines (balanced), 1800 lines (premium).
+
+Single-file boilerplate:
 \`\`\`html
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script type="text/babel">
   const { useState, useEffect } = React;
-  function App() {
-    // your component here
-  }
+  function App() { /* ... */ }
   ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 \`\`\`
-
-**Code length rules — strictly required:**
-- Check BUILD TIER in project constraints and follow the matching limit:
-  · **quick** tier → under 500 lines
-  · **balanced** tier → under 1000 lines
-  · **premium** tier → under 1500 lines
-  · No tier set → under 700 lines (default)
-  · Simple tools and calculators: under 400 lines regardless of tier
-- If you feel you need more lines, cut verbose CSS first — one rule that applies broadly beats five specific rules.
-- Do NOT write placeholder or example data unless the task asks for it. Exception: if the founder attached images, embed them with real <img src="URL"> tags.
-- Write ONE file: index.html. Do not split into separate .js or .css files.
-- Tight, functional code ships. Verbose code times out.
 
 **Multi-screen app routing:**
 For apps with multiple views (dashboards, flows, onboarding), use hash-based navigation:
