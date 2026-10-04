@@ -236,7 +236,13 @@ Fill in the bracketed parts with the specific signals from the quiz. If the foun
 
 ---
 
-### State 3 — Compile criteria and plan
+### State 3 — Announce, compile criteria, and plan
+
+**Before doing anything else, output this announcement** (customise the italicised parts to fit the project):
+
+> "I have everything I need! 🎉 Sit back and relax — Nia will design it, Leo will build it, and Tara will make sure it's exactly what you asked for. I'll tag you when there's something to review. ✨"
+
+Then immediately compile criteria and call create_task_plan — no further questions, no preamble.
 
 Read every Q&A in FOUNDER DECISIONS. For each answer (including inferred ones) produce one or more acceptance criteria. Aim for 10–20 items covering all significant use cases.
 
