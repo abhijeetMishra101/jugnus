@@ -107,7 +107,8 @@ Before calling create_task_plan you must run a requirements quiz. Non-negotiable
 | **1** | FOUNDER DECISIONS is empty | Call ask_founder with Q1 (build tier) only |
 | **2** | 1 entry in FOUNDER DECISIONS (build tier answered, quiz not started) | Ask first quiz question |
 | **2** | 2+ entries, not all categories covered yet | Ask next uncovered category question |
-| **3** | All categories covered, OR founder says "done / proceed / enough / start building" | Compile acceptance_criteria → call create_task_plan |
+| **2.5** | All categories covered AND complexity exceeds tier AND no \`tier_upgrade\` entry yet | Ask ONE tier upgrade question (see State 2.5 below) |
+| **3** | All categories covered AND (tier fits OR \`tier_upgrade\` entry present) — OR founder says "done / proceed / enough / start building" | Compile acceptance_criteria → call create_task_plan |
 
 ---
 
@@ -120,9 +121,9 @@ Call ask_founder IMMEDIATELY. No text before the tool call. ONE question only.
   "questions": [{
     "text": "How much quality and time do you want to invest?",
     "options": [
-      "⚡ Quick — from ₹10 (~$0.12) · ~10–20 min · Lightweight AI throughout. Best for prototypes and quick ideas.",
-      "⭐ Balanced (Recommended) — from ₹50 (~$0.60) · ~25–40 min · Powerful AI for the build, efficient AI for design. Right for most apps.",
-      "💎 Premium — from ₹120 (~$1.40) · ~40–60 min · Top AI everywhere. For launch-ready, production-quality builds."
+      "⚡ Quick — from ₹10 (~$0.12) · ~10–20 min · 1-2 screens, no login or saved data. Best for prototypes and quick ideas.",
+      "⭐ Balanced (Recommended) — from ₹50 (~$0.60) · ~25–40 min · 3-5 screens, single user type, basic CRUD. Right for most apps.",
+      "💎 Premium — from ₹120 (~$1.40) · ~40–60 min · 6+ screens, multiple user roles, auth, or complex data. For production-quality builds."
     ]
   }]
 }
@@ -189,6 +190,36 @@ Ask one question per element. If a screen has five buttons, ask five questions �
 | **Users & access** | Ask about user types. Then for each type: "What can [role] see and do that [other role] cannot?" If the app is single-user: "Is the data private per device, per account, or shared?" |
 | **Explicit exclusions** | "What must NOT be in this first version?" Then follow up on anything mentioned in the brief or earlier answers that hasn't been confirmed in or out. |
 | **Wrap-up** | "Is there any screen, button, or data field we haven't discussed that should be in the first version?" (always the last question) |
+
+---
+
+### State 2.5 — Tier validation (one upgrade question if needed)
+
+Before compiling the plan, check if the quiz revealed complexity that exceeds the chosen tier. Do this check only once — if FOUNDER DECISIONS already contains an entry with \`category: "tier_upgrade"\`, skip to State 3.
+
+**Complexity signals that require Premium:**
+- 6 or more distinct screens identified across all Q&As
+- 2 or more distinct user roles or user types
+- Authentication / login / account system required
+
+**Trigger condition:** Founder chose Quick or Balanced AND one or more complexity signals are present.
+
+If triggered, call ask_founder with ONE question (no text before the tool call):
+
+\`\`\`json
+{
+  "questions": [{
+    "text": "Based on your answers, this app has [X screens / multiple roles / login] — that exceeds what the [current tier] tier can reliably build. Upgrading to Premium unlocks the full scope and adds ~₹70 (~10-15 min). Want to upgrade?",
+    "options": [
+      "Yes — upgrade to Premium",
+      "No — keep current tier and simplify scope if needed"
+    ],
+    "category": "tier_upgrade"
+  }]
+}
+\`\`\`
+
+Fill in the bracketed parts with the specific signals from the quiz. If the founder says yes, pass \`build_tier: "premium"\` to create_task_plan. If no, proceed with the current tier — Leo will do his best within the line limit.
 
 ---
 

@@ -288,7 +288,7 @@ ${body}
           build_tier: {
             type: 'string',
             enum: ['quick', 'balanced', 'premium'],
-            description: 'Build quality tier selected by the founder. quick = all Haiku (~10–20 min, from ₹10), balanced = Haiku design + Sonnet build (~25–40 min, from ₹50), premium = Sonnet everywhere (~40–60 min, from ₹120). Always set this from the founder\'s tier question answer.',
+            description: 'Build quality tier. quick = all Haiku (~10–20 min, from ₹10), balanced = Haiku design + Sonnet build (~25–40 min, from ₹50), premium = Sonnet everywhere (~40–60 min, from ₹120). Use the founder\'s original tier answer — BUT if FOUNDER DECISIONS contains a tier_upgrade entry where the founder said yes, use "premium" regardless of the original choice.',
           },
           acceptance_criteria: {
             type: 'array',
@@ -768,7 +768,7 @@ ${body}
     })
     handlers['write_file'] = async (input) => {
       // Hard size gate — prevent multi-thousand-line writes that hang mid-inference.
-      // Tiers: quick=500, balanced=1000, premium=1500 lines. Nia PATH A writes
+      // Tiers: quick=600, balanced=1200, premium=1800 lines. Nia PATH A writes
       // one screen per file (~100–200 lines each), so this only triggers on genuine over-writes.
       const content = input.content as string
       const lineCount = content.split('\n').length
