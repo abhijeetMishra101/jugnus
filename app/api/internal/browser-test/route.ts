@@ -29,27 +29,39 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   let chromium: typeof import('@sparticuz/chromium').default
-  let pw: typeof import('playwright-core')
+  let puppeteer: typeof import('puppeteer-core')
 
   try {
-    const [chromiumMod, playwrightMod] = await Promise.all([
+    const [chromiumMod, puppeteerMod] = await Promise.all([
       import('@sparticuz/chromium'),
-      import('playwright-core'),
+      import('puppeteer-core'),
     ])
     chromium = chromiumMod.default
-    pw = playwrightMod
+    puppeteer = puppeteerMod
   } catch (importErr) {
     console.error('[browser-test] import failed:', importErr)
     return NextResponse.json({
       ok: false,
       available: false,
-      error: `Playwright/Chromium not available: ${String(importErr)}`,
+      error: `Browser dependencies not available: ${String(importErr)}`,
     })
   }
 
-  const browser = await pw.chromium.launch({
+  let executablePath: string
+  try {
+    executablePath = await chromium.executablePath()
+  } catch (e) {
+    console.error('[browser-test] chromium.executablePath() failed:', e)
+    return NextResponse.json({
+      ok: false,
+      available: false,
+      error: `Chromium executable not found: ${String(e)}`,
+    })
+  }
+
+  const browser = await puppeteer.launch({
     args: chromium.args,
-    executablePath: await chromium.executablePath(),
+    executablePath,
     headless: true,
   }).catch((e: unknown) => {
     throw new Error(`Failed to launch browser: ${String(e)}`)
@@ -61,49 +73,51 @@ export async function POST(request: Request): Promise<Response> {
     const consoleErrors: string[] = []
     const consoleWarnings: string[] = []
     page.on('console', (msg) => {
-      if (msg.type() === 'error')   consoleErrors.push(msg.text())
-      if (msg.type() === 'warning') consoleWarnings.push(msg.text())
+      const t = msg.type()
+      if (t === 'error')   consoleErrors.push(msg.text())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((t as any) === 'warning') consoleWarnings.push(msg.text())
     })
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
 
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 })
 
     // Wait for JS frameworks to render (React CDN needs a tick after networkidle)
-    await page.waitForTimeout(1500)
+    await new Promise(r => setTimeout(r, 1500))
 
     const blankScreen = await page.evaluate(() => {
-      const root = document.getElementById('root') ?? document.body
+      const root = document.getElementById('root') ?? document.getElementById('app') ?? document.body
       return root.children.length === 0 && (root.textContent ?? '').trim().length === 0
     })
 
     const pageTitle = await page.title()
     const pageTextPreview = await page.evaluate(() =>
-      (document.body.innerText ?? '').slice(0, 600)
+      ((document.body as HTMLElement).innerText ?? '').slice(0, 600)
     )
 
     const actionResults: ActionResult[] = []
     for (const action of actions) {
       try {
         if (action.type === 'fill') {
-          await page.fill(action.selector, action.value, { timeout: 5000 })
+          await page.type(action.selector, action.value)
           actionResults.push({ action: `fill ${action.selector}`, passed: true })
         } else if (action.type === 'click') {
-          await page.click(action.selector, { timeout: 5000 })
-          await page.waitForTimeout(600)
+          await page.click(action.selector)
+          await new Promise(r => setTimeout(r, 600))
           actionResults.push({ action: `click ${action.selector}`, passed: true })
         } else if (action.type === 'select') {
-          await page.selectOption(action.selector, action.value, { timeout: 5000 })
+          await page.select(action.selector, action.value)
           actionResults.push({ action: `select ${action.selector}=${action.value}`, passed: true })
         } else if (action.type === 'wait') {
-          await page.waitForTimeout(action.ms ?? 1000)
+          await new Promise(r => setTimeout(r, action.ms ?? 1000))
           actionResults.push({ action: `wait ${action.ms}ms`, passed: true })
         } else if (action.type === 'reload') {
-          await page.reload({ waitUntil: 'networkidle', timeout: 10000 })
-          await page.waitForTimeout(1500)
+          await page.reload({ waitUntil: 'networkidle2', timeout: 10000 })
+          await new Promise(r => setTimeout(r, 1500))
           actionResults.push({ action: 'reload', passed: true })
         } else if (action.type === 'check_text') {
           const found = await page.evaluate(
-            (text: string) => document.body.innerText.includes(text),
+            (text: string) => (document.body as HTMLElement).innerText.includes(text),
             action.value
           )
           actionResults.push({
@@ -114,7 +128,7 @@ export async function POST(request: Request): Promise<Response> {
         }
       } catch (e) {
         actionResults.push({
-          action: `${action.type} ${('selector' in action ? action.selector : '')}`,
+          action: `${action.type} ${'selector' in action ? action.selector : ''}`,
           passed: false,
           error: String(e),
         })
@@ -125,6 +139,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return NextResponse.json({
       ok: !blankScreen && consoleErrors.length === 0 && allActionsPassed,
+      available: true,
       loaded: !blankScreen,
       blank_screen: blankScreen,
       page_title: pageTitle,
