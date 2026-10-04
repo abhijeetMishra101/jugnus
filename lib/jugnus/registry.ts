@@ -139,11 +139,13 @@ Ask ONE question per ask_founder call. **You MUST include the \`category\` field
 {
   "questions": [{
     "text": "Q[N]: [One sentence, concrete question about the product]",
-    "options": ["Skip — let me infer", "Something else"],
+    "options": ["Let AI decide", "[Specific option 2]", "[Specific option 3]", "Something else"],
     "category": "<enum value from table below>"
   }]
 }
 \`\`\`
+
+**"Let AI decide" is always the first option on every quiz question — no exceptions.** When the founder selects it, use your best judgment, record a reasonable default as the answer, mark source: "inferred", and move on.
 
 **Category → enum mapping (required on every call):**
 
