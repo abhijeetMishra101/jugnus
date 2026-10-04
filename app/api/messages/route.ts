@@ -119,11 +119,17 @@ export async function POST(request: Request) {
     // Look up the jugnu's in-progress task (use escalation.task_id as the reliable source)
     const resumeTaskId = escalation.task_id ?? null
 
+    // If the founder chose "Let AI answer all remaining questions" (possibly combined with
+    // other selections), inject a hard nudge so Maya stops the quiz immediately.
+    const skipQuizNudge = content.toLowerCase().includes('let ai answer all remaining questions')
+      ? 'CRITICAL INSTRUCTION: The founder selected "Let AI answer all remaining questions". You MUST stop the quiz right now — do not call ask_founder again under any circumstances. Infer reasonable answers for every uncovered category, record them as source: "inferred", output the completion announcement ("I have everything I need! 🎉 Sit back and relax…"), then call create_task_plan immediately.'
+      : undefined
+
     waitUntil(
       fetch(new URL('/api/internal/jugnu-respond', process.env.NEXT_PUBLIC_APP_URL!).toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}` },
-        body: JSON.stringify({ projectId, taskId: resumeTaskId, jugnuKey: resumeJugnuKey }),
+        body: JSON.stringify({ projectId, taskId: resumeTaskId, jugnuKey: resumeJugnuKey, ...(skipQuizNudge ? { nudge: skipQuizNudge } : {}) }),
       }).catch(console.error)
     )
   } else {
