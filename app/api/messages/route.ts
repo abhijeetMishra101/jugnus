@@ -119,10 +119,23 @@ export async function POST(request: Request) {
     // Look up the jugnu's in-progress task (use escalation.task_id as the reliable source)
     const resumeTaskId = escalation.task_id ?? null
 
-    // If the founder chose "Let AI answer all remaining questions" (possibly combined with
-    // other selections), inject a hard nudge so Maya stops the quiz immediately.
-    const skipQuizNudge = content.toLowerCase().includes('let ai answer all remaining questions')
-      ? 'CRITICAL INSTRUCTION: The founder selected "Let AI answer all remaining questions". You MUST stop the quiz right now — do not call ask_founder again under any circumstances. Infer reasonable answers for every uncovered category, record them as source: "inferred", output the completion announcement ("I have everything I need! 🎉 Sit back and relax…"), then call create_task_plan immediately.'
+    // If the founder chose "Let AI answer all remaining questions", post the completion
+    // announcement immediately — before Maya's 10-second inference — so the UI never
+    // goes dead. Then nudge Maya to skip the quiz and go straight to create_task_plan.
+    const skipQuiz = content.toLowerCase().includes('let ai answer all remaining questions')
+    if (skipQuiz) {
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'jugnu',
+        author_key: 'maya',
+        content: "I have everything I need! 🎉 Sit back and relax — Nia will design it, Leo will build it, and Tara will make sure it's exactly what you asked for. I'll tag you when there's something to review. ✨",
+        task_id: resumeTaskId,
+        metadata: { event_type: 'QUIZ_COMPLETE' },
+      })
+    }
+
+    const skipQuizNudge = skipQuiz
+      ? 'CRITICAL INSTRUCTION: The founder selected "Let AI answer all remaining questions". You MUST stop the quiz right now — do not call ask_founder again under any circumstances. Infer reasonable answers for every uncovered category, record them as source: "inferred". Do NOT output the completion announcement (it was already shown). Call create_task_plan immediately.'
       : undefined
 
     waitUntil(
