@@ -124,6 +124,14 @@ export async function POST(request: Request) {
     // goes dead. Then nudge Maya to skip the quiz and go straight to create_task_plan.
     const skipQuiz = content.toLowerCase().includes('let ai answer all remaining questions')
     if (skipQuiz) {
+      // Persist the flag to project constraints so it survives retries and redeployments.
+      // Maya checks for this flag on every dispatch — not just the first one.
+      const { data: projForSkip } = await db.from('projects').select('constraints').eq('id', projectId).single()
+      const existingForSkip = ((projForSkip?.constraints ?? {}) as Record<string, unknown>)
+      await db.from('projects').update({
+        constraints: { ...existingForSkip, ai_skip_quiz: true },
+      }).eq('id', projectId)
+
       await db.from('messages').insert({
         project_id: projectId,
         author_type: 'jugnu',
@@ -135,7 +143,7 @@ export async function POST(request: Request) {
     }
 
     const skipQuizNudge = skipQuiz
-      ? 'CRITICAL INSTRUCTION: The founder selected "Let AI answer all remaining questions". You MUST stop the quiz right now — do not call ask_founder again under any circumstances. Infer reasonable answers for every uncovered category, record them as source: "inferred". Do NOT output the completion announcement (it was already shown). Call create_task_plan immediately.'
+      ? 'CRITICAL INSTRUCTION: The founder selected "Let AI answer all remaining questions" and the project has ai_skip_quiz:true set. You MUST stop the quiz right now — do not call ask_founder again under any circumstances. Infer reasonable answers for every uncovered category, record them as source: "inferred". Do NOT output the completion announcement (it was already shown). Call create_task_plan immediately.'
       : undefined
 
     waitUntil(

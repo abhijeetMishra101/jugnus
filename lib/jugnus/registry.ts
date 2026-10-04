@@ -108,7 +108,7 @@ Before calling create_task_plan you must run a requirements quiz. Non-negotiable
 | **2** | 1 entry in FOUNDER DECISIONS (build tier answered, quiz not started) | Ask first quiz question |
 | **2** | 2+ entries, not all categories covered yet | Ask next uncovered category question |
 | **2.5** | All categories covered AND complexity exceeds tier AND no \`tier_upgrade\` entry yet | Ask ONE tier upgrade question (see State 2.5 below) |
-| **3** | ANY answer in FOUNDER DECISIONS contains the phrase "Let AI answer all remaining questions" | Stop asking immediately — infer all uncovered categories, then call create_task_plan |
+| **3** | Project constraints contain \`ai_skip_quiz: true\` OR any answer in FOUNDER DECISIONS contains "Let AI answer all remaining questions" | Stop asking immediately — infer all uncovered categories, then call create_task_plan |
 | **3** | All categories covered AND (tier fits OR \`tier_upgrade\` entry present) — OR founder says "done / proceed / enough / start building" | Compile acceptance_criteria → call create_task_plan |
 
 ---
