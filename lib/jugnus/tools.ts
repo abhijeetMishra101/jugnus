@@ -994,6 +994,120 @@ ${body}
       }
     }
 
+    // ── verify_assets — static pre-flight that works without a browser ─────────
+    // Fetches the live HTML, resolves every local <script> and <link>, verifies
+    // each asset loads HTTP 200, then cross-checks all function *calls* against
+    // function *definitions* across all JS files to catch undefined references.
+    definitions.push({
+      name: 'verify_assets',
+      description: 'Fetch the live preview HTML, verify every local script and stylesheet returns HTTP 200, and do a cross-file static analysis: collect all function definitions, find all function calls, and report any calls to functions that are never defined. Call this before browse_app. If any asset is missing or any function is called but never defined, call request_changes immediately.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          preview_url: { type: 'string', description: 'Full preview URL, e.g. https://jugnus.vercel.app/preview/PROJECT_ID' },
+        },
+        required: ['preview_url'],
+      },
+    })
+
+    handlers['verify_assets'] = async (input) => {
+      const previewUrl = input.preview_url as string
+      const origin = new URL(previewUrl).origin
+
+      // 1. Fetch the HTML
+      let html: string
+      let htmlStatus: number
+      try {
+        const res = await fetch(previewUrl)
+        htmlStatus = res.status
+        html = await res.text()
+        if (!res.ok) return { ok: false, html_status: htmlStatus, error: `Preview HTML returned ${htmlStatus}` }
+      } catch (e) {
+        return { ok: false, error: `Failed to fetch preview HTML: ${String(e)}` }
+      }
+
+      // 2. Extract local script/link srcs (skip CDN https:// URLs)
+      const scriptSrcs: string[] = []
+      for (const m of html.matchAll(/<script[^>]*\bsrc="([^"]+)"/gi)) {
+        const src = m[1]
+        if (!src.startsWith('http')) scriptSrcs.push(src)
+      }
+      const linkHrefs: string[] = []
+      for (const m of html.matchAll(/<link[^>]*\bhref="([^"]+)"/gi)) {
+        const href = m[1]
+        if (!href.startsWith('http')) linkHrefs.push(href)
+      }
+
+      // 3. Fetch each local asset; separate JS for static analysis
+      const assetErrors: string[] = []
+      const jsContents: Record<string, string> = {}
+
+      for (const src of scriptSrcs) {
+        const url = src.startsWith('/') ? `${origin}${src}` : `${previewUrl.replace(/\/?$/, '/')}${src}`
+        try {
+          const res = await fetch(url)
+          if (!res.ok) {
+            assetErrors.push(`${src}: HTTP ${res.status}`)
+          } else {
+            jsContents[src] = await res.text()
+          }
+        } catch (e) {
+          assetErrors.push(`${src}: fetch failed — ${String(e)}`)
+        }
+      }
+      for (const href of linkHrefs) {
+        const url = href.startsWith('/') ? `${origin}${href}` : `${previewUrl.replace(/\/?$/, '/')}${href}`
+        try {
+          const res = await fetch(url)
+          if (!res.ok) assetErrors.push(`${href}: HTTP ${res.status}`)
+        } catch (e) {
+          assetErrors.push(`${href}: fetch failed — ${String(e)}`)
+        }
+      }
+
+      // 4. Cross-file static analysis — collect defined vs called function names
+      const allJS = Object.values(jsContents).join('\n')
+
+      const defined = new Set<string>()
+      // function declarations
+      for (const m of allJS.matchAll(/\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g)) defined.add(m[1])
+      // const/let/var arrow + function expressions
+      for (const m of allJS.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s*)?\(/g)) defined.add(m[1])
+      for (const m of allJS.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s+)?function/g)) defined.add(m[1])
+      // React useState destructuring: const [state, setSomething] = useState(...)
+      for (const m of allJS.matchAll(/const\s*\[[^\]]*,\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\]/g)) defined.add(m[1])
+
+      // Build call list — skip anything preceded by '.' (object/prototype method call)
+      const SKIP = new Set(['if','else','while','for','switch','catch','return','typeof','instanceof','new','delete','void','throw','await','yield','async','function','class','extends','super','import','export','default','var','let','const','fetch','console','JSON','Object','Array','String','Number','Boolean','Math','Date','setTimeout','clearTimeout','setInterval','clearInterval','Promise','Error','parseInt','parseFloat','isNaN','isFinite','encodeURIComponent','decodeURIComponent','React','ReactDOM','useState','useEffect','useRef','useMemo','useCallback','useContext','createContext','forwardRef','createElement','require','document','window','navigator','location','history','sessionStorage','localStorage','alert','confirm','prompt','eval','Babel'])
+
+      const called = new Set<string>()
+      // Match calls NOT preceded by '.' — avoids obj.method() false positives
+      for (const m of allJS.matchAll(/(?<![.\w])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g)) {
+        const name = m[1]
+        if (!SKIP.has(name) && name.length > 2) called.add(name)
+      }
+
+      const undefinedCalls = [...called].filter(f => !defined.has(f)).sort()
+
+      const ok = assetErrors.length === 0 && undefinedCalls.length === 0
+
+      return {
+        ok,
+        html_status: htmlStatus,
+        local_scripts: scriptSrcs,
+        local_stylesheets: linkHrefs,
+        asset_errors: assetErrors,
+        defined_functions: [...defined].sort(),
+        undefined_function_calls: undefinedCalls,
+        summary: ok
+          ? `All ${scriptSrcs.length + linkHrefs.length} local assets load HTTP 200. No undefined function calls found across ${scriptSrcs.length} JS file(s).`
+          : [
+              assetErrors.length ? `${assetErrors.length} asset(s) failed to load: ${assetErrors.join(', ')}` : '',
+              undefinedCalls.length ? `${undefinedCalls.length} function(s) called but never defined: ${undefinedCalls.join(', ')}` : '',
+            ].filter(Boolean).join(' | '),
+      }
+    }
+
     // ── browse_app — headless browser smoke test ──────────────────────────────
     definitions.push({
       name: 'browse_app',
