@@ -183,6 +183,18 @@ ${body}
     })
 
     handlers['ask_founder'] = async (input) => {
+      // Hard gate: if ai_skip_quiz is set, this tool must not proceed.
+      // Returning an error forces Maya to call create_task_plan instead.
+      const { data: projForSkip } = await db.from('projects').select('constraints').eq('id', projectId).single()
+      const constraintsForSkip = ((projForSkip?.constraints ?? {}) as Record<string, unknown>)
+      if (constraintsForSkip.ai_skip_quiz === true) {
+        return {
+          ok: false,
+          blocked: true,
+          reason: 'ai_skip_quiz is true — the founder selected "Let AI answer all remaining questions". You are NOT allowed to call ask_founder again. Infer reasonable answers for every uncovered category and call create_task_plan immediately.',
+        }
+      }
+
       const questions = (input.questions as Array<{ text: string; options: string[]; category?: string }>) ?? []
 
       // For quiz questions (not tier selection or tier upgrade), always inject the two
