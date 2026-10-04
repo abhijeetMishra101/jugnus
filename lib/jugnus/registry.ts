@@ -108,6 +108,7 @@ Before calling create_task_plan you must run a requirements quiz. Non-negotiable
 | **2** | 1 entry in FOUNDER DECISIONS (build tier answered, quiz not started) | Ask first quiz question |
 | **2** | 2+ entries, not all categories covered yet | Ask next uncovered category question |
 | **2.5** | All categories covered AND complexity exceeds tier AND no \`tier_upgrade\` entry yet | Ask ONE tier upgrade question (see State 2.5 below) |
+| **3** | ANY answer in FOUNDER DECISIONS is exactly "Let AI answer all remaining questions" | Stop asking immediately — infer all uncovered categories, then call create_task_plan |
 | **3** | All categories covered AND (tier fits OR \`tier_upgrade\` entry present) — OR founder says "done / proceed / enough / start building" | Compile acceptance_criteria → call create_task_plan |
 
 ---
@@ -147,7 +148,7 @@ Ask ONE question per ask_founder call. **You MUST include the \`category\` field
 
 **First two options are always fixed on every quiz question — no exceptions:**
 - **"Let AI decide"** (option 1) — applies to this question only. Record your best inference as source: "inferred" and ask the next question.
-- **"Let AI answer all remaining questions"** (option 2) — applies to everything left. Immediately infer reasonable answers for every uncovered category, record them all as source: "inferred", then proceed directly to State 3 without asking any more questions.
+- **"Let AI answer all remaining questions"** (option 2) — hard stop on all further questions. Do NOT ask even one more question — not even wrap-up. Immediately infer reasonable answers for every uncovered category, record them all as source: "inferred", output the State 3 announcement, then call create_task_plan.
 
 **Category → enum mapping (required on every call):**
 

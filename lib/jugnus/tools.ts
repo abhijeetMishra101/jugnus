@@ -183,17 +183,28 @@ ${body}
     })
 
     handlers['ask_founder'] = async (input) => {
-      const questions = (input.questions as Array<{ text: string; options: string[] }>) ?? []
-      const combinedQuestion = questions.map((q, i) => `${i + 1}. ${q.text}`).join('\n')
+      const questions = (input.questions as Array<{ text: string; options: string[]; category?: string }>) ?? []
+
+      // For quiz questions (not tier selection or tier upgrade), always inject the two
+      // standard shortcut options at the top so the founder can always skip with one tap.
+      const FIXED_OPTS = ['Let AI decide', 'Let AI answer all remaining questions']
+      const NON_QUIZ_CATEGORIES = new Set(['build_tier', 'tier_upgrade'])
+      const questionsWithFixedOpts = questions.map((q) => {
+        if (NON_QUIZ_CATEGORIES.has(q.category ?? '')) return q
+        const filtered = (q.options ?? []).filter((o) => !FIXED_OPTS.includes(o))
+        return { ...q, options: [...FIXED_OPTS, ...filtered] }
+      })
+
+      const combinedQuestion = questionsWithFixedOpts.map((q, i) => `${i + 1}. ${q.text}`).join('\n')
 
       // Build markdown content for the message bubble
       const lines: string[] = []
-      if (questions.length === 1) {
-        lines.push(`**${questions[0].text}**`)
-        questions[0].options.forEach((opt) => lines.push(`  · ${opt}`))
+      if (questionsWithFixedOpts.length === 1) {
+        lines.push(`**${questionsWithFixedOpts[0].text}**`)
+        questionsWithFixedOpts[0].options.forEach((opt) => lines.push(`  · ${opt}`))
       } else {
         lines.push(`Quick questions before I start planning:\n`)
-        questions.forEach((q, i) => {
+        questionsWithFixedOpts.forEach((q, i) => {
           lines.push(`**${i + 1}. ${q.text}**`)
           q.options.forEach((opt) => lines.push(`  · ${opt}`))
           lines.push('')
@@ -202,13 +213,13 @@ ${body}
 
       await db.from('escalations').insert({
         project_id: projectId, task_id: taskId, jugnu_key: 'maya',
-        question: combinedQuestion, options: questions, status: 'pending',
+        question: combinedQuestion, options: questionsWithFixedOpts, status: 'pending',
       })
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'maya',
         content: lines.join('\n').trim(),
         task_id: taskId,
-        metadata: { event_type: 'CLARIFICATION_REQUIRED', questions, escalation: true },
+        metadata: { event_type: 'CLARIFICATION_REQUIRED', questions: questionsWithFixedOpts, escalation: true },
       })
       return { ok: true, waiting_for_founder: true }
     }
