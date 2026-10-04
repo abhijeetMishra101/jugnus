@@ -193,7 +193,7 @@ function FileStreamBubble({ msg, j }: { msg: Message; j: { color: string; bg: st
 
   return (
     <div
-      className="rounded-2xl rounded-tl-sm overflow-hidden shadow-sm"
+      className="w-full rounded-2xl rounded-tl-sm overflow-hidden shadow-sm"
       style={{ border: `1px solid ${j.color}22`, background: '#0d1117' }}
     >
       {/* File header */}
@@ -209,8 +209,8 @@ function FileStreamBubble({ msg, j }: { msg: Message; j: { color: string; bg: st
           ) : `${lines} lines`}
         </span>
       </div>
-      {/* Content */}
-      <pre className="px-4 py-3 text-xs overflow-x-auto overflow-y-auto max-h-64 leading-relaxed"
+      {/* Content — overflow-x-auto gives horizontal scroll; pre preserves formatting */}
+      <pre className="px-4 py-3 text-xs overflow-x-auto max-h-64 leading-relaxed"
         style={{ color: 'rgba(200,210,230,0.9)', fontFamily: 'ui-monospace, SFMono-Regular, monospace', whiteSpace: 'pre' }}>
         {msg.content}
       </pre>
@@ -374,7 +374,7 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
                   <FileStreamBubble msg={msg} j={j} />
                 ) : (
                   <div
-                    className="rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble"
+                    className="w-full min-w-0 rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-sm jugnu-dark-bubble overflow-hidden"
                     style={{ backgroundColor: j.bg, border: `1px solid ${j.color}22` }}
                   >
                     {isClarification && questions.length > 0 ? (
@@ -386,7 +386,7 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
                       />
                     ) : (
                       <>
-                        <div className="jugnu-markdown" style={{ color: 'rgba(240,240,255,0.92)' }}>
+                        <div className="jugnu-markdown min-w-0 break-words" style={{ color: 'rgba(240,240,255,0.92)' }}>
                           <ReactMarkdown>{msg.content}</ReactMarkdown>
                         </div>
                         {meta.event_type === 'REVIEW_PASSED' && (meta.preview_url || meta.live_url) && (

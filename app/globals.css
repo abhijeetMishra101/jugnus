@@ -44,6 +44,21 @@ body {
   font-size: 0.8125rem; background: rgba(0,0,0,0.06);
   border-radius: 0.25rem; padding: 0.1rem 0.3rem;
 }
+/* Code blocks (triple-backtick) get a scroll box so they never overflow the bubble */
+.jugnu-markdown pre {
+  overflow-x: auto;
+  max-width: 100%;
+  background: rgba(0,0,0,0.18);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+}
+.jugnu-markdown pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.75rem;
+  white-space: pre;
+}
 .jugnu-markdown blockquote {
   border-left: 3px solid currentColor; opacity: 0.7;
   padding-left: 0.75rem; margin: 0.375rem 0;
