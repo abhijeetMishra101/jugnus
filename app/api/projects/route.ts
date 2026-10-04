@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
-import { waitUntil } from '@vercel/functions'
 import { createServiceClient } from '@/lib/supabase/server'
 import { JUGNU_REGISTRY } from '@/lib/jugnus/registry'
-import { runPipeline } from '@/lib/jugnus/pipeline'
 
 export const maxDuration = 300
 
@@ -97,8 +95,16 @@ export async function POST(request: Request) {
 
   await db.from('jugnus').update({ status: 'working' }).eq('workspace_id', workspaceId).eq('key', 'maya')
 
-  // Kick off Maya with her real taskId so complete_task marks her Done
-  waitUntil(runPipeline(projectId, mayaTask?.id ?? null, 'maya', db))
+  // Kick off Maya via jugnu-respond (responds 202 immediately) so the browser
+  // doesn't wait for the pipeline — avoids the 55s block in local next dev.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+  if (appUrl) {
+    fetch(`${appUrl}/api/internal/jugnu-respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}` },
+      body: JSON.stringify({ projectId, taskId: mayaTask?.id ?? null, jugnuKey: 'maya' }),
+    }).catch((e) => console.error('[projects] jugnu-respond kick failed:', e))
+  }
 
   return NextResponse.json({ id: projectId, title }, { status: 201 })
 }
