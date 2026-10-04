@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-export const maxDuration = 45
+export const maxDuration = 60
 
 type BrowserAction =
   | { type: 'fill';       selector: string; value: string }

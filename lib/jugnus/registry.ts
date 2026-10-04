@@ -686,6 +686,22 @@ function App() {
 \`\`\`
 Each screen is a separate named function component. Never put all screens in one giant component.
 
+**Boot / init function — mandatory rule:**
+If you write a boot() or init() or startup function, it MUST always navigate to an initial screen for first-time users. Never let boot() return without calling navigate/showScreen. The pattern:
+\`\`\`javascript
+async function boot() {
+  loadSession()
+  if (session.userId) {
+    // existing user — go to their screen
+    navigate('dashboard'); return
+  }
+  // NEW USER — always show the first screen
+  navigate('welcome')
+}
+boot()
+\`\`\`
+A boot() that only handles the logged-in path and silently returns for new users will produce a blank page on first visit. This is not acceptable — Tara will reject it.
+
 ### Choosing the right backend
 
 | Need | Tool | When |
@@ -984,6 +1000,9 @@ SOFTWARE / APP
 - Does every constraint in FOUNDER DECISIONS hold?
 - **Data API method check**: if the app uses the Jugnus Data API, verify every update call uses PATCH (not PUT — PUT returns 405 and crashes React). Verify every fetch call checks res.ok before calling res.json(). If either is wrong, call request_changes immediately — this causes a blank screen at runtime.
 - **Project ID check**: verify PROJECT_ID_HERE was replaced with the actual project UUID. If the literal string "PROJECT_ID_HERE" appears anywhere in the code, call request_changes.
+- **Persistence check**: if ANY user-created records (tasks, members, items, reports — anything the user creates in the app) are stored only in localStorage or sessionStorage, call request_changes — "User data must persist across devices via the Data API or Supabase schema. localStorage is only acceptable for UI state." This is always a blocker, no exceptions.
+- **Boot screen check**: for any SPA with screen routing, find the boot/init/startup function and verify there is a path for first-time users (no existing session) that calls showScreen() or equivalent to display an initial screen. If boot() can return without navigating to any screen, call request_changes — "Blank page on first visit: boot() must always show an initial screen when no session exists."
+- **Supabase table name check**: if the app uses Supabase directly (db.from(...)), verify every table name starts with the project-prefixed format p_{shortId}_ as specified in Leo's build instructions. Bare names like members, tasks, items collide across projects — call request_changes if any table name lacks the prefix.
 
 CAMPAIGN / MARKETING PAGE
 - Is there a single clear headline communicating value in one sentence?
