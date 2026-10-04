@@ -19,6 +19,11 @@ type ViewMode = 'preview' | 'code'
 
 function bestFile(files: FileSnapshot[]): { file: FileSnapshot; mode: ViewMode } | null {
   if (!files.length) return null
+  // Prefer the app entry point over design files
+  const index = files.find((f) => f.path === 'index.html')
+  if (index) return { file: index, mode: 'preview' }
+  const nonDesign = files.find((f) => f.path.endsWith('.html') && !f.path.startsWith('design/'))
+  if (nonDesign) return { file: nonDesign, mode: 'preview' }
   const html = files.find((f) => f.path.endsWith('.html'))
   if (html) return { file: html, mode: 'preview' }
   return { file: files[0], mode: 'code' }
@@ -175,13 +180,23 @@ export function FilesPanel({ projectId, initialFiles, projectStatus }: Props) {
               </div>
 
               {viewMode === 'preview' && isHtml ? (
-                <iframe
-                  key={selected.path}
-                  srcDoc={selected.content}
-                  className="flex-1 w-full border-0 bg-white"
-                  sandbox="allow-scripts"
-                  title={selected.path}
-                />
+                selected.path === 'index.html' ? (
+                  <iframe
+                    key="project-preview"
+                    src={`/preview/${projectId}`}
+                    className="flex-1 w-full border-0 bg-white"
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    title="App preview"
+                  />
+                ) : (
+                  <iframe
+                    key={selected.path}
+                    srcDoc={selected.content}
+                    className="flex-1 w-full border-0 bg-white"
+                    sandbox="allow-scripts"
+                    title={selected.path}
+                  />
+                )
               ) : (
                 <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-gray-800 bg-gray-50 whitespace-pre leading-relaxed">
                   {selected.content}

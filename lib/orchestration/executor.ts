@@ -98,11 +98,16 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       const previewUrl = appUrl ? `${appUrl}/preview/${slug}` : null
 
       const existingConstraints = ((projTitle?.constraints ?? {}) as Record<string, unknown>)
+      // Critical: always set status + deploy_url (separate from preview_slug so a missing column
+      // doesn't silently fail the whole update and leave the project stuck at "building").
       await db.from('projects').update({
         status: 'completed',
+        ...(previewUrl ? { deploy_url: previewUrl } : {}),
+      }).eq('id', projectId)
+      // Best-effort: store slug + update constraints (may fail if preview_slug column not yet added)
+      await db.from('projects').update({
         preview_slug: slug,
         constraints: { ...existingConstraints, preview_slug: slug, revision_mode: false },
-        ...(previewUrl ? { deploy_url: previewUrl } : {}),
       }).eq('id', projectId)
 
       const { data: hasFiles } = await db
