@@ -62,7 +62,15 @@ export async function GET(
     })
   }
 
-  return new NextResponse(file.content as string, {
+  // Inject <base> so relative asset URLs (data.js, styles.css, screen-*.js) resolve
+  // to /preview/{id}/* — served by the [...path] route — instead of /preview/data.js
+  // which hits this route with a non-UUID param and returns "Project not found."
+  const html = (file.content as string).replace(
+    /(<head[^>]*>)/i,
+    `$1\n  <base href="/preview/${resolvedId}/" />`
+  )
+
+  return new NextResponse(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, stale-while-revalidate=60',
