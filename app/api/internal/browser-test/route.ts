@@ -38,11 +38,12 @@ export async function POST(request: Request): Promise<Response> {
     ])
     chromium = chromiumMod.default
     pw = playwrightMod
-  } catch {
+  } catch (importErr) {
+    console.error('[browser-test] import failed:', importErr)
     return NextResponse.json({
       ok: false,
       available: false,
-      error: 'Playwright/Chromium not available in this environment.',
+      error: `Playwright/Chromium not available: ${String(importErr)}`,
     })
   }
 
