@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { createServiceClient } from '../supabase/server'
 import { flags } from '../feature-flags'
 
 const MODEL_STANDARD = 'gpt-image-1'   // OpenAI Images 2.5 — better quality, lower cost than DALL-E 3
@@ -44,7 +45,6 @@ export async function generateImage(params: GenerateImageParams): Promise<ImageR
   const model = quality === 'premium' ? MODEL_PREMIUM : MODEL_STANDARD
 
   try {
-    // gpt-image-1 returns base64 by default; request URL format explicitly
     const response = await client.images.generate({
       model,
       prompt,
@@ -52,13 +52,29 @@ export async function generateImage(params: GenerateImageParams): Promise<ImageR
       size: '1024x1024',
     })
 
-    // gpt-image-1 returns base64 — convert to data URL; fallback to url field if present
     const imgData = response.data?.[0]
-    const url = (imgData as { url?: string })?.url
-      ?? (imgData?.b64_json ? `data:image/png;base64,${imgData.b64_json}` : null)
-    if (!url) throw new Error('No image data in response')
+    const b64 = imgData?.b64_json
+    if (!b64) throw new Error('No image data in response')
 
-    // gpt-image-1 pricing: ~$0.04/image (1024×1024 standard)
+    // Upload to Supabase Storage so the HTML embeds a real URL, not a ~1MB data URI
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.png`
+    const buf = Buffer.from(b64, 'base64')
+    const db = createServiceClient()
+    const { error: uploadError } = await db.storage
+      .from('generated-images')
+      .upload(filename, buf, { contentType: 'image/png', upsert: false })
+
+    let url: string
+    if (uploadError) {
+      // Storage upload failed — fall back to data URL rather than blocking Nia
+      url = `data:image/png;base64,${b64}`
+    } else {
+      const { data: { publicUrl } } = db.storage
+        .from('generated-images')
+        .getPublicUrl(filename)
+      url = publicUrl
+    }
+
     const costUsd = 0.04
 
     return { source: 'generated', url, alt, model, costUsd }

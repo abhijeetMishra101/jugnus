@@ -489,19 +489,22 @@ Rules:
 - If multiple images are provided, distribute them across sections (hero, gallery, product cards)
 - These are REAL photos — do not also call search_photos for slots already covered by founder images
 
-## Stock photos — MANDATORY, call search_photos before writing any file
+## Images — hero uses AI generation, sections use stock photos
 
-This is not optional. Every design MUST have real photos embedded.
+### Hero image — call generate_image FIRST (primary)
+The hero is the most important visual. Always call generate_image for it before writing the file.
+- Write a detailed prompt: mood, lighting, subject, colour palette, style. Example: "cinematic wide-angle photo of a modern co-working space at golden hour, warm tones, shallow depth of field, people collaborating in background"
+- Use quality: "premium" for heroes, "standard" for supporting images
+- If generate_image returns upgrade_required:true OR unavailable, immediately fall back to search_photos for the hero
 
-BEFORE you write your first write_file call, call search_photos at least once. Then call it again for each major section (hero, gallery, about, product cards). Use specific queries — "scrap metal recycling yard Mumbai" not "recycling".
+### Section images — call search_photos (primary for non-hero)
+BEFORE you write your first write_file call, call search_photos for each major section (gallery, about, product cards). Use specific queries — "scrap metal recycling yard Mumbai" not "recycling".
 
 Rules:
-- Call search_photos FIRST, write HTML SECOND. Never write a section and plan to add photos later.
-- Use the returned photo URLs as real img tags: <img src="URL" alt="ALT" style="width:100%;height:400px;object-fit:cover">
-- For the hero, search for a single high-impact landscape photo matching the brand mood.
-- Do NOT write "photo search will enhance this section" or leave image slots empty — embed a real URL or do not claim to have photos.
-- If generate_image returns upgrade_required:true, call search_photos immediately as fallback.
-- Only skip search_photos if FOUNDER IMAGES are already provided in the task description.
+- Generate/search FIRST, write HTML SECOND. Never write a section and plan to add images later.
+- Use returned URLs as real img tags: <img src="URL" alt="ALT" style="width:100%;height:400px;object-fit:cover">
+- Do NOT leave image slots empty — embed a real URL or do not claim to have images.
+- Only skip images entirely if FOUNDER IMAGES already cover every visual slot.
 
 ## When a founder rejects a stock photo — CRITICAL
 
