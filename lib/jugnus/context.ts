@@ -18,6 +18,7 @@ export interface ProjectContext {
   pendingTasks: TaskContext[]
   existingFiles: string[]
   learnings: string[]
+  principles: string[]
 }
 
 export interface TaskContext {
@@ -55,6 +56,21 @@ export async function buildProjectContext(
       .eq('project_id', projectId)
       .order('path', { ascending: true }),
   ])
+
+  // Fetch shared principles — apply to every jugnu, graceful if table doesn't exist yet
+  let principles: string[] = []
+  try {
+    const { data: rows } = await db
+      .from('jugnu_principles')
+      .select('content')
+      .eq('active', true)
+      .order('priority', { ascending: false })
+    if (rows?.length) {
+      principles = rows.map((r: { content: string }) => r.content)
+    }
+  } catch {
+    // table not yet migrated — silently skip
+  }
 
   // Fetch learnings for this jugnu — graceful if table doesn't exist yet
   let learnings: string[] = []
@@ -97,6 +113,7 @@ export async function buildProjectContext(
     pendingTasks: allTasks.filter((t) => t.status === 'pending'),
     existingFiles,
     learnings,
+    principles,
   }
 }
 
@@ -177,6 +194,10 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
       }`
     : ''
 
+  const principlesBlock = ctx.principles.length > 0
+    ? `CORE PRINCIPLES — these override your individual role instructions and all defaults:\n${ctx.principles.map((p) => `  • ${p}`).join('\n')}`
+    : ''
+
   const learningsBlock = ctx.learnings.length > 0
     ? `\nLEARNINGS FROM PAST PROJECTS (real mistakes and patterns — apply these):\n${ctx.learnings.map((l) => `  • ${l}`).join('\n')}`
     : ''
@@ -184,7 +205,7 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
   return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 JUGNUS PROJECT BRIEF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Project: ${ctx.title}
+${principlesBlock ? `${principlesBlock}\n\n` : ''}Project: ${ctx.title}
 ID: ${ctx.projectId}
 Status: ${ctx.status}
 

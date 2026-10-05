@@ -76,6 +76,7 @@ const BASE_CTX: ProjectContext = {
     },
   ],
   learnings: [],
+  principles: [],
 }
 
 describe('formatContextBlock', () => {

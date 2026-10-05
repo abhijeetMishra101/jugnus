@@ -19,3 +19,16 @@ CREATE INDEX IF NOT EXISTS jugnu_learnings_jugnu_key_idx
 ALTER TABLE jugnu_learnings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "service role full access" ON jugnu_learnings
   USING (true) WITH CHECK (true);
+
+-- Shared constitutional principles — injected into every jugnu's context block.
+-- Edit rows here to change agent behavior without code changes or redeployment.
+CREATE TABLE IF NOT EXISTS jugnu_principles (
+  id         uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  content    text        NOT NULL,
+  active     boolean     DEFAULT true,
+  priority   int         DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS jugnu_principles_active_idx ON jugnu_principles (active, priority DESC);
+ALTER TABLE jugnu_principles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service role full access" ON jugnu_principles USING (true) WITH CHECK (true);
