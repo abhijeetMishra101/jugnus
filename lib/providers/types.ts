@@ -30,6 +30,7 @@ export interface UnifiedToolDefinition {
 export interface TokenUsage {
   inputTokens: number
   cachedTokens: number
+  cacheWriteTokens: number
   outputTokens: number
 }
 

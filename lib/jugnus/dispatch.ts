@@ -25,12 +25,12 @@ const MODEL_FOR_JUGNU: Partial<Record<JugnuKey, string>> = {
   tara: MODEL_HAIKU,
 }
 
-// Pricing per 1M tokens
-const PRICING: Record<string, { input: number; cacheRead: number; output: number }> = {
-  [MODEL_SONNET]: { input: 3.00,  cacheRead: 0.30,  output: 15.00 },
-  [MODEL_HAIKU]:  { input: 0.80,  cacheRead: 0.08,  output: 4.00  },
-  [MODEL_ASTRA]:  { input: 15.00, cacheRead: 1.50,  output: 60.00 },
-  [MODEL_GPT41]:  { input: 2.00,  cacheRead: 0.50,  output: 8.00  },
+// Pricing per 1M tokens (cacheWrite = 1.25× input; cacheRead = 0.1× input)
+const PRICING: Record<string, { input: number; cacheWrite: number; cacheRead: number; output: number }> = {
+  [MODEL_SONNET]: { input: 3.00,  cacheWrite: 3.75,  cacheRead: 0.30,  output: 15.00 },
+  [MODEL_HAIKU]:  { input: 0.80,  cacheWrite: 1.00,  cacheRead: 0.08,  output: 4.00  },
+  [MODEL_ASTRA]:  { input: 15.00, cacheWrite: 18.75, cacheRead: 1.50,  output: 60.00 },
+  [MODEL_GPT41]:  { input: 2.00,  cacheWrite: 2.50,  cacheRead: 0.50,  output: 8.00  },
 }
 
 function isOpenAIModel(model: string) {
@@ -436,12 +436,12 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       if (event.type === 'text_delta') planText += event.text
       if (event.type === 'turn_done') {
         const p = PRICING[MODEL] ?? PRICING[MODEL_SONNET]
-        const { inputTokens, cachedTokens, outputTokens } = event.usage
+        const { inputTokens, cachedTokens, cacheWriteTokens, outputTokens } = event.usage
         totalInputTokens  += inputTokens
         totalCachedTokens += cachedTokens
         totalOutputTokens += outputTokens
         totalModelCalls   += 1
-        totalCost += (inputTokens * p.input + cachedTokens * p.cacheRead + outputTokens * p.output) / 1_000_000
+        totalCost += (inputTokens * p.input + cacheWriteTokens * p.cacheWrite + cachedTokens * p.cacheRead + outputTokens * p.output) / 1_000_000
         break
       }
     }
@@ -538,6 +538,19 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       content: turn === 0 ? (turn0Label[jugnuKey] ?? '💭 Starting…') : turnLabel(jugnuKey, turn),
       metadata: { event_type: 'JUGNU_THINKING', jugnu_key: jugnuKey, turn, model: MODEL },
     })
+
+    // ── Trim message history to prevent context bloat ─────────────────────────
+    // Leo keeps 4 head messages (task + plan turn); others keep 1.
+    // Tool results from early turns (large file reads) are dropped after 16 msgs.
+    const HEAD = jugnuKey === 'leo' ? 4 : 1
+    const MAX_MSGS = HEAD + 12  // HEAD + 6 complete turns
+    if (messages.length > MAX_MSGS) {
+      const head = messages.slice(0, HEAD)
+      const tail = messages.slice(-(MAX_MSGS - HEAD))
+      // Ensure tail starts with a user message to maintain role alternation
+      const tailStart = tail.findIndex((m) => m.role === 'user')
+      messages = [...head, ...(tailStart > 0 ? tail.slice(tailStart) : tail)]
+    }
 
     // ── Stream a single turn via the provider adapter ──────────────────────────
 
@@ -695,8 +708,8 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
         // Accumulate telemetry
         const p = PRICING[MODEL] ?? PRICING[MODEL_SONNET]
-        const { inputTokens, cachedTokens, outputTokens } = event.usage
-        const turnCost = (inputTokens * p.input + cachedTokens * p.cacheRead + outputTokens * p.output) / 1_000_000
+        const { inputTokens, cachedTokens, cacheWriteTokens, outputTokens } = event.usage
+        const turnCost = (inputTokens * p.input + cacheWriteTokens * p.cacheWrite + cachedTokens * p.cacheRead + outputTokens * p.output) / 1_000_000
         totalInputTokens += inputTokens
         totalCachedTokens += cachedTokens
         totalOutputTokens += outputTokens

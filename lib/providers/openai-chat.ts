@@ -69,7 +69,7 @@ export function createOpenAIChatAdapter(): ProviderAdapter {
       // Accumulate tool call state across chunks
       const toolCalls: Record<number, { id: string; name: string; args: string }> = {}
       let textContent = ''
-      let usage: TokenUsage = { inputTokens: 0, cachedTokens: 0, outputTokens: 0 }
+      let usage: TokenUsage = { inputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }
       let stopReason: 'end_turn' | 'tool_use' | 'max_tokens' = 'end_turn'
 
       for await (const chunk of stream) {
@@ -77,9 +77,10 @@ export function createOpenAIChatAdapter(): ProviderAdapter {
 
         if (chunk.usage) {
           usage = {
-            inputTokens: chunk.usage.prompt_tokens ?? 0,
-            cachedTokens: (chunk.usage as unknown as Record<string, number>).cached_tokens ?? 0,
-            outputTokens: chunk.usage.completion_tokens ?? 0,
+            inputTokens:      chunk.usage.prompt_tokens ?? 0,
+            cachedTokens:     (chunk.usage as unknown as Record<string, number>).cached_tokens ?? 0,
+            cacheWriteTokens: 0,
+            outputTokens:     chunk.usage.completion_tokens ?? 0,
           }
         }
 

@@ -48,15 +48,19 @@ export function createAnthropicAdapter(): ProviderAdapter {
     async *streamTurn(params: ProviderStreamParams): AsyncIterable<ProviderEvent> {
       const { model, systemPrompt, contextBlock, messages, tools, forceToolUse } = params
 
+      // systemPrompt first: identical across ALL projects using the same jugnu → cache hits span projects
+      // contextBlock second: static within a single task run → cache hits span turns 2+ within one task
       const systemContent: Anthropic.TextBlockParam[] = [
+        { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: contextBlock, cache_control: { type: 'ephemeral' } },
-        { type: 'text', text: systemPrompt },
       ]
 
-      const anthropicTools: Anthropic.Tool[] = tools.map((t) => ({
+      // Cache tool definitions — identical across all runs of the same jugnu
+      const anthropicTools = tools.map((t, i) => ({
         name: t.name,
         description: t.description,
         input_schema: t.inputSchema as Anthropic.Tool['input_schema'],
+        ...(i === tools.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }))
 
       const stream = client.messages.stream({
@@ -93,10 +97,12 @@ export function createAnthropicAdapter(): ProviderAdapter {
         }
       }
 
+      const usageRaw = final.usage as unknown as Record<string, number>
       const usage: TokenUsage = {
-        inputTokens: final.usage.input_tokens ?? 0,
-        cachedTokens: (final.usage as unknown as Record<string, number>).cache_read_input_tokens ?? 0,
-        outputTokens: final.usage.output_tokens ?? 0,
+        inputTokens:      final.usage.input_tokens ?? 0,
+        cachedTokens:     usageRaw.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: usageRaw.cache_creation_input_tokens ?? 0,
+        outputTokens:     final.usage.output_tokens ?? 0,
       }
 
       const stopReason =
