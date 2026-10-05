@@ -316,10 +316,29 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
       taskFailureCount: 0,
     }, db, projectId, taskId)
     if (clarDec === 'PROCEED') {
-      // Brief is clear enough — Jev says proceed, but Maya still runs her full question protocol
-      // (tier selection + priority + constraints). Do not restrict question count here.
       dynamicNudge = (dynamicNudge ? dynamicNudge + '\n\n' : '') +
         '[ROUTING] Brief is well-specified. Run your standard question protocol (tier + priority + constraints). Do not add questions beyond the mandatory 3.'
+    }
+
+    // Jev tier routing — assess complexity and guide Maya's build_tier choice
+    const tierDec = await decide('build_tier', {
+      objective,
+      briefLength: objective.length,
+      hasAttachments,
+      previousClarificationCount: clarCount ?? 0,
+      retryCount,
+      taskFailureCount: 0,
+    }, db, projectId, taskId)
+
+    if (tierDec === 'TIER_QUICK' || tierDec === 'TIER_BALANCED' || tierDec === 'TIER_PREMIUM') {
+      const suggestedTier = tierDec === 'TIER_QUICK' ? 'quick' : tierDec === 'TIER_PREMIUM' ? 'premium' : 'balanced'
+      const rationale = tierDec === 'TIER_QUICK'
+        ? 'simple single-page project — Haiku is sufficient, do not over-engineer'
+        : tierDec === 'TIER_PREMIUM'
+        ? 'complex project with attachments or advanced features — use full quality'
+        : 'medium complexity — balanced tier recommended'
+      dynamicNudge = (dynamicNudge ? dynamicNudge + '\n\n' : '') +
+        `[ROUTING] Jev complexity assessment → build_tier="${suggestedTier}" (${rationale}). Set this tier in create_task_plan unless the founder's answers justify a change.`
     }
   }
 

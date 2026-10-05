@@ -9,6 +9,9 @@ export type DecisionOutcome =
   | 'ESCALATE_ASTRA'
   | 'RETRY'
   | 'STOP'
+  | 'TIER_QUICK'
+  | 'TIER_BALANCED'
+  | 'TIER_PREMIUM'
 
 export interface DecisionContext {
   objective: string
@@ -57,6 +60,16 @@ function deterministicDecision(type: string, ctx: DecisionContext): DecisionOutc
     return 'RETRY'
   }
 
+  if (type === 'build_tier') {
+    const obj = ctx.objective.toLowerCase()
+    const quickSignals = ['landing page', 'one page', 'single page', 'portfolio', 'coming soon', 'profile page', 'simple website', 'promo page']
+    const premiumSignals = ['dashboard', 'full-stack', 'full stack', 'marketplace', 'e-commerce', 'ecommerce', 'multi-page app', 'saas platform', 'admin panel', 'booking system', 'auth']
+    // Attachments mean the founder has visual references → honour them with richer output
+    if (ctx.hasAttachments || ctx.briefLength > 1000 || premiumSignals.some((k) => obj.includes(k))) return 'TIER_PREMIUM'
+    if (!ctx.hasAttachments && ctx.briefLength < 400 && quickSignals.some((k) => obj.includes(k))) return 'TIER_QUICK'
+    return null // ambiguous → Jev decides
+  }
+
   return null
 }
 
@@ -76,8 +89,13 @@ async function callJevDecision(
       needs_clarification: ['ASK_CLARIFICATION', 'PROCEED'],
       needs_nia:           ['SKIP_NIA', 'PROCEED'],
       should_escalate:     ['RETRY', 'ESCALATE_ASTRA', 'STOP'],
+      build_tier:          ['TIER_QUICK', 'TIER_BALANCED', 'TIER_PREMIUM'],
     }
     const options = optionsMap[type] ?? ['PROCEED']
+
+    const tierGuide = type === 'build_tier'
+      ? '\nTIER_QUICK=simple single-page (landing, portfolio, promo). TIER_BALANCED=medium multi-section app. TIER_PREMIUM=complex app (dashboard, marketplace, auth, multi-screen).'
+      : ''
 
     const contextSummary = [
       `Brief length: ${ctx.briefLength} chars`,
@@ -90,10 +108,10 @@ async function callJevDecision(
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 64,
-      system: `You are Jev, a routing decision engine for an AI product team. Output ONLY valid JSON with no explanation: {"decision":"<one of: ${options.join(', ')}>","confidence":<float 0-1>}`,
+      system: `You are Jev, a routing decision engine for an AI product team.${tierGuide} Output ONLY valid JSON with no explanation: {"decision":"<one of: ${options.join(', ')}>","confidence":<float 0-1>}`,
       messages: [{
         role: 'user',
-        content: `Decision: ${type}\nContext: ${contextSummary}\nObjective: ${ctx.objective.slice(0, 200)}`,
+        content: `Decision: ${type}\nContext: ${contextSummary}\nObjective: ${ctx.objective.slice(0, 300)}`,
       }],
     }, { timeout: 8000 })
 
