@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { JugnuIllustration } from './JugnuIllustration'
 import { useProjectEvents } from '../hooks/useProjectEvents'
+import { useNotifications } from '../hooks/useNotifications'
 
 interface Attachment {
   url: string
@@ -826,6 +827,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   // Derive all event-driven state from the messages event stream (reliable) rather
   // than the jugnus table (drops Realtime events under pipeline burst load).
   const events = useProjectEvents(projectId)
+  const { permission, requestPermission } = useNotifications(projectId)
 
   // activeJugnu: last TASK_ASSIGNED says who's working; any completion event clears it.
   // Falls back to the server-rendered snapshot for projects predating event vocabulary.
@@ -1123,6 +1125,17 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
               style={{ maxHeight: '120px' }}
               disabled={sending}
             />
+            {permission !== 'granted' && (
+              <button
+                onClick={() => void requestPermission()}
+                className="text-white/30 hover:text-white/60 transition-colors"
+                title="Enable notifications"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}

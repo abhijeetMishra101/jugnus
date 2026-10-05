@@ -292,8 +292,36 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
   const ctx = await buildProjectContext(projectId, taskId, db, jugnuKey)
   if (!ctx) return { posted: false, toolsUsed: [], finalMessage: null }
 
-  // Phase 7: dynamic routing decision for Maya — skip clarification for clear briefs
+  // Phase 7: dynamic routing decisions via Jev
   let dynamicNudge: string | undefined = input.nudge
+
+  // Tara depth routing — skip compare_with_design on minor revisions
+  if (jugnuKey === 'tara' && flags.DYNAMIC_AGENT_ROUTING) {
+    const { count: leoRevisions } = await db
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('jugnu_key', 'leo')
+      .eq('status', 'completed')
+      .gte('sort_order', 100)
+
+    const { decide } = await import('../engines/decision')
+    const depthDec = await decide('tara_review_depth', {
+      objective: '',
+      briefLength: 0,
+      hasAttachments: false,
+      previousClarificationCount: 0,
+      retryCount,
+      taskFailureCount: 0,
+      leoRevisionCount: leoRevisions ?? 0,
+    }, db, projectId, taskId)
+
+    if (depthDec === 'REVIEW_LITE') {
+      dynamicNudge = (dynamicNudge ? dynamicNudge + '\n\n' : '') +
+        '[ROUTING] Jev depth assessment → LITE review. This is a minor revision — skip compare_with_design and focus on browse_app to check for functional regressions only.'
+    }
+  }
+
   if (jugnuKey === 'maya' && flags.DYNAMIC_AGENT_ROUTING) {
     const { decide } = await import('../engines/decision')
     const { data: proj } = await db.from('projects').select('objective').eq('id', projectId).single()

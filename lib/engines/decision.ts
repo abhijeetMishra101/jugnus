@@ -12,6 +12,8 @@ export type DecisionOutcome =
   | 'TIER_QUICK'
   | 'TIER_BALANCED'
   | 'TIER_PREMIUM'
+  | 'REVIEW_FULL'
+  | 'REVIEW_LITE'
 
 export interface DecisionContext {
   objective: string
@@ -20,6 +22,7 @@ export interface DecisionContext {
   previousClarificationCount: number
   retryCount: number
   taskFailureCount: number
+  leoRevisionCount?: number
 }
 
 export interface DecisionRecord {
@@ -70,6 +73,15 @@ function deterministicDecision(type: string, ctx: DecisionContext): DecisionOutc
     return null // ambiguous → Jev decides
   }
 
+  if (type === 'tara_review_depth') {
+    const revisions = ctx.leoRevisionCount ?? 0
+    // First build: always full review — establish baseline
+    if (revisions === 0) return 'REVIEW_FULL'
+    // 3+ revisions: probably minor polish — lite is sufficient
+    if (revisions >= 3) return 'REVIEW_LITE'
+    return null // 1–2 revisions → Jev decides based on context
+  }
+
   return null
 }
 
@@ -90,11 +102,14 @@ async function callJevDecision(
       needs_nia:           ['SKIP_NIA', 'PROCEED'],
       should_escalate:     ['RETRY', 'ESCALATE_ASTRA', 'STOP'],
       build_tier:          ['TIER_QUICK', 'TIER_BALANCED', 'TIER_PREMIUM'],
+      tara_review_depth:   ['REVIEW_FULL', 'REVIEW_LITE'],
     }
     const options = optionsMap[type] ?? ['PROCEED']
 
     const tierGuide = type === 'build_tier'
       ? '\nTIER_QUICK=simple single-page (landing, portfolio, promo). TIER_BALANCED=medium multi-section app. TIER_PREMIUM=complex app (dashboard, marketplace, auth, multi-screen).'
+      : type === 'tara_review_depth'
+      ? '\nREVIEW_FULL=thorough review with browser test and design comparison. REVIEW_LITE=quick check for functional regressions only, skip design comparison.'
       : ''
 
     const contextSummary = [

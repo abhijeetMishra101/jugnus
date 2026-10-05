@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JugnuKey } from '../jugnus/registry'
+import { sendPipelineEmail } from '../notifications'
 
 interface Task {
   id: string
@@ -134,6 +135,7 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       if (proj?.workspace_id) {
         await db.from('jugnus').update({ status: 'idle' }).eq('workspace_id', proj.workspace_id)
       }
+      void sendPipelineEmail(projectId, 'project_complete', db, { previewUrl: previewUrl ?? undefined })
     }
     return { dispatched: false, jugnuKey: null, taskId: null }
   }
@@ -156,6 +158,7 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
       task_id: next.id,
       metadata: { event_type: 'APPROVAL_REQUIRED', task_id: next.id },
     })
+    void sendPipelineEmail(projectId, 'human_gate', db)
     return { dispatched: false, jugnuKey: null, taskId: next.id }
   }
 
