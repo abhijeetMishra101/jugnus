@@ -1206,7 +1206,19 @@ ${body}
         .single()
 
       const buildEvidence = (leoTask?.artifact as Record<string, unknown> | null)?.build_evidence as Record<string, unknown> | undefined
-      if (buildEvidence && buildEvidence.html_valid === false) {
+
+      // If at the revision cap, approve must go through regardless of html_valid — otherwise
+      // Tara is deadlocked (request_changes also blocked). She must document issues in comment.
+      const { count: leoRevisions } = await db
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('jugnu_key', 'leo')
+        .eq('status', 'completed')
+        .gte('sort_order', 100)
+      const atRevisionCap = (leoRevisions ?? 0) >= 4
+
+      if (!atRevisionCap && buildEvidence && buildEvidence.html_valid === false) {
         throw new Error('Cannot approve: build evidence shows html_valid is false. Use request_changes to ask Leo to fix the HTML output.')
       }
 
@@ -1262,7 +1274,7 @@ ${body}
 
     definitions.push({
       name: 'request_changes',
-      description: 'Request changes from Leo. Describe exactly what needs to be fixed. Do not call this if Leo has already revised once — approve with reservations instead.',
+      description: 'Request changes from Leo. Describe exactly what needs to be fixed. Do not call this if Leo has already revised four times — approve with reservations instead, listing every remaining issue in your comment.',
       input_schema: {
         type: 'object' as const,
         properties: {

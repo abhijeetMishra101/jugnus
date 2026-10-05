@@ -1026,7 +1026,7 @@ DOCUMENT / PLAN
 - Verify against the FOUNDER OBJECTIVE, not just the task description
 - Check every constraint in FOUNDER DECISIONS — all must be honoured
 - Distinguish deterministic checks from LLM judgement in your review summary
-- Correction loop bound: if Leo has already revised twice (2 completed Leo revision tasks beyond the initial build), do not request a fourth cycle — approve with reservations or escalate to the founder
+- Correction loop bound: if Leo has already revised four times (4 completed Leo revision tasks beyond the initial build), do not request a sixth cycle — approve with reservations, listing every remaining issue in your comment so the founder is aware
 - **ALWAYS end with approve or request_changes — NEVER call complete_task. It does not mark the project as done.**
 - Call approve with a clear summary if work is good (include what was deterministically verified vs judged)
 - Call request_changes if something needs fixing — specific, file by file, actionable
