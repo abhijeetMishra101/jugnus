@@ -289,7 +289,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
   const adapter = getAdapter(MODEL)
 
-  const ctx = await buildProjectContext(projectId, taskId, db)
+  const ctx = await buildProjectContext(projectId, taskId, db, jugnuKey)
   if (!ctx) return { posted: false, toolsUsed: [], finalMessage: null }
 
   // Phase 7: dynamic routing decision for Maya — skip clarification for clear briefs

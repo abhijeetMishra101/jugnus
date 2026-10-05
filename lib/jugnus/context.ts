@@ -17,6 +17,7 @@ export interface ProjectContext {
   completedTasks: TaskContext[]
   pendingTasks: TaskContext[]
   existingFiles: string[]
+  learnings: string[]
 }
 
 export interface TaskContext {
@@ -33,7 +34,8 @@ export interface TaskContext {
 export async function buildProjectContext(
   projectId: string,
   currentTaskId: string | null,
-  db: SupabaseClient
+  db: SupabaseClient,
+  jugnuKey?: string
 ): Promise<ProjectContext | null> {
   const { data: project } = await db
     .from('projects')
@@ -53,6 +55,26 @@ export async function buildProjectContext(
       .eq('project_id', projectId)
       .order('path', { ascending: true }),
   ])
+
+  // Fetch learnings for this jugnu — graceful if table doesn't exist yet
+  let learnings: string[] = []
+  if (jugnuKey) {
+    try {
+      const { data: rows } = await db
+        .from('jugnu_learnings')
+        .select('content, learning_type')
+        .eq('jugnu_key', jugnuKey)
+        .order('created_at', { ascending: false })
+        .limit(6)
+      if (rows?.length) {
+        learnings = rows.map((r: { content: string; learning_type: string }) =>
+          `[${r.learning_type}] ${r.content}`
+        )
+      }
+    } catch {
+      // table not yet migrated — silently skip
+    }
+  }
 
   const allTasks = (tasksRes.data ?? []) as TaskContext[]
   const existingFiles = (filesRes.data ?? []).map((f: { path: string }) => f.path)
@@ -74,6 +96,7 @@ export async function buildProjectContext(
     completedTasks: allTasks.filter((t) => t.status === 'completed'),
     pendingTasks: allTasks.filter((t) => t.status === 'pending'),
     existingFiles,
+    learnings,
   }
 }
 
@@ -154,6 +177,10 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
       }`
     : ''
 
+  const learningsBlock = ctx.learnings.length > 0
+    ? `\nLEARNINGS FROM PAST PROJECTS (real mistakes and patterns — apply these):\n${ctx.learnings.map((l) => `  • ${l}`).join('\n')}`
+    : ''
+
   return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 JUGNUS PROJECT BRIEF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -171,6 +198,7 @@ ${completed ? `\nCOMPLETED TASKS:\n${completed}` : ''}
 ${pending ? `\nUPCOMING TASKS:\n${pending}` : ''}
 ${filesBlock}
 ${buildEvidenceBlock}
+${learningsBlock}
 
 ${current}
 ${personaLine}

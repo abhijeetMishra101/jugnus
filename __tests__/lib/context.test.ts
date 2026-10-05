@@ -75,6 +75,7 @@ const BASE_CTX: ProjectContext = {
       jugnu_key: 'leo', status: 'pending', result: null, artifact: null,
     },
   ],
+  learnings: [],
 }
 
 describe('formatContextBlock', () => {
