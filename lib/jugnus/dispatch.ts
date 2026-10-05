@@ -712,7 +712,7 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
     if (completedTools.length === 0) break
 
-    const toolResults: Array<{ toolUseId: string; content: string; isError?: boolean }> = []
+    const toolResults: Array<{ toolUseId: string; content: import('../providers/types').ToolResultContent; isError?: boolean }> = []
 
     for (const toolCall of completedTools) {
       toolsUsed.push(toolCall.name)
@@ -729,8 +729,9 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         approve:           `✅ Approving`,
         request_changes:   `✏️ Requesting changes`,
         ask_founder:       `💬 Asking for your input`,
-        call_api:          `🌐 Testing API…`,
-        browse_app:        `🌐 Running browser test…`,
+        call_api:            `🌐 Testing API…`,
+        browse_app:          `🌐 Running browser test…`,
+        compare_with_design: `🎨 Comparing against approved design…`,
       }
 
       await db.from('messages').insert({
@@ -748,7 +749,9 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
 
       try {
         const result = await handler(toolCall.input)
-        toolResults.push({ toolUseId: toolCall.id, content: JSON.stringify(result) })
+        // Array results are content blocks (e.g. images) — pass directly; objects get JSON-stringified
+        const content = Array.isArray(result) ? result : JSON.stringify(result)
+        toolResults.push({ toolUseId: toolCall.id, content })
 
         const terminalTools = ['complete_task', 'create_task_plan', 'submit_for_review', 'approve', 'request_changes', 'ask_founder', 'join_v2_waitlist', 'request_info']
         if (terminalTools.includes(toolCall.name)) {

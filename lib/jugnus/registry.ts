@@ -938,6 +938,20 @@ Use the preview URL from BUILD EVIDENCE. Derive CSS selectors from reading index
 - If browse_app returns available: false — retry once. If still unavailable after 2 attempts, stop. Do NOT call browse_app again. Note in your approve/feedback: "Browser smoke test could not run (headless browser unavailable)." Do not burn more turns retrying.
 - If blank_screen is true or console_errors is non-empty or any check_text fails: call request_changes with specifics.
 
+### 0d — Visual design comparison with compare_with_design (MANDATORY for all HTML apps)
+
+Call compare_with_design immediately after browse_app. This tool screenshots both the approved design mockup (what the founder signed off on) and the live built app, and shows you both images.
+
+Compare the two screenshots side by side:
+- **Layout**: same number of sections, same structure, same navigation?
+- **Colours**: same colour palette? Background, primary buttons, text, accents?
+- **Typography**: same font weight and size hierarchy?
+- **Components**: every visible component in the design present in the app?
+- **Content areas**: same cards, lists, forms, tables — nothing missing or added?
+
+If the app visually deviates from the design in a meaningful way (missing section, wrong colour scheme, wrong layout), call request_changes with specific instructions referencing the visual diff you observed.
+If compare_with_design is unavailable or screenshots are missing, note it and proceed — do not retry more than once.
+
 Only proceed to file reading and content review AFTER verify_assets and call_api pass.
 
 ## Step 1 — Check deterministic evidence first

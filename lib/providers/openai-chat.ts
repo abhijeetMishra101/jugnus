@@ -136,11 +136,15 @@ export function createOpenAIChatAdapter(): ProviderAdapter {
 
     appendToolResults(messages, assistantContent, toolResults) {
       const assistantMsg = assistantContent as OpenAI.Chat.ChatCompletionAssistantMessageParam
-      const resultMsgs: OpenAI.Chat.ChatCompletionToolMessageParam[] = toolResults.map((r) => ({
-        role: 'tool' as const,
-        tool_call_id: r.toolUseId,
-        content: r.isError ? `Error: ${r.content}` : r.content,
-      }))
+      const resultMsgs: OpenAI.Chat.ChatCompletionToolMessageParam[] = toolResults.map((r) => {
+        // OpenAI tool results only support string content — flatten arrays to JSON
+        const content = typeof r.content === 'string' ? r.content : JSON.stringify(r.content)
+        return {
+          role: 'tool' as const,
+          tool_call_id: r.toolUseId,
+          content: r.isError ? `Error: ${content}` : content,
+        }
+      })
       return [
         ...messages,
         { role: 'assistant' as const, content: assistantMsg as unknown as string },

@@ -22,10 +22,15 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { url, actions = [] } = await request.json() as { url: string; actions?: BrowserAction[] }
+  const { url, htmlContent, actions = [], returnScreenshot = false } = await request.json() as {
+    url?: string
+    htmlContent?: string
+    actions?: BrowserAction[]
+    returnScreenshot?: boolean
+  }
 
-  if (!url) {
-    return NextResponse.json({ ok: false, error: 'url is required' }, { status: 400 })
+  if (!url && !htmlContent) {
+    return NextResponse.json({ ok: false, error: 'url or htmlContent is required' }, { status: 400 })
   }
 
   let chromium: typeof import('@sparticuz/chromium').default
@@ -80,7 +85,11 @@ export async function POST(request: Request): Promise<Response> {
     })
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
 
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 })
+    if (htmlContent) {
+      await page.setContent(htmlContent, { waitUntil: 'networkidle2', timeout: 15000 })
+    } else {
+      await page.goto(url!, { waitUntil: 'networkidle2', timeout: 15000 })
+    }
 
     // Wait for JS frameworks to render (React CDN needs a tick after networkidle)
     await new Promise(r => setTimeout(r, 1500))
@@ -137,6 +146,12 @@ export async function POST(request: Request): Promise<Response> {
 
     const allActionsPassed = actionResults.every((r) => r.passed)
 
+    let screenshot: string | undefined
+    if (returnScreenshot) {
+      const buf = await page.screenshot({ type: 'jpeg', quality: 75, fullPage: false }) as Buffer
+      screenshot = buf.toString('base64')
+    }
+
     return NextResponse.json({
       ok: !blankScreen && consoleErrors.length === 0 && allActionsPassed,
       available: true,
@@ -147,6 +162,7 @@ export async function POST(request: Request): Promise<Response> {
       console_errors: consoleErrors,
       console_warnings: consoleWarnings,
       action_results: actionResults,
+      ...(screenshot ? { screenshot } : {}),
     })
   } finally {
     await browser.close()

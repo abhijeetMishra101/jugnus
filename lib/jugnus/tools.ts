@@ -1181,6 +1181,83 @@ ${body}
       }
     }
 
+    // ── compare_with_design — visual fidelity check against Nia's approved mockup ─
+    definitions.push({
+      name: 'compare_with_design',
+      description: 'Screenshot both the approved design mockup (design/assembled.html) and the live built app, and return both images so you can verify the implementation matches what the user approved visually. Call this after browse_app.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {},
+        required: [],
+      },
+    })
+
+    handlers['compare_with_design'] = async () => {
+      const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}`,
+      }
+
+      const { data: designFile } = await db
+        .from('file_snapshots')
+        .select('content')
+        .eq('project_id', projectId)
+        .eq('path', 'design/assembled.html')
+        .single()
+
+      if (!designFile?.content) {
+        return { ok: false, error: 'No design/assembled.html found — cannot compare against approved design.' }
+      }
+
+      const [designRes, appRes] = await Promise.all([
+        fetch(`${base}/api/internal/browser-test`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ htmlContent: designFile.content, returnScreenshot: true }),
+        }),
+        fetch(`${base}/api/internal/browser-test`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ url: `${base}/preview/${projectId}`, returnScreenshot: true }),
+        }),
+      ])
+
+      const [designData, appData] = await Promise.all([
+        designRes.json() as Promise<{ screenshot?: string; ok?: boolean }>,
+        appRes.json() as Promise<{ screenshot?: string; ok?: boolean }>,
+      ])
+
+      if (!designData.screenshot && !appData.screenshot) {
+        return { ok: false, error: 'Screenshots unavailable (browser not running). Skip this step and rely on browse_app result.' }
+      }
+
+      // Return as image content blocks — the LLM sees both screenshots side by side
+      type Block = { type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+      const blocks: Block[] = []
+
+      if (designData.screenshot) {
+        blocks.push({ type: 'text', text: '**Approved design** (what the founder signed off on):' })
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: designData.screenshot } })
+      } else {
+        blocks.push({ type: 'text', text: '**Approved design**: screenshot unavailable.' })
+      }
+
+      if (appData.screenshot) {
+        blocks.push({ type: 'text', text: '**Built app** (current implementation):' })
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: appData.screenshot } })
+      } else {
+        blocks.push({ type: 'text', text: '**Built app**: screenshot unavailable.' })
+      }
+
+      blocks.push({
+        type: 'text',
+        text: 'Compare the two screenshots. Flag any deviations: missing sections, wrong layout, wrong colours, wrong typography, missing components, or content that differs from the approved design. If the app does not match, call request_changes with specific file-by-file instructions.',
+      })
+
+      return blocks
+    }
+
     definitions.push({
       name: 'approve',
       description: 'Approve the files. The project will be marked complete and the founder notified.',

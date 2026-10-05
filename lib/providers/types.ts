@@ -50,6 +50,12 @@ export interface ProviderStreamParams {
   forceToolUse: boolean
 }
 
+export type ToolResultContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
+export type ToolResultContent = string | ToolResultContentBlock[]
+
 export interface ProviderAdapter {
   /** Stream a single agentic turn, yielding unified events. */
   streamTurn(params: ProviderStreamParams): AsyncIterable<ProviderEvent>
@@ -57,7 +63,7 @@ export interface ProviderAdapter {
   appendToolResults(
     messages: UnifiedMessage[],
     assistantContent: unknown,
-    toolResults: Array<{ toolUseId: string; content: string; isError?: boolean }>
+    toolResults: Array<{ toolUseId: string; content: ToolResultContent; isError?: boolean }>
   ): UnifiedMessage[]
   /** Raw assistant content from the last turn (provider-specific format, for appendToolResults). */
   lastAssistantContent: unknown
