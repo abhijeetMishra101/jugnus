@@ -1284,13 +1284,13 @@ ${body}
         .eq('status', 'completed')
         .gte('sort_order', 100)
 
-      if ((leoRevisions ?? 0) >= 1) {
-        // Leo has already revised once — hard block to prevent endless loop.
+      if ((leoRevisions ?? 0) >= 2) {
+        // Leo has already revised twice — hard block to prevent endless loop.
         // Tara MUST call approve (with reservations if needed), not request_changes again.
         return {
           ok: false,
           blocked: true,
-          reason: 'Leo has already revised once. You are NOT allowed to call request_changes again. Call approve now. If issues remain, describe them in your approval comment so the founder is aware — but the project must ship.',
+          reason: 'Leo has already revised twice. You are NOT allowed to call request_changes again. Call approve now. If issues remain, describe them in your approval comment so the founder is aware — but the project must ship.',
         }
       }
 
