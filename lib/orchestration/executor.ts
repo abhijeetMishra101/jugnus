@@ -104,11 +104,12 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
         status: 'completed',
         ...(previewUrl ? { deploy_url: previewUrl } : {}),
       }).eq('id', projectId)
-      // Best-effort: store slug + update constraints (may fail if preview_slug column not yet added)
+      // Always: embed slug in constraints JSON — preview route fallback reads this
       await db.from('projects').update({
-        preview_slug: slug,
         constraints: { ...existingConstraints, preview_slug: slug, revision_mode: false },
       }).eq('id', projectId)
+      // Best-effort: set preview_slug column (fails silently if migration not applied — that's fine)
+      await db.from('projects').update({ preview_slug: slug }).eq('id', projectId)
 
       const { data: hasFiles } = await db
         .from('file_snapshots')
