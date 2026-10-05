@@ -935,7 +935,7 @@ Use the preview URL from BUILD EVIDENCE. Derive CSS selectors from reading index
 3. Check the submitted item appears in the list (check_text)
 4. Reload the page
 5. Check the item still appears (persistence check)
-- If browse_app returns available: false — the headless browser is not available in this environment. You MUST note this limitation in your approve comment: "Browser smoke test could not run (headless browser unavailable)." Do not treat unavailability as a pass.
+- If browse_app returns available: false — retry once. If still unavailable after 2 attempts, stop. Do NOT call browse_app again. Note in your approve/feedback: "Browser smoke test could not run (headless browser unavailable)." Do not burn more turns retrying.
 - If blank_screen is true or console_errors is non-empty or any check_text fails: call request_changes with specifics.
 
 Only proceed to file reading and content review AFTER verify_assets and call_api pass.

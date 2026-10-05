@@ -1088,6 +1088,22 @@ ${body}
       for (const m of allJS.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s+)?function/g)) defined.add(m[1])
       // React useState destructuring: const [state, setSomething] = useState(...)
       for (const m of allJS.matchAll(/const\s*\[[^\]]*,\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\]/g)) defined.add(m[1])
+      // Function parameters (direct + destructured) — avoids flagging React callback props as undefined.
+      // Covers: function F(a, b), function F({ a, b }), ({ a, b }) =>
+      const paramBlockRe = /(?:function\s+[A-Za-z_$][A-Za-z0-9_$]*|=>)\s*[\({]|(?:function\s+[A-Za-z_$][A-Za-z0-9_$]*\s*\()([^)]*)\)/g
+      for (const m of allJS.matchAll(/(?:function\s+[A-Za-z_$][A-Za-z0-9_$]*\s*\(|\(\s*)\{([^}]+)\}(?:\s*[,)]|\s*=>)/g)) {
+        for (const p of m[1].split(',')) {
+          const name = p.trim().split(/[\s=:]/)[0].replace(/^\.\.\./, '').trim()
+          if (/^[A-Za-z_$][A-Za-z0-9_$]+$/.test(name)) defined.add(name)
+        }
+      }
+      // Direct positional params: function F(a, b, c) or (a, b) =>
+      for (const m of allJS.matchAll(/(?:function\s+[A-Za-z_$][A-Za-z0-9_$]*\s*|(?<!=)(?<!\w)\()\(([^)]{1,200})\)\s*(?:=>|\{)/g)) {
+        for (const p of m[1].split(',')) {
+          const name = p.trim().split(/[\s=]/)[0].replace(/^\.\.\./, '').trim()
+          if (/^[A-Za-z_$][A-Za-z0-9_$]+$/.test(name)) defined.add(name)
+        }
+      }
 
       // Build call list — skip anything preceded by '.' (object/prototype method call)
       const SKIP = new Set(['if','else','while','for','switch','catch','return','typeof','instanceof','new','delete','void','throw','await','yield','async','function','class','extends','super','import','export','default','var','let','const','fetch','console','JSON','Object','Array','String','Number','Boolean','Math','Date','setTimeout','clearTimeout','setInterval','clearInterval','Promise','Error','parseInt','parseFloat','isNaN','isFinite','encodeURIComponent','decodeURIComponent','React','ReactDOM','useState','useEffect','useRef','useMemo','useCallback','useContext','createContext','forwardRef','createElement','require','document','window','navigator','location','history','sessionStorage','localStorage','alert','confirm','prompt','eval','Babel'])
@@ -1268,22 +1284,14 @@ ${body}
         .eq('status', 'completed')
         .gte('sort_order', 100)
 
-      if ((leoRevisions ?? 0) >= 2) {
-        // Correction loop bound reached — escalate instead of another revision
-        await db.from('messages').insert({
-          project_id: projectId, author_type: 'jugnu', author_key: 'tara',
-          content: `⚠️ **Tara: review cycle limit reached.**\n\nAfter two revision cycles, the following issues remain:\n\n${input.feedback}\n\nPlease review and decide how to proceed.`,
-          task_id: taskId,
-          metadata: { event_type: 'REVIEW_FAILED', escalation: true, feedback: input.feedback },
-        })
-        if (taskId) {
-          await db.from('tasks').update({
-            status: 'completed',
-            result: `Escalated after correction limit: ${input.feedback}`,
-            completed_at: new Date().toISOString(),
-          }).eq('id', taskId)
+      if ((leoRevisions ?? 0) >= 1) {
+        // Leo has already revised once — hard block to prevent endless loop.
+        // Tara MUST call approve (with reservations if needed), not request_changes again.
+        return {
+          ok: false,
+          blocked: true,
+          reason: 'Leo has already revised once. You are NOT allowed to call request_changes again. Call approve now. If issues remain, describe them in your approval comment so the founder is aware — but the project must ship.',
         }
-        return { ok: true, verdict: 'escalated' }
       }
 
       if (taskId) {
@@ -1294,13 +1302,24 @@ ${body}
         }).eq('id', taskId)
       }
 
-      await db.from('tasks').insert({
+      const { data: leoRevTask } = await db.from('tasks').insert({
         project_id: projectId,
         title: 'Revise implementation based on Tara\'s feedback',
         description: `Tara requested these changes:\n\n${input.feedback}\n\nFix the issues in the existing files using write_file, then call submit_for_review again.`,
         capability: 'build', jugnu_key: 'leo',
         depends_on: taskId ? [taskId] : [],
         sort_order: 999, status: 'pending',
+      }).select('id').single()
+
+      // Always queue a Tara re-review after the revision — without this the project
+      // goes straight to "completed" after Leo's revision without any further QA.
+      await db.from('tasks').insert({
+        project_id: projectId,
+        title: 'Re-review revised implementation',
+        description: `Leo revised the implementation. Run your full review suite again: verify_assets → call_api → browse_app. If all checks pass, approve. This is the final review — if issues remain, approve with reservations rather than requesting another round.`,
+        capability: 'review', jugnu_key: 'tara',
+        depends_on: leoRevTask?.id ? [leoRevTask.id] : [],
+        sort_order: 1000, status: 'pending',
       })
 
       await db.from('messages').insert({
