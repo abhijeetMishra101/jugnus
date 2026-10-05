@@ -86,7 +86,7 @@ export async function POST(request: Request): Promise<Response> {
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
 
     if (htmlContent) {
-      await page.setContent(htmlContent, { waitUntil: 'networkidle2', timeout: 15000 })
+      await page.setContent(htmlContent, { waitUntil: 'load', timeout: 15000 })
     } else {
       await page.goto(url!, { waitUntil: 'networkidle2', timeout: 15000 })
     }

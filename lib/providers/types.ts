@@ -52,7 +52,7 @@ export interface ProviderStreamParams {
 
 export type ToolResultContentBlock =
   | { type: 'text'; text: string }
-  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } }
 
 export type ToolResultContent = string | ToolResultContentBlock[]
 

@@ -1233,7 +1233,7 @@ ${body}
       }
 
       // Return as image content blocks — the LLM sees both screenshots side by side
-      type Block = { type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+      type Block = { type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } }
       const blocks: Block[] = []
 
       if (designData.screenshot) {
