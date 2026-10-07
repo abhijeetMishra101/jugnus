@@ -17,6 +17,7 @@ export interface ProjectContext {
   completedTasks: TaskContext[]
   pendingTasks: TaskContext[]
   existingFiles: string[]
+  failedTasks: TaskContext[]
   learnings: string[]
   principles: string[]
 }
@@ -111,6 +112,7 @@ export async function buildProjectContext(
     currentTask,
     completedTasks: allTasks.filter((t) => t.status === 'completed'),
     pendingTasks: allTasks.filter((t) => t.status === 'pending'),
+    failedTasks: allTasks.filter((t) => t.status === 'failed'),
     existingFiles,
     learnings,
     principles,
@@ -158,7 +160,7 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
       .join('\n')
   }
 
-  // Extract build evidence from Leo's completed task (if present) for Tara
+  // Extract build evidence from Leo's last completed task (if present) for Tara
   const leoBuildEvidence = ctx.completedTasks
     .filter((t) => t.jugnu_key === 'leo')
     .map((t) => (t.artifact as Record<string, unknown> | null)?.build_evidence as Record<string, unknown> | undefined)
@@ -172,6 +174,10 @@ export function formatContextBlock(ctx: ProjectContext, jugnuKey: JugnuKey): str
       `  Preview URL: ${String(leoBuildEvidence.preview_url ?? 'unavailable')}\n` +
       `  Checked at: ${String(leoBuildEvidence.checked_at ?? 'unknown')}\n` +
       `  NOTE: Do NOT approve if html_valid is false.`
+    : ''
+
+  const leoBuildFailedBlock = ctx.failedTasks.some((t) => t.jugnu_key === 'leo')
+    ? `\n⚠️ LEO BUILD FAILED — Leo's last attempt produced no files (build error). You MUST call approve immediately with a clear message to the founder explaining what was attempted and what could not be delivered. Do NOT call request_changes.`
     : ''
 
   // Inject project-specific persona for this jugnu
@@ -218,7 +224,7 @@ ${acceptanceCriteriaBlock}
 ${completed ? `\nCOMPLETED TASKS:\n${completed}` : ''}
 ${pending ? `\nUPCOMING TASKS:\n${pending}` : ''}
 ${filesBlock}
-${buildEvidenceBlock}
+${buildEvidenceBlock}${leoBuildFailedBlock}
 ${learningsBlock}
 
 ${current}

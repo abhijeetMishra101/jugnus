@@ -69,6 +69,7 @@ const BASE_CTX: ProjectContext = {
     artifact: null,
   },
   completedTasks: [],
+  failedTasks: [],
   pendingTasks: [
     {
       id: 'task-2', title: 'Implement dark mode', description: '…', capability: 'build',

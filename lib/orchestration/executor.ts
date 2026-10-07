@@ -23,14 +23,16 @@ export async function getNextReadyTask(
 
   if (!tasks?.length) return null
 
-  const completedIds = new Set(
-    tasks.filter((t) => t.status === 'completed' || t.status === 'skipped').map((t) => t.id)
+  // 'failed' is treated as satisfied so downstream tasks (e.g. Tara reviewing a failed Leo build)
+  // can still run — otherwise the project deadlocks permanently with a pending task that never fires.
+  const satisfiedIds = new Set(
+    tasks.filter((t) => ['completed', 'skipped', 'failed'].includes(t.status)).map((t) => t.id)
   )
 
   return tasks.find((t) => {
     if (t.status !== 'pending') return false
     const deps = (t.depends_on ?? []) as string[]
-    return deps.every((dep) => completedIds.has(dep))
+    return deps.every((dep) => satisfiedIds.has(dep))
   }) ?? null
 }
 

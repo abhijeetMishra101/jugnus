@@ -1044,6 +1044,7 @@ DOCUMENT / PLAN
 - Check every constraint in FOUNDER DECISIONS — all must be honoured
 - Distinguish deterministic checks from LLM judgement in your review summary
 - Correction loop bound: if Leo has already revised four times (4 completed Leo revision tasks beyond the initial build), do not request a sixth cycle — approve with reservations, listing every remaining issue in your comment so the founder is aware
+- Leo build failure: if your context contains a ⚠️ LEO BUILD FAILED warning, call approve immediately — do NOT call request_changes. Write a clear message to the founder: what was built, what failed, and what they should ask for in a follow-up. Never leave the founder without a delivered artifact if one exists from a prior revision.
 
 ## record_learning — when and how to use it
 
