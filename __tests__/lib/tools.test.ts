@@ -531,3 +531,123 @@ describe('create_task_plan handler', () => {
     expect(constraints?.acceptance_criteria).toEqual(minimalRevisionPlan.acceptance_criteria)
   })
 })
+
+// ── Tara tools ─────────────────────────────────────────────────────────────────
+
+function makeTaraDb() {
+  const insertedLearnings: Array<Record<string, unknown>> = []
+  const insertedMessages: Array<Record<string, unknown>> = []
+  const insertedTasks: Array<Record<string, unknown>> = []
+  let taskInsertCount = 0
+
+  const db = {
+    from: vi.fn((table: string) => {
+      if (table === 'jugnu_learnings') {
+        return {
+          insert: vi.fn((data: Record<string, unknown>) => {
+            insertedLearnings.push(data)
+            return Promise.resolve({ error: null })
+          }),
+        }
+      }
+      if (table === 'messages') {
+        return {
+          insert: vi.fn((data: Record<string, unknown>) => {
+            insertedMessages.push(data)
+            return Promise.resolve({ error: null })
+          }),
+        }
+      }
+      if (table === 'tasks') {
+        return {
+          select: vi.fn((_fields: unknown, opts?: { count?: string; head?: boolean }) => {
+            if (opts?.head) {
+              return { eq: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(() => ({ gte: vi.fn().mockResolvedValue({ count: 0 }) })) })) })) }
+            }
+            return {
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  eq: vi.fn(() => ({
+                    order: vi.fn(() => ({ limit: vi.fn(() => ({ single: vi.fn().mockResolvedValue({ data: { artifact: { build_evidence: { html_valid: true, preview_url: 'http://localhost:3000/preview/proj-test' } } } }) })) })),
+                  })),
+                })),
+              })),
+            }
+          }),
+          insert: vi.fn((data: Record<string, unknown>) => {
+            taskInsertCount++
+            const id = `task-${taskInsertCount}`
+            insertedTasks.push({ ...data, id })
+            return { select: vi.fn(() => ({ single: vi.fn().mockResolvedValue({ data: { id } }) })) }
+          }),
+          update: vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) })),
+        }
+      }
+      if (table === 'projects') {
+        return {
+          update: vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) })),
+        }
+      }
+      return {}
+    }),
+    _learnings: insertedLearnings,
+    _messages: insertedMessages,
+    _tasks: insertedTasks,
+  }
+  return db
+}
+
+describe('record_learning (tara)', () => {
+  const projectId = makeProjectId()
+  const taskId = makeTaskId()
+
+  it('inserts a learning record for the given jugnu_key and type', async () => {
+    const db = makeTaraDb()
+    const tools = buildToolsForJugnu('tara', projectId, taskId, db as unknown as SupabaseClient)
+    const result = await tools.handlers['record_learning']({
+      jugnu_key: 'leo',
+      learning_type: 'mistake',
+      content: 'Use React useState for screen transitions — vanilla JS display:none toggling fails under headless browser clicks.',
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    expect(db._learnings).toHaveLength(1)
+    expect(db._learnings[0]).toMatchObject({
+      jugnu_key: 'leo',
+      learning_type: 'mistake',
+      source_project_id: projectId,
+    })
+  })
+
+  it('rejects content that is too short', async () => {
+    const db = makeTaraDb()
+    const tools = buildToolsForJugnu('tara', projectId, taskId, db as unknown as SupabaseClient)
+    const result = await tools.handlers['record_learning']({
+      jugnu_key: 'leo',
+      learning_type: 'pattern',
+      content: 'Too short.',
+    })
+
+    expect(result).toMatchObject({ ok: false })
+    expect(db._learnings).toHaveLength(0)
+  })
+
+  it('rejects content that exceeds 400 chars', async () => {
+    const db = makeTaraDb()
+    const tools = buildToolsForJugnu('tara', projectId, taskId, db as unknown as SupabaseClient)
+    const result = await tools.handlers['record_learning']({
+      jugnu_key: 'nia',
+      learning_type: 'fix',
+      content: 'x'.repeat(401),
+    })
+
+    expect(result).toMatchObject({ ok: false })
+    expect(db._learnings).toHaveLength(0)
+  })
+
+  it('record_learning is not available to non-tara jugnues', () => {
+    const db = makeTaraDb()
+    const tools = buildToolsForJugnu('leo', projectId, taskId, db as unknown as SupabaseClient)
+    expect(tools.handlers['record_learning']).toBeUndefined()
+  })
+})

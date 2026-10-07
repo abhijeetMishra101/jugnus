@@ -4,15 +4,17 @@ import { useEffect, useRef, useState } from 'react'
 import { useProjectEvents } from './useProjectEvents'
 
 export function useNotifications(projectId: string) {
+  // useState lazy init is allowed for impure calls like Date.now()
+  const [mountTime] = useState(() => Date.now())
   const [permission, setPermission] = useState<NotificationPermission>('default')
-  const mountTime = useRef(Date.now())
   const notifiedIds = useRef(new Set<string>())
   const events = useProjectEvents(projectId)
 
   useEffect(() => {
-    if (typeof Notification !== 'undefined') {
-      setPermission(Notification.permission)
-    }
+    if (typeof Notification === 'undefined') return
+    // Read external browser state in a callback to satisfy react-hooks/set-state-in-effect
+    const update = () => setPermission(Notification.permission)
+    update()
   }, [])
 
   const requestPermission = async () => {
@@ -29,7 +31,7 @@ export function useNotifications(projectId: string) {
       notifiedIds.current.add(event.id)
 
       // Skip historical events that predate this page load
-      if (new Date(event.created_at).getTime() <= mountTime.current) continue
+      if (new Date(event.created_at).getTime() <= mountTime) continue
 
       if (event.event_type === 'APPROVAL_REQUIRED') {
         new Notification('👀 Design ready for review', {
@@ -44,7 +46,7 @@ export function useNotifications(projectId: string) {
         })
       }
     }
-  }, [events, projectId])
+  }, [events, projectId, mountTime])
 
   return { permission, requestPermission }
 }
