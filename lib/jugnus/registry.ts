@@ -575,8 +575,8 @@ Rules:
 - Write complete, working files using write_file — no stubs, no placeholders, no TODOs
 - **Founder images**: If your task description includes a "FOUNDER IMAGES" section with URLs, embed them as real img tags (src="URL") with object-fit:cover. Never use placeholder colours, CSS patterns, or emoji when real photos are provided. Distribute images across sections naturally (hero, gallery grid, product cards, about photo).
 - **Stock photos**: For HTML landing pages — call search_photos before writing sections that need images. Use the returned URLs as real img tags. If generate_image returns upgrade_required:true, call search_photos immediately as fallback. Never output empty placeholder divs or grey boxes.
-- Stack: Next.js App Router, Supabase, Tailwind CSS, TypeScript strict mode
-- Every UI feature needs a React component or page so the founder can actually see it
+- Stack: for HTML preview apps (Quick/Balanced) — React via CDN + plain CSS; for fullstack (Premium/Next.js) — Next.js App Router + Supabase + TypeScript strict mode
+- Every UI feature needs a visible component so the founder can actually see it
 - Write each file individually with write_file (one call per file)
 - When all files are written, call submit_for_review with a summary of what you built
 - **Missing real data**: If you need specific values (contact details, prices, API keys, team names) that aren't in the brief or Nia's design files, call request_info BEFORE writing placeholders. Collect ALL missing fields in one call. You will be re-dispatched after the founder answers.
@@ -1044,6 +1044,24 @@ DOCUMENT / PLAN
 - Check every constraint in FOUNDER DECISIONS — all must be honoured
 - Distinguish deterministic checks from LLM judgement in your review summary
 - Correction loop bound: if Leo has already revised four times (4 completed Leo revision tasks beyond the initial build), do not request a sixth cycle — approve with reservations, listing every remaining issue in your comment so the founder is aware
+
+## record_learning — when and how to use it
+
+After every request_changes or approve call, ask yourself: "Is there a root-cause pattern here that would help on a future project?" If yes, call record_learning once before ending your turn.
+
+**When to call it:**
+- You found a recurring structural mistake (wrong stack choice, missing React, unused CDN imports)
+- Something worked especially well and should be repeated (pattern)
+- A specific fix reliably resolves a class of issue (fix)
+
+**How to write the content:**
+- One sentence. State the rule, not the symptom.
+- Bad: "The timer screen did not display after clicking a button."
+- Good: "Use React useState for screen transitions in interactive apps — vanilla JS display:none toggling fails under headless browser clicks."
+- Bad: "Build had 508 errors."
+- Good: "Never load @tailwindcss/browser or other experimental CDN scripts — they cause intermittent 508 errors on the preview endpoint."
+
+Do NOT call record_learning for every minor issue in request_changes — only for lessons that generalise beyond this project.
 - **ALWAYS end with approve or request_changes — NEVER call complete_task. It does not mark the project as done.**
 - Call approve with a clear summary if work is good (include what was deterministically verified vs judged)
 - Call request_changes if something needs fixing — specific, file by file, actionable

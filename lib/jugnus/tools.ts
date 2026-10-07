@@ -1336,17 +1336,6 @@ ${body}
         metadata: { event_type: 'REVIEW_PASSED', review_verdict: 'approved', project_complete: true, live_url: liveUrl, preview_url: previewUrl, build_verified: buildEvidence?.html_valid === true },
       })
 
-      // Save a positive learning — what Tara verified worked, so Leo knows what "done" looks like
-      const approvalSummary = (input.comment as string).slice(0, 300)
-      try {
-        await db.from('jugnu_learnings').insert({
-          jugnu_key: 'leo',
-          source_project_id: projectId,
-          learning_type: 'pattern',
-          content: `Approved build pattern: ${approvalSummary}`,
-        })
-      } catch { /* table not yet migrated */ }
-
       // Emit PROJECT_COMPLETED directly so the UI shows the preview button even if
       // advanceProject is never called (e.g. watchdog-dispatched functions that time out).
       await db.from('messages').insert({
@@ -1429,24 +1418,48 @@ ${body}
         metadata: { event_type: 'TASK_RETURNED', review_verdict: 'changes_requested' },
       })
 
-      // Save each distinct issue as a Leo learning so future builds avoid the same mistake
-      const issues = (input.feedback as string)
-        .split(/\n+/)
-        .map((l: string) => l.replace(/^[-*•\d.)\s]+/, '').trim())
-        .filter((l: string) => l.length > 20 && l.length < 300)
-        .slice(0, 3)
-      for (const issue of issues) {
-        try {
-          await db.from('jugnu_learnings').insert({
-            jugnu_key: 'leo',
-            source_project_id: projectId,
-            learning_type: 'mistake',
-            content: issue,
-          })
-        } catch { /* table not yet migrated */ }
-      }
-
       return { ok: true, verdict: 'changes_requested' }
+    }
+
+    // ── record_learning — intentional, reusable lesson capture ───────────────
+    definitions.push({
+      name: 'record_learning',
+      description: 'Save a reusable lesson to the learnings store so future builds avoid the same mistake. Call this when you identify a root-cause pattern — something general enough to help on a different project, not just a description of this specific bug. Write one concise actionable sentence. Call this separately from request_changes; do not duplicate raw feedback here.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          jugnu_key: {
+            type: 'string',
+            enum: ['leo', 'nia'],
+            description: 'Which jugnu this lesson applies to.',
+          },
+          learning_type: {
+            type: 'string',
+            enum: ['mistake', 'pattern', 'fix'],
+            description: 'mistake = what to avoid, pattern = what works well, fix = specific corrective technique.',
+          },
+          content: {
+            type: 'string',
+            description: 'One actionable sentence. State the rule, not the symptom. Bad: "Timer screen did not display." Good: "Use React useState for screen transitions — vanilla JS display:none toggling fails under headless browser clicks."',
+          },
+        },
+        required: ['jugnu_key', 'learning_type', 'content'],
+      },
+    })
+
+    handlers['record_learning'] = async (input) => {
+      const content = (input.content as string).trim()
+      if (content.length < 20) return { ok: false, error: 'Learning too short — write a full actionable sentence.' }
+      if (content.length > 400) return { ok: false, error: 'Learning too long — keep it under 400 chars.' }
+
+      await db.from('jugnu_learnings').insert({
+        jugnu_key: input.jugnu_key as string,
+        source_project_id: projectId,
+        learning_type: input.learning_type as string,
+        content,
+      })
+
+      return { ok: true, saved: content }
     }
   }
 
