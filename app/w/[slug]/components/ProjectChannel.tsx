@@ -819,6 +819,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const [pendingFiles, setPendingFiles] = useState<Attachment[]>([])
   const [uploading, setUploading]       = useState(false)
   const [pausing, setPausing]           = useState(false)
+  const [confirmPause, setConfirmPause] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef       = useRef<HTMLDivElement>(null)
   const scrollRef       = useRef<HTMLDivElement>(null)
@@ -936,6 +937,9 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages, activeJugnu])
+
+  // Dismiss confirm-pause prompt whenever a new jugnu takes over
+  useEffect(() => { if (activeJugnu) setConfirmPause(false) }, [activeJugnu])
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return
@@ -1097,22 +1101,42 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         {/* Bottom bar — Pause button while pipeline is running, message input when idle */}
         <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
         {activeJugnu ? (
-          <div className="flex items-center justify-center">
-            <button
-              onClick={async () => {
-                setPausing(true)
-                await fetch(`/api/projects/${projectId}/pause`, { method: 'POST' })
-                setPausing(false)
-              }}
-              disabled={pausing}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white/70 hover:text-white/90 border border-white/15 hover:border-white/30 transition-all disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.05)' }}
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-              </svg>
-              {pausing ? 'Pausing…' : 'Pause pipeline'}
-            </button>
+          <div className="flex items-center justify-center min-h-[44px]">
+            {confirmPause ? (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-white/50">Stop the team after this step?</span>
+                <button
+                  onClick={async () => {
+                    setPausing(true)
+                    await fetch(`/api/projects/${projectId}/pause`, { method: 'POST' })
+                    setPausing(false)
+                    setConfirmPause(false)
+                  }}
+                  disabled={pausing}
+                  className="px-3 py-1.5 rounded-lg font-medium text-white/90 border border-white/20 hover:border-white/40 transition-all disabled:opacity-40"
+                  style={{ background: 'rgba(255,255,255,0.08)' }}
+                >
+                  {pausing ? 'Pausing…' : 'Yes, pause'}
+                </button>
+                <button
+                  onClick={() => setConfirmPause(false)}
+                  disabled={pausing}
+                  className="px-3 py-1.5 rounded-lg text-white/40 hover:text-white/70 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmPause(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white/40 hover:text-white/60 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+                Put the team on hold
+              </button>
+            )}
           </div>
         ) : (
           <>
