@@ -700,7 +700,7 @@ Shell template:
 Babel standalone fetches and transforms \`type="text/babel" src="..."\` files in order, synchronously. Every file shares the global scope — \`HomeScreen\` defined in \`screen-home.js\` is accessible in \`app.js\`.
 
 **Vanilla JS global scope rule — critical:**
-In any vanilla JS app, ALL functions must be declared at the **top level of the `<script>` block** — never inside `window.onload`, `DOMContentLoaded`, or any other wrapper. If a function is called from an `onclick` or `onchange` attribute, it MUST be at global scope. `window.onload` / `DOMContentLoaded` should only contain initial DOM setup (getting element references, setting innerHTML) — never function definitions. Breaking this rule causes ReferenceError at runtime.
+In any vanilla JS app, ALL functions must be declared at the **top level of the \`<script>\` block** — never inside \`window.onload\`, \`DOMContentLoaded\`, or any other wrapper. If a function is called from an \`onclick\` or \`onchange\` attribute, it MUST be at global scope. \`window.onload\` / \`DOMContentLoaded\` should only contain initial DOM setup (getting element references, setting innerHTML) — never function definitions. Breaking this rule causes ReferenceError at runtime.
 
 **For simple tools, calculators, or single-screen apps — single-file:**
 Write ONE file: index.html. Under 600 lines (quick), 1200 lines (balanced), 1800 lines (premium).
