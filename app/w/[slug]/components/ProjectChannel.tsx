@@ -818,6 +818,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const [sending, setSending]           = useState(false)
   const [pendingFiles, setPendingFiles] = useState<Attachment[]>([])
   const [uploading, setUploading]       = useState(false)
+  const [pausing, setPausing]           = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef       = useRef<HTMLDivElement>(null)
   const scrollRef       = useRef<HTMLDivElement>(null)
@@ -1093,8 +1094,28 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
           <ApprovalCard projectId={projectId} taskId={approvalTask.taskId} />
         )}
 
-        {/* Input bar — always visible; MCQ appears inline inside Maya's bubble */}
+        {/* Bottom bar — Pause button while pipeline is running, message input when idle */}
         <div className="shrink-0 border-t border-white/10 px-6 py-4" style={{ background: 'rgba(8, 14, 35, 0.75)', backdropFilter: 'blur(10px)' }}>
+        {activeJugnu ? (
+          <div className="flex items-center justify-center">
+            <button
+              onClick={async () => {
+                setPausing(true)
+                await fetch(`/api/projects/${projectId}/pause`, { method: 'POST' })
+                setPausing(false)
+              }}
+              disabled={pausing}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white/70 hover:text-white/90 border border-white/15 hover:border-white/30 transition-all disabled:opacity-40"
+              style={{ background: 'rgba(255,255,255,0.05)' }}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+              </svg>
+              {pausing ? 'Pausing…' : 'Pause pipeline'}
+            </button>
+          </div>
+        ) : (
+          <>
           <input
             ref={fileInputRef}
             type="file"
@@ -1157,6 +1178,8 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
               </svg>
             </button>
           </div>
+          </>
+        )}
         </div>
       </div>
   )

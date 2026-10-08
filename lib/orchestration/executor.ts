@@ -41,6 +41,11 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
   jugnuKey: JugnuKey | null
   taskId: string | null
 }> {
+  // Never advance a paused project — let the current in-flight task finish,
+  // then stop. User must resume explicitly.
+  const { data: projStatus } = await db.from('projects').select('status').eq('id', projectId).single()
+  if (projStatus?.status === 'paused') return { dispatched: false, jugnuKey: null, taskId: null }
+
   const { data: inProgress } = await db
     .from('tasks')
     .select('id')
