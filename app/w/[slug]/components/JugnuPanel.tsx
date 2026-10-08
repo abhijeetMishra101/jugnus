@@ -55,9 +55,11 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   working:   { label: 'Working',   cls: 'bg-indigo-500/20 text-indigo-300 animate-pulse' },
   reviewing: { label: 'Reviewing', cls: 'bg-amber-500/20  text-amber-300  animate-pulse' },
   done:      { label: 'Done',      cls: 'bg-emerald-500/20 text-emerald-300' },
-  idle:      { label: 'Idle',      cls: 'bg-white/10      text-white/40' },
+  idle:      { label: 'Waiting',   cls: 'bg-white/10      text-white/40' },
   blocked:   { label: 'Blocked',   cls: 'bg-red-500/20    text-red-300' },
 }
+
+const PIPELINE_ORDER = ['maya', 'nia', 'leo', 'tara']
 
 const TASK_ICON: Record<string, { icon: string; cls: string }> = {
   completed:   { icon: '✓', cls: 'text-emerald-500' },
@@ -146,6 +148,12 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
   const pct = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0
   const circumference = 2 * Math.PI * 20 // r=20
 
+  // While Maya is still planning (no tasks created yet), only show Maya
+  const teamPlanning = tasks.length === 0
+  const visibleJugnus = jugnus
+    .filter((j) => !teamPlanning || j.key === 'maya')
+    .sort((a, b) => PIPELINE_ORDER.indexOf(a.key) - PIPELINE_ORDER.indexOf(b.key))
+
   return (
     <aside className="w-72 shrink-0 border-l border-white/10 flex flex-col h-full overflow-y-auto" style={{ background: 'rgba(8, 14, 35, 0.88)', backdropFilter: 'blur(12px)' }}>
 
@@ -157,7 +165,7 @@ export function JugnuPanel({ jugnus: initialJugnus, tasks: initialTasks, project
         </div>
 
         <div className="space-y-3">
-          {jugnus.map((j) => {
+          {visibleJugnus.map((j) => {
             const currentTask = tasks.find((t) => t.jugnu_key === j.key && t.status === 'in_progress')
             const hasDone    = tasks.some((t) => t.jugnu_key === j.key && t.status === 'completed')
             const hasPending = tasks.some((t) => t.jugnu_key === j.key && (t.status === 'pending' || t.status === 'in_progress'))
