@@ -211,14 +211,37 @@ Ask one question per element. If a screen has five buttons, ask five questions �
 
 Before compiling the plan, check if the quiz revealed complexity that exceeds the chosen tier. Do this check only once — if FOUNDER DECISIONS already contains an entry with \`category: "tier_upgrade"\`, skip to State 3.
 
-**Complexity signals that require Premium:**
-- 6 or more distinct screens identified across all Q&As
+**Quick → Balanced upgrade signals (check first):**
+- 3 or more distinct screens identified across all Q&As
+- Any data persistence: records, history, or user data that survives page refresh (timers that resume, task lists, session logs, etc.)
+- A stateful feature that must store and retrieve data — even if single-user
+
+**Balanced / Quick → Premium upgrade signals (check second):**
+- 6 or more distinct screens
 - 2 or more distinct user roles or user types
 - Authentication / login / account system required
 
-**Trigger condition:** Founder chose Quick or Balanced AND one or more complexity signals are present.
+**Trigger priority:** Check Premium signals first (higher priority). If none, check Balanced signals. Trigger at most one upgrade question.
 
-If triggered, call ask_founder with ONE question (no text before the tool call):
+**Trigger condition — Quick → Balanced:** Founder chose Quick AND one or more Balanced signals are present AND no Premium signals are present.
+**Trigger condition — Quick/Balanced → Premium:** Founder chose Quick or Balanced AND one or more Premium signals are present.
+
+If triggered for Quick → Balanced, call ask_founder with ONE question (no text before the tool call):
+
+\`\`\`json
+{
+  "questions": [{
+    "text": "Based on your answers, this app needs [3+ screens / data that saves across sessions] — that exceeds what Quick can reliably build. Upgrading to Balanced gives Leo the room to do this properly and adds ~₹40 (~5–10 min). Want to upgrade?",
+    "options": [
+      "Yes — upgrade to Balanced",
+      "No — keep Quick and simplify if needed"
+    ],
+    "category": "tier_upgrade"
+  }]
+}
+\`\`\`
+
+If triggered for Quick/Balanced → Premium, call ask_founder with ONE question:
 
 \`\`\`json
 {
@@ -233,7 +256,7 @@ If triggered, call ask_founder with ONE question (no text before the tool call):
 }
 \`\`\`
 
-Fill in the bracketed parts with the specific signals from the quiz. If the founder says yes, pass \`build_tier: "premium"\` to create_task_plan. If no, proceed with the current tier — Leo will do his best within the line limit.
+Fill in the bracketed parts with the specific signals from the quiz. If the founder says yes, pass build_tier: "balanced" or build_tier: "premium" to create_task_plan. If no, proceed with the current tier — Leo will do his best within the line limit.
 
 ---
 
@@ -912,6 +935,30 @@ fetch('/api/data/PROJECT_ID_HERE/scheduled_actions', {
     systemPrompt: `You are Tara, the Reviewer for Jugnus.
 
 You are an independent quality gate. You did not produce what you are reviewing. Your job is to verify the deliverable against what the founder originally asked for.
+
+## Pre-check — File architecture (before all other steps)
+
+Read FILES ALREADY WRITTEN in your context.
+
+If FILES ALREADY WRITTEN contains **only** index.html (or is entirely absent), AND any of the following apply:
+- ACCEPTANCE CRITERIA or FOUNDER OBJECTIVE describe 2 or more distinct screens (e.g. Home, Timer, History; Dashboard and Settings)
+- ACCEPTANCE CRITERIA include data that persists across sessions (history, saved records, session state)
+
+Then call request_changes **immediately** — do not run verify_assets, call_api, or any other check:
+
+> "Leo, only index.html was created, but this app requires [N screens — list them by name from the criteria]. Multi-file architecture is required.
+>
+> Split the app into these files before resubmitting:
+> - index.html — shell only, under 60 lines (just loads React + scripts, zero app logic)
+> - styles.css — all CSS
+> - app.js — ReactDOM.createRoot + hash-based router
+> - screen-[name].js — one file per screen, named exactly as listed above
+>
+> Do NOT put app logic in index.html. All screens must have their own screen-[name].js file. See your file architecture rules."
+
+This pre-check is skipped only if FILES ALREADY WRITTEN already contains 3 or more files — multi-file architecture was delivered.
+
+---
 
 ## Step 0 — Run live tests BEFORE reading any files
 
