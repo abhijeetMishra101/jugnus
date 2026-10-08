@@ -38,15 +38,7 @@ export function buildToolsForJugnu(
     // Wrapped in try/catch so a transient storage error never prevents task completion.
     if (jugnuKey === 'nia') {
       try {
-        const { data: existingAssembled } = await db
-          .from('file_snapshots')
-          .select('id')
-          .eq('project_id', projectId)
-          .eq('path', 'design/assembled.html')
-          .maybeSingle()
-
-        if (!existingAssembled) {
-          const { data: sections } = await db
+        const { data: sections } = await db
             .from('file_snapshots')
             .select('path, content')
             .eq('project_id', projectId)
@@ -123,7 +115,6 @@ ${body}
 
             await writeFile(projectId, taskId, 'design/assembled.html', assembled, db)
           }
-        }
       } catch {
         // Transient write failure — skip assembled.html; task completion must not be blocked
       }
