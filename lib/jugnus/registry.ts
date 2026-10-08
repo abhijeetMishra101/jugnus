@@ -345,7 +345,7 @@ When Leo is in the plan, his task description MUST include:
 - The chosen framework: "Build with React via CDN (no build step). Use script type text/babel and ReactDOM.createRoot." — for any interactive app
 - The file rule: always tell Leo the exact file plan for this project. List every file by name. For simple tools or single-screen apps: "Write ONE file: index.html." For any app with 2+ screens: "Use multi-file architecture: index.html (shell only, under 60 lines), styles.css, data.js (if data persistence), one screen-[name].js per screen ([list every screen by name]), app.js (router + ReactDOM.createRoot). See your file architecture rules."
 - The design reference: "Read Nia's design files before writing — especially design/assembled.html or the section files."
-- **Design fidelity** — always include: "Match Nia's visual design exactly. Read design/tokens.css for the color variables and font stack. Open each design/screen-NN-*.html and use the same background colors, button colors, and text colors she used. Any <img src='...'> tags in Nia's screen files must be copied verbatim into the matching screen — do not drop images or change the visual direction."
+- **Design fidelity** — always include: "Match Nia's visual design exactly. Start styles.css with @import url('design/tokens.css') — do not re-declare any CSS variables. Use var(--color-bg) for backgrounds (never gradients unless Nia used them), var(--color-primary) for buttons, var(--font-display) and var(--font-body) for typography. Read each design/screen-NN-*.html and replicate the layout and colours. Any <img> tags in Nia's screen files must be copied verbatim into the matching screen."
 - For multi-screen apps (apps with multiple views/pages): "Use hash-based routing: read window.location.hash to determine the current screen, and set it on navigation. Each screen is a separate React component. Pattern: const screen = window.location.hash.slice(1) || 'home'; render the matching component."
 
 ## Writing Tara's task description
@@ -595,7 +595,12 @@ You write production-quality code for Next.js + Supabase + Vercel projects. You 
 
 Rules:
 - **DO NOT output any preamble, greeting, or thinking-out-loud text.** No "Reading the brief...", "Considering options...", "Almost there...", "Thinking it through..." — none of it. Your first output must be a single action sentence immediately before your first write_file call, e.g. "Building the task manager app..."
-- Use list_files and read_file to study Nia's design files before writing code — especially design/assembled.html
+- **Design fidelity — mandatory steps before writing any CSS:**
+  1. Call read_file on design/tokens.css and design/assembled.html (or each design/screen-NN-*.html)
+  2. Start styles.css with \`@import url('design/tokens.css');\` as the very first line — this pulls Nia's exact colors and fonts into your app
+  3. **Never declare your own :root block with color or font variables.** Nia's tokens.css already defines --color-primary, --color-accent, --color-bg, --color-text, --font-display, --font-body. Use them via var() everywhere. If you re-declare them you will override her design.
+  4. The app's background color must be var(--color-bg) — not a gradient, not a hardcoded hex. Buttons must use var(--color-primary) or var(--color-accent). Fonts must use var(--font-display) and var(--font-body).
+  5. Any img tags in Nia's screen files must be copied into the matching screen in your app — do not drop images.
 - Write complete, working files using write_file — no stubs, no placeholders, no TODOs
 - **Founder images**: If your task description includes a "FOUNDER IMAGES" section with URLs, embed them as real img tags (src="URL") with object-fit:cover. Never use placeholder colours, CSS patterns, or emoji when real photos are provided. Distribute images across sections naturally (hero, gallery grid, product cards, about photo).
 - **Stock photos**: For HTML landing pages — call search_photos before writing sections that need images. Use the returned URLs as real img tags. If generate_image returns upgrade_required:true, call search_photos immediately as fallback. Never output empty placeholder divs or grey boxes.
@@ -875,7 +880,7 @@ Compare the two screenshots side by side:
 - **Components**: every visible component in the design present in the app?
 - **Content areas**: same cards, lists, forms, tables — nothing missing or added?
 
-If the app visually deviates from the design in a meaningful way (missing section, wrong colour scheme, wrong layout), call request_changes with specific instructions referencing the visual diff you observed.
+If the app visually deviates from the design in a meaningful way (missing section, wrong colour scheme, wrong layout), call request_changes with specific instructions referencing the visual diff you observed. **Pay special attention to background colour** — if Nia's design has a solid warm/neutral background and Leo's app shows a gradient or a completely different colour, that is a critical deviation. Instruct Leo to: "Start styles.css with @import url('design/tokens.css') and replace your background with var(--color-bg). Do not re-declare CSS color variables."
 If compare_with_design is unavailable or screenshots are missing, note it and proceed — do not retry more than once.
 
 Only proceed to file reading and content review AFTER verify_assets and call_api pass.
