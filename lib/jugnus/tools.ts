@@ -837,6 +837,88 @@ ${body}
   }
 
   // ── run_sql — Leo only ───────────────────────────────────────────────────────
+  // API reference tool — Leo calls this instead of relying on static prompt docs.
+  // Keeps the system prompt lean; Leo only pays for tokens it actually needs.
+  if (jugnuKey === 'leo') {
+    const API_DOCS: Record<string, string> = {
+      data_api: `Data API — full CRUD for flat collections.
+Base URL: /api/data/PROJECT_ID/collection (replace PROJECT_ID with the actual project UUID from context).
+GET    /api/data/PROJECT_ID/items              → { records: [...] }
+POST   /api/data/PROJECT_ID/items   body: {}   → { record: { id, created_at, updated_at, ...fields } }
+PATCH  /api/data/PROJECT_ID/items/:id body: {} → { record: {...merged} }  — use PATCH not PUT
+DELETE /api/data/PROJECT_ID/items/:id          → 204
+Always check res.ok before res.json(). Never generate IDs yourself — id is returned by the API.`,
+
+      supabase: `Supabase schema setup (for relational data, RLS, Realtime).
+Table naming: p_{shortId}_{name} where shortId = first 8 chars of project UUID with hyphens removed.
+Example: project 0c4bc599-9257-... → prefix p_0c4bc599_, tables p_0c4bc599_items.
+Run these SQL steps via run_sql in order:
+1. CREATE TABLE IF NOT EXISTS public.p_{shortId}_{name} (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), ...fields..., created_at timestamptz DEFAULT now())
+2. ALTER TABLE public.p_{shortId}_{name} ENABLE ROW LEVEL SECURITY
+3. CREATE POLICY "open" ON public.p_{shortId}_{name} FOR ALL USING (true) WITH CHECK (true)
+4. GRANT SELECT, INSERT, UPDATE, DELETE ON public.p_{shortId}_{name} TO anon, authenticated
+JS client in HTML:
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+const db = window.supabase.createClient('https://rtihiqafvayuiqusrajr.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0aWhpcWFmdmF5dWlxdXNyYWpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNTY0MjksImV4cCI6MjEwMzkzMjQyOX0.2ZUpPi62RrNud9wRoTMBFyJrG-ZBJcFUU2_65GuHLNU')
+const { data } = await db.from('p_0c4bc599_items').select('*').order('created_at', { ascending: false })
+Realtime: db.channel('items').on('postgres_changes', { event: '*', schema: 'public', table: 'p_0c4bc599_items' }, handler).subscribe()`,
+
+      forms: `Form submissions (one-way, no retrieval needed — waitlists, contact forms, surveys).
+fetch('/api/collect/PROJECT_ID', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ form: 'waitlist', email: emailValue }) })
+.then(r => r.json()).then(r => { if (r.ok) { /* show success */ } })
+Set form to: 'waitlist', 'contact', 'survey', etc. Always show a success and error state.`,
+
+      email: `Send transactional emails (confirmations, reports, notifications).
+fetch('/api/email/PROJECT_ID', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ to: 'user@example.com', subject: 'Subject', html: '<p>Body</p>' }) })
+.then(r => r.json()).then(r => { if (r.ok) { /* sent */ } })
+Required: to, subject, and html or text.`,
+
+      upload: `File uploads — returns a permanent public URL.
+const fd = new FormData(); fd.append('file', fileInput.files[0])
+fetch('/api/upload/PROJECT_ID', { method: 'POST', body: fd })
+  .then(r => r.json()).then(({ url, name, type, size }) => { /* store url in data API */ })
+Max 20 MB. Store url via the data API if you need to reference it later.`,
+
+      webhooks: `Receive events from third-party services (Stripe, Twilio, GitHub, etc.).
+Webhook URL pattern: https://jugnus.vercel.app/api/webhook/PROJECT_ID/stripe (replace 'stripe' with source name).
+Payloads auto-stored in collection webhook_stripe. Read via GET /api/data/PROJECT_ID/webhook_stripe.
+Show the webhook URL prominently in the app so founders know where to paste it.
+Poll for new events: setInterval(() => fetch('/api/data/PROJECT_ID/webhook_stripe').then(r=>r.json()).then(({records})=>setEvents(records)), 5000)`,
+
+      scheduled_jobs: `Schedule future actions (send email in 24h, trigger webhook at midnight).
+POST /api/data/PROJECT_ID/scheduled_actions body:
+{ action: 'send_email', run_at: new Date(Date.now()+86400000).toISOString(), status:'pending', to:'...', subject:'...', html:'...' }
+{ action: 'http_post',  run_at: new Date(Date.now()+3600000).toISOString(),  status:'pending', url:'https://hooks.slack.com/...', body:{text:'...'} }
+Scheduler runs every minute. Records updated to completed/failed with completed_at.
+Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
+    }
+
+    definitions.push({
+      name: 'get_api_docs',
+      description: 'Get the exact code reference for a Jugnus API before writing any fetch calls, SQL, form submissions, emails, uploads, webhooks, or scheduled jobs. Call this first — do not guess URLs or request shapes from memory.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          section: {
+            type: 'string',
+            enum: ['data_api', 'supabase', 'forms', 'email', 'upload', 'webhooks', 'scheduled_jobs'],
+            description: 'The API section you need.',
+          },
+        },
+        required: ['section'],
+      },
+    })
+
+    handlers['get_api_docs'] = async (input) => {
+      const section = input.section as string
+      const doc = API_DOCS[section]
+      if (!doc) return { ok: false, error: `Unknown section "${section}". Valid: ${Object.keys(API_DOCS).join(', ')}` }
+      return { ok: true, reference: doc }
+    }
+  }
+
   // Executes DDL and DML against the shared Jugnus Postgres instance so Leo can
   // provision real tables (CREATE TABLE, GRANT, RLS policies) without any founder credentials.
   // Tables must follow the naming convention: p_{shortProjectId}_{tablename}

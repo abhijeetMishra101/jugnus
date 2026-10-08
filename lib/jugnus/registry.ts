@@ -623,9 +623,15 @@ Do NOT call complete_task — always end with submit_for_review.
 
 Write \`index.html\` first — even if it is just the shell with CDN imports and script tags (no component logic yet). This passes build validation immediately and creates a checkpoint. Then write each JS/CSS file in order.
 
-**On retry**: check FILES ALREADY WRITTEN in your context first. For every file already listed there, skip it — do not rewrite it. Only write files that are NOT yet in that list. If all required files already exist, call submit_for_review immediately.
+**Write each file exactly once.** After write_file succeeds for a filename, never call write_file on that same filename again in this run — not to polish, not to improve, not to fix a typo. Get it right on the first write. Rewriting wastes tokens and triggers rate limits.
 
-This checkpoint behaviour is mandatory. A partial save is always better than no save, and rewriting files wastes tokens.
+**On retry — three words: LOOK, COMPARE, SUBMIT.**
+1. LOOK at FILES ALREADY WRITTEN in your context (the filenames only — do NOT call read_file on any of them).
+2. COMPARE that list against the files your plan requires.
+3. If all required files are present → call submit_for_review RIGHT NOW. No reads. No writes. No planning text. Just submit.
+4. If files are missing → write only the missing ones, then call submit_for_review.
+
+Reading existing files on a retry is forbidden. The files are already written. Tara will review them. Your job is to submit.
 
 ## Progress messages — required
 
@@ -732,49 +738,25 @@ A boot() that only handles the logged-in path and silently returns for new users
 
 ### Choosing the right backend
 
-| Need | Tool | When |
-|---|---|---|
-| Simple key-value / document store | Data API (/api/data/PROJECT_ID/collection) | Todos, notes, contacts, expenses — any flat record list |
-| Real relational schema with foreign keys, RLS, joins, or Realtime | run_sql + Supabase anon key | Multi-user apps, household apps, any app needing live sync across devices |
+| Need | Tool |
+|---|---|
+| Flat record list (todos, notes, sessions, expenses) | Data API — call get_api_docs("data_api") |
+| Relational schema, foreign keys, RLS, Realtime | run_sql + Supabase — call get_api_docs("supabase") |
 
-**When using run_sql to provision a Supabase-backed schema:**
+**Before writing ANY fetch call, form submit, email send, file upload, webhook listener, or scheduled job — call get_api_docs with the matching section name.** Do not guess URLs or request shapes from memory.
 
-Table naming convention: p_{shortId}_{tablename} where shortId = first 8 chars of the project UUID with hyphens removed.
-For project 0c4bc599-9257-... → prefix is p_0c4bc599_, tables are p_0c4bc599_households, p_0c4bc599_items, etc.
+Section names: \`data_api\` · \`supabase\` · \`forms\` · \`email\` · \`upload\` · \`webhooks\` · \`scheduled_jobs\`
 
-Always run these SQL steps in order:
-1. CREATE TABLE IF NOT EXISTS public.p_{shortId}_{name} (...) — define the schema
-2. ALTER TABLE public.p_{shortId}_{name} ENABLE ROW LEVEL SECURITY — enable RLS
-3. CREATE POLICY "open" ON public.p_{shortId}_{name} FOR ALL USING (true) WITH CHECK (true) — open policy (isolation is by project prefix)
-4. GRANT SELECT, INSERT, UPDATE, DELETE ON public.p_{shortId}_{name} TO anon, authenticated — allow anon key
+**NEVER use localStorage, sessionStorage, or in-memory state for user data.** localStorage is only acceptable for purely UI state (e.g. which tab is open).
 
-After provisioning, embed the Jugnus Supabase credentials in the built app and use the Supabase JS client directly:
-\`\`\`html
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script>
-const SUPABASE_URL  = 'https://rtihiqafvayuiqusrajr.supabase.co'
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0aWhpcWFmdmF5dWlxdXNyYWpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNTY0MjksImV4cCI6MjEwMzkzMjQyOX0.2ZUpPi62RrNud9wRoTMBFyJrG-ZBJcFUU2_65GuHLNU'
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON)
-</script>
+**ALWAYS check res.ok before calling res.json().** A failed fetch that calls res.json() returns undefined, which crashes React and blanks the screen:
+\`\`\`javascript
+const res = await fetch(...)
+if (!res.ok) { setError('Something went wrong. Try again.'); return }
+const data = await res.json()
 \`\`\`
 
-Then query using the prefixed table names:
-\`\`\`js
-const { data } = await db.from('p_0c4bc599_items').select('*').order('created_at', { ascending: false })
-\`\`\`
-
-For Realtime live sync:
-\`\`\`js
-db.channel('items').on('postgres_changes', { event: '*', schema: 'public', table: 'p_0c4bc599_items' }, handler).subscribe()
-\`\`\`
-
----
-
-### Data API — full CRUD backend (for simple flat collections)
-
-**NEVER use localStorage, sessionStorage, or in-memory state for user data.**
-Data must always be stored in the Jugnus Data API so it persists across devices and users.
-localStorage is only acceptable for purely UI state (e.g. which tab is open) — never for user-created records.
+### Data API — quick reference (full examples: call get_api_docs("data_api"))
 
 Base URL: \`/api/data/PROJECT_ID_HERE\` — replace PROJECT_ID_HERE with the actual project UUID.
 
@@ -796,134 +778,17 @@ fetch('/api/data/PROJECT_ID_HERE/items', {
 **Update a record — use PATCH, NOT PUT (PUT returns 405)**
 \`\`\`javascript
 fetch(\`/api/data/PROJECT_ID_HERE/items/\${id}\`, {
-  method: 'PATCH',
-  headers: { 'Content-Type': 'application/json' },
+  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ done: true })
-}).then(r => { if (!r.ok) throw new Error(r.status); return r.json() })
-  .then(({ record }) => { /* merged record */ })
+}).then(r => r.json()).then(({ record }) => { /* merged record */ })
 \`\`\`
 
-**Delete a record**
-\`\`\`javascript
-fetch(\`/api/data/PROJECT_ID_HERE/items/\${id}\`, { method: 'DELETE' })
-  .then(r => { if (!r.ok) throw new Error(r.status) })
-\`\`\`
+**Delete a record:** \`fetch(\`/api/data/PROJECT_ID_HERE/items/\${id}\`, { method: 'DELETE' })\`
 
-**ALWAYS check res.ok before calling res.json().** A failed fetch that calls res.json() returns undefined, which crashes React and blanks the screen. Pattern for every fetch:
-\`\`\`javascript
-const res = await fetch(...)
-if (!res.ok) { setError('Something went wrong. Try again.'); return }
-const data = await res.json()
-\`\`\`
+- Use descriptive collection names: \`tasks\`, \`sessions\`, \`contacts\`, \`expenses\`, etc.
+- Each record auto-gets \`id\`, \`created_at\`, \`updated_at\` — never generate IDs yourself
 
-- Replace \`items\` with a descriptive collection name: \`tasks\`, \`entries\`, \`contacts\`, \`expenses\`, etc.
-- Each record automatically gets \`id\`, \`created_at\`, \`updated_at\` — never generate IDs yourself
-- Data persists across page loads and is shared across all users of the preview URL
-- For a todo app: collection = \`todos\`. For a CRM: \`contacts\`. For a budget tracker: \`transactions\`.
-
-### Form submissions (one-way data collection)
-
-For waitlist, contact, survey forms — use the simpler collect API instead of the data API:
-\`\`\`javascript
-fetch('/api/collect/PROJECT_ID_HERE', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ form: 'waitlist', email: emailValue })
-}).then(r => r.json()).then(r => { if (r.ok) { /* show success */ } })
-\`\`\`
-- Set \`form\` to the form type: 'waitlist', 'contact', 'survey', etc.
-- Always show a visible success state and a clear error state
-
-### Email sending
-
-Send transactional emails from the app (confirmations, notifications, reports):
-\`\`\`javascript
-fetch('/api/email/PROJECT_ID_HERE', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    to: 'user@example.com',
-    subject: 'Your report is ready',
-    html: '<p>Hello! Your report is attached.</p>',
-  })
-}).then(r => r.json()).then(r => { if (r.ok) { /* email sent */ } })
-\`\`\`
-- \`to\`, \`subject\`, and either \`html\` or \`text\` are required
-- Use for welcome emails, confirmations, notifications, reports
-
-### File uploads
-
-Allow users to upload files; get back a public URL to store or display:
-\`\`\`javascript
-const formData = new FormData()
-formData.append('file', fileInput.files[0])
-
-fetch('/api/upload/PROJECT_ID_HERE', { method: 'POST', body: formData })
-  .then(r => r.json())
-  .then(({ url, name, type, size }) => {
-    // store url in project_data, display in UI, etc.
-  })
-\`\`\`
-- Returns \`{ url, name, type, size }\` — \`url\` is a permanent public URL
-- Max 20 MB per file
-- Store the URL in project_data if you need to reference it later
-
-### Incoming webhooks
-
-To receive events from third-party services (Stripe, Twilio, GitHub, etc.):
-- Webhook URL: \`https://jugnus.vercel.app/api/webhook/PROJECT_ID_HERE/stripe\` (replace \`stripe\` with the source name)
-- Payloads are stored automatically in project_data under collection \`webhook_stripe\`
-- Read events via the Data API: \`GET /api/data/PROJECT_ID_HERE/webhook_stripe\`
-- Always show the webhook URL prominently in the app so the founder knows where to paste it in their third-party dashboard
-
-\`\`\`javascript
-// Poll for new webhook events
-useEffect(() => {
-  const poll = () =>
-    fetch('/api/data/PROJECT_ID_HERE/webhook_stripe')
-      .then(r => r.json())
-      .then(({ records }) => setEvents(records))
-  poll()
-  const interval = setInterval(poll, 5000)
-  return () => clearInterval(interval)
-}, [])
-\`\`\`
-
-### Scheduled jobs
-
-Schedule future actions (send email in 24h, trigger a webhook at midnight, etc.):
-\`\`\`javascript
-// Schedule a future email
-fetch('/api/data/PROJECT_ID_HERE/scheduled_actions', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'send_email',
-    run_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h from now
-    status: 'pending',
-    to: 'user@example.com',
-    subject: 'Your trial is ending',
-    html: '<p>Your trial ends tomorrow.</p>',
-  })
-})
-
-// Schedule an outgoing HTTP POST
-fetch('/api/data/PROJECT_ID_HERE/scheduled_actions', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'http_post',
-    run_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1h from now
-    status: 'pending',
-    url: 'https://hooks.slack.com/services/...',
-    body: { text: 'Reminder: daily standup in 5 minutes' },
-  })
-})
-\`\`\`
-- Supported action types: \`send_email\`, \`http_post\`
-- The Jugnus scheduler runs every minute and executes overdue pending actions
-- Each action record gets updated to \`completed\` or \`failed\` with a \`completed_at\` timestamp
-- Read scheduled action status via \`GET /api/data/PROJECT_ID_HERE/scheduled_actions\``,
+For forms, email, file uploads, webhooks, or scheduled jobs → call get_api_docs with the matching section name before writing any code.`,
   },
 
   tara: {
