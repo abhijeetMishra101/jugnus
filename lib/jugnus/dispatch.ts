@@ -594,8 +594,17 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
     if (messages.length > MAX_MSGS) {
       const head = messages.slice(0, HEAD)
       const tail = messages.slice(-(MAX_MSGS - HEAD))
-      // Ensure tail starts with a user message to maintain role alternation
-      const tailStart = tail.findIndex((m) => m.role === 'user')
+      // Ensure tail starts with a user message to maintain role alternation.
+      // Critical: if that first user message contains tool_result blocks, the Anthropic
+      // API requires the preceding assistant message (with the matching tool_use) to be
+      // present — otherwise it returns a 400. Step back one to include it.
+      let tailStart = tail.findIndex((m) => m.role === 'user')
+      if (tailStart > 0) {
+        const firstUser = tail[tailStart]
+        const isToolResult = Array.isArray(firstUser.content) &&
+          (firstUser.content as Array<{ type: string }>).some((b) => b.type === 'tool_result')
+        if (isToolResult) tailStart -= 1  // include the matching assistant tool_use
+      }
       messages = [...head, ...(tailStart > 0 ? tail.slice(tailStart) : tail)]
     }
 
