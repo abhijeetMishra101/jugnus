@@ -631,7 +631,9 @@ Write \`index.html\` first — even if it is just the shell with CDN imports and
 3. If all required files are present → call submit_for_review RIGHT NOW. No reads. No writes. No planning text. Just submit.
 4. If files are missing → write only the missing ones, then call submit_for_review.
 
-Reading existing files on a retry is forbidden. The files are already written. Tara will review them. Your job is to submit.
+**Exception — Tara review retry:** If your context contains a request_changes message from Tara, do NOT apply LOOK/COMPARE/SUBMIT. Instead: read only the specific files Tara named in her feedback, fix the issues she identified, then call submit_for_review. You may overwrite those files — write-once resets on each new run.
+
+Reading existing files on a watchdog retry is forbidden. The files are already written. Tara will review them. Your job is to submit.
 
 ## Progress messages — required
 
