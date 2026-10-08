@@ -43,6 +43,7 @@ export function buildToolsForJugnu(
             .select('path, content')
             .eq('project_id', projectId)
             .ilike('path', 'design/%.html')
+            .neq('path', 'design/assembled.html')
             .order('path', { ascending: true })
 
           if (sections && sections.length > 0) {

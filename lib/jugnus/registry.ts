@@ -652,8 +652,10 @@ Emit a short status sentence before each major phase. Not analysis — just one 
 The project ID is in your context block under "ID:" — embed it literally in every fetch URL.
 
 ### When to use React vs vanilla JS
-- **Vanilla JS**: landing pages, static sites, simple forms with no state
-- **React via CDN**: any app with interactive state — todos, dashboards, trackers, tools
+- **Vanilla JS**: landing pages, static sites, simple forms with no state, single-screen calculators
+- **React via CDN**: any app with interactive state — todos, dashboards, trackers, tools, **timer apps, countdowns, meditation/focus sessions, any app that navigates between 2+ screens, any app that updates UI on a timer interval**
+
+**If in doubt, use React. The single-file React boilerplate is just 3 CDN lines — the cost is near zero.**
 
 **File architecture — strictly required:**
 
@@ -696,6 +698,9 @@ Shell template:
 \`\`\`
 
 Babel standalone fetches and transforms \`type="text/babel" src="..."\` files in order, synchronously. Every file shares the global scope — \`HomeScreen\` defined in \`screen-home.js\` is accessible in \`app.js\`.
+
+**Vanilla JS global scope rule — critical:**
+In any vanilla JS app, ALL functions must be declared at the **top level of the `<script>` block** — never inside `window.onload`, `DOMContentLoaded`, or any other wrapper. If a function is called from an `onclick` or `onchange` attribute, it MUST be at global scope. `window.onload` / `DOMContentLoaded` should only contain initial DOM setup (getting element references, setting innerHTML) — never function definitions. Breaking this rule causes ReferenceError at runtime.
 
 **For simple tools, calculators, or single-screen apps — single-file:**
 Write ONE file: index.html. Under 600 lines (quick), 1200 lines (balanced), 1800 lines (premium).
