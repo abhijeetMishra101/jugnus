@@ -938,8 +938,6 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     }
   }, [messages, activeJugnu])
 
-  // Dismiss confirm-pause prompt whenever a new jugnu takes over
-  useEffect(() => { if (activeJugnu) setConfirmPause(false) }, [activeJugnu])
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return
