@@ -1100,11 +1100,15 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
       const previewUrl = input.preview_url as string
       const origin = new URL(previewUrl).origin
 
-      // 1. Fetch the HTML
+      // 1. Fetch the HTML — retry once on 5xx (transient CDN/preview timeouts)
       let html: string
       let htmlStatus: number
       try {
-        const res = await fetch(previewUrl)
+        let res = await fetch(previewUrl)
+        if (!res.ok && res.status >= 500) {
+          await new Promise(r => setTimeout(r, 3000))
+          res = await fetch(previewUrl)
+        }
         htmlStatus = res.status
         html = await res.text()
         if (!res.ok) return { ok: false, html_status: htmlStatus, error: `Preview HTML returned ${htmlStatus}` }

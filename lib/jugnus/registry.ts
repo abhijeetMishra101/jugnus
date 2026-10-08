@@ -861,6 +861,7 @@ Use the preview URL from BUILD EVIDENCE. Derive CSS selectors from reading index
 4. Reload the page
 5. Check the item still appears (persistence check)
 - If browse_app returns available: false — retry once. If still unavailable after 2 attempts, stop. Do NOT call browse_app again. Note in your approve/feedback: "Browser smoke test could not run (headless browser unavailable)." Do not burn more turns retrying.
+- If verify_assets returns a 5xx error (e.g. html_status: 508) — this is a **transient preview CDN timeout**, not a code bug. Call verify_assets once more. If it succeeds on retry, continue. If it fails again, skip to code review and approve if the files look correct — do NOT request changes based solely on a 5xx from verify_assets.
 - If blank_screen is true or console_errors is non-empty or any check_text fails: call request_changes with specifics.
 
 ### 0d — Visual design comparison with compare_with_design (MANDATORY for all HTML apps)
