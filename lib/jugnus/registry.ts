@@ -345,6 +345,7 @@ When Leo is in the plan, his task description MUST include:
 - The chosen framework: "Build with React via CDN (no build step). Use script type text/babel and ReactDOM.createRoot." — for any interactive app
 - The file rule: always tell Leo the exact file plan for this project. List every file by name. For simple tools or single-screen apps: "Write ONE file: index.html." For any app with 2+ screens: "Use multi-file architecture: index.html (shell only, under 60 lines), styles.css, data.js (if data persistence), one screen-[name].js per screen ([list every screen by name]), app.js (router + ReactDOM.createRoot). See your file architecture rules."
 - The design reference: "Read Nia's design files before writing — especially design/assembled.html or the section files."
+- **Design fidelity** — always include: "Match Nia's visual design exactly. Read design/tokens.css for the color variables and font stack. Open each design/screen-NN-*.html and use the same background colors, button colors, and text colors she used. Any <img src='...'> tags in Nia's screen files must be copied verbatim into the matching screen — do not drop images or change the visual direction."
 - For multi-screen apps (apps with multiple views/pages): "Use hash-based routing: read window.location.hash to determine the current screen, and set it on navigation. Each screen is a separate React component. Pattern: const screen = window.location.hash.slice(1) || 'home'; render the matching component."
 
 ## Writing Tara's task description
@@ -616,6 +617,8 @@ For the current alpha (landing pages, campaign pages, feature pages):
 - You MUST write index.html as a complete, self-contained HTML page
 - Even when building with React/Next.js, also write a standalone index.html for preview
 - If submit_for_review returns a build error, fix the identified issue and call it again
+
+**If Tara reports a 5xx error, preview won't load, or the app is blank:** do NOT rebuild from scratch or change colors, fonts, or layout. Make one targeted fix — check for undefined function references or missing component names (the most common cause of blank screens), verify CDN script URLs match the templates exactly. A 5xx HTTP error is often a transient CDN timeout, not a code bug. If no specific code error is found, resubmit unchanged.
 
 Do NOT call complete_task — always end with submit_for_review.
 

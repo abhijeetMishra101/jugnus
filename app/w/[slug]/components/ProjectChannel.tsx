@@ -823,6 +823,8 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef       = useRef<HTMLDivElement>(null)
   const scrollRef       = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+  const [hasUnread, setHasUnread] = useState(false)
   // IDs of messages that existed at load time — those sections never play the fly-in
   const initialIds   = useRef(new Set(initialMessages.map((m) => m.id)))
 
@@ -929,12 +931,31 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     return () => { void db.removeChannel(msgSub); clearInterval(pollId) }
   }, [projectId])
 
+  // Jump to bottom on first render
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView()
+  }, [])
+
+  // Track whether user is near bottom — use a ref to avoid re-renders on every scroll
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (distanceFromBottom < 120) {
+    const onScroll = () => {
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight < 150
+      isNearBottomRef.current = near
+      if (near) setHasUnread(false)
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // New message: auto-scroll if near bottom, otherwise show the pill
+  useEffect(() => {
+    if (!messages.length) return
+    if (isNearBottomRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      setHasUnread(true)
     }
   }, [messages, activeJugnu])
 
@@ -1090,6 +1111,26 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
 
           <div ref={bottomRef} />
         </div>
+
+        {/* New-messages pill — appears when user is scrolled up and new messages arrive */}
+        {hasUnread && (
+          <div className="absolute bottom-20 left-0 right-0 flex justify-center pointer-events-none z-10">
+            <button
+              onClick={() => {
+                bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+                setHasUnread(false)
+                isNearBottomRef.current = true
+              }}
+              className="pointer-events-auto flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-full shadow-lg transition-all hover:opacity-90 active:scale-95"
+              style={{ background: 'rgba(99,102,241,0.88)', color: '#e0e7ff', backdropFilter: 'blur(8px)', border: '1px solid rgba(129,140,248,0.5)' }}
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/>
+              </svg>
+              New messages
+            </button>
+          </div>
+        )}
 
         {/* Approval gate card — shown when APPROVAL_REQUIRED fires */}
         {approvalTask && (
