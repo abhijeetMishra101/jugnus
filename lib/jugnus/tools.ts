@@ -24,6 +24,17 @@ export interface ToolSet {
   handlers: Record<string, (input: Record<string, unknown>) => Promise<unknown>>
 }
 
+// CDN patterns Leo must never add without an explicit feature need.
+// Checked at write_file time so the violation is caught immediately, not after a full Tara review cycle.
+const BANNED_CDN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /@tailwindcss\/browser/,       reason: 'experimental CDN build — causes 508 timeouts on the preview proxy. Use plain CSS instead.' },
+  { pattern: /unpkg\.com\/chart\.js/,       reason: 'chart.js is not needed unless the task explicitly requires charts. Remove it.' },
+  { pattern: /cdn\.jsdelivr\.net\/npm\/chart\.js/, reason: 'chart.js is not needed unless the task explicitly requires charts. Remove it.' },
+  { pattern: /unpkg\.com\/lodash/,          reason: 'lodash is not needed — use native JS array/object methods.' },
+  { pattern: /unpkg\.com\/bootstrap/,       reason: 'Bootstrap CDN conflicts with the design token system. Use the project CSS instead.' },
+  { pattern: /unpkg\.com\/react@/,          reason: 'use the pinned React CDN URL from the registry prompt, not a floating unpkg version.' },
+]
+
 export function buildToolsForJugnu(
   jugnuKey: JugnuKey,
   projectId: string,
@@ -32,6 +43,10 @@ export function buildToolsForJugnu(
 ): ToolSet {
   const definitions: Anthropic.Tool[] = []
   const handlers: Record<string, (input: Record<string, unknown>) => Promise<unknown>> = {}
+
+  // Session flag: Tara must call compare_with_design before submitting or requesting changes.
+  // Resets to false at the start of each Tara task invocation.
+  let compareWithDesignCalled = false
 
   // ── complete_task — all jugnus ───────────────────────────────────────────────
   definitions.push({
@@ -799,10 +814,21 @@ ${body}
       },
     })
     handlers['write_file'] = async (input) => {
+      const content = input.content as string
+
+      // CDN gate — catch hallucinated or unnecessary CDN imports before they waste a Tara cycle.
+      // Only enforced for Leo (Nia writes static design HTML, not production code).
+      if (jugnuKey === 'leo') {
+        const violations = BANNED_CDN_PATTERNS.filter(({ pattern }) => pattern.test(content))
+        if (violations.length > 0) {
+          const msgs = violations.map(v => `  • ${v.reason}`)
+          return { ok: false, error: `Rejected — file contains banned CDN imports:\n${msgs.join('\n')}\n\nRemove them and rewrite the file without these libraries.` }
+        }
+      }
+
       // Hard size gate — prevent multi-thousand-line writes that hang mid-inference.
       // Tiers: quick=600, balanced=1200, premium=1800 lines. Nia PATH A writes
       // one screen per file (~100–200 lines each), so this only triggers on genuine over-writes.
-      const content = input.content as string
       const lineCount = content.split('\n').length
       const { data: tierProj } = await db.from('projects').select('constraints').eq('id', projectId).single()
       const tier = ((tierProj?.constraints as Record<string, unknown>)?.build_tier as string) ?? 'balanced'
@@ -1307,6 +1333,7 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
     })
 
     handlers['compare_with_design'] = async () => {
+      compareWithDesignCalled = true
       const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
       const headers = {
         'Content-Type': 'application/json',
@@ -1385,6 +1412,11 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
     })
 
     handlers['approve'] = async (input) => {
+      // Must have compared with design before approving
+      if (!compareWithDesignCalled) {
+        return { ok: false, blocked: true, reason: 'You must call compare_with_design before approving. Run it now to verify the build matches the approved design.' }
+      }
+
       // Hard gate: if build evidence shows html_valid:false, Tara cannot approve
       const { data: leoTask } = await db
         .from('tasks')
@@ -1463,6 +1495,64 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
       return { ok: true, verdict: 'approved' }
     }
 
+    // ── pass_with_notes — approve + cosmetic observations, no revision needed ──
+    definitions.push({
+      name: 'pass_with_notes',
+      description: 'Approve the build AND leave minor polish notes for the founder. Use this when all functional acceptance criteria pass but you have cosmetic observations (a missing placeholder style, a colour that is slightly off, a copy tweak). This ships the project without triggering another Leo revision. Do NOT use this for functional bugs or missing features — those require request_changes.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          approval_summary: { type: 'string', description: 'What passed — functional criteria met, app works as designed.' },
+          polish_notes: { type: 'string', description: 'Minor cosmetic observations for the founder. Not blockers.' },
+        },
+        required: ['approval_summary', 'polish_notes'],
+      },
+    })
+
+    handlers['pass_with_notes'] = async (input) => {
+      if (!compareWithDesignCalled) {
+        return { ok: false, blocked: true, reason: 'You must call compare_with_design before passing. Run it now to confirm visual match.' }
+      }
+
+      if (taskId) {
+        await db.from('tasks').update({
+          status: 'completed',
+          result: `${input.approval_summary}\n\nPolish notes: ${input.polish_notes}`,
+          completed_at: new Date().toISOString(),
+        }).eq('id', taskId)
+      }
+
+      const { data: leoTask } = await db
+        .from('tasks').select('artifact').eq('project_id', projectId)
+        .eq('jugnu_key', 'leo').eq('status', 'completed')
+        .order('completed_at', { ascending: false }).limit(1).single()
+      const buildEvidence = (leoTask?.artifact as Record<string, unknown> | null)?.build_evidence as Record<string, unknown> | undefined
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+      const liveUrl = buildEvidence?.preview_url ? String(buildEvidence.preview_url) : null
+      const previewUrl = liveUrl ?? (appUrl ? `${appUrl}/preview/${projectId}` : null)
+      const deployLine = previewUrl ? `\n\n🌐 [**View live →**](${previewUrl})` : ''
+
+      await db.from('projects').update({
+        status: 'completed',
+        ...(previewUrl ? { deploy_url: previewUrl } : {}),
+      }).eq('id', projectId)
+
+      await db.from('messages').insert({
+        project_id: projectId, author_type: 'jugnu', author_key: 'tara',
+        content: `✅ **Tara approved the work.**\n\n${input.approval_summary}${deployLine}\n\n💡 **Polish notes (not blockers):**\n${input.polish_notes}`,
+        task_id: taskId,
+        metadata: { event_type: 'REVIEW_PASSED', review_verdict: 'approved', project_complete: true, live_url: liveUrl, preview_url: previewUrl, build_verified: buildEvidence?.html_valid === true },
+      })
+
+      await db.from('messages').insert({
+        project_id: projectId, author_type: 'system', author_key: 'system',
+        content: `✨ All tasks completed. Your Jugnus finished the project.${previewUrl ? `\n\n🌐 Preview: ${previewUrl}` : ''}`,
+        metadata: { event_type: 'PROJECT_COMPLETED', project_complete: true, deploy_url: previewUrl },
+      })
+
+      return { ok: true, verdict: 'approved_with_notes' }
+    }
+
     definitions.push({
       name: 'request_changes',
       description: 'Request changes from Leo. Describe exactly what needs to be fixed. Do not call this if Leo has already revised four times — approve with reservations instead, listing every remaining issue in your comment.',
@@ -1476,6 +1566,11 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
     })
 
     handlers['request_changes'] = async (input) => {
+      // Must have compared with design before blocking Leo with a revision request
+      if (!compareWithDesignCalled) {
+        return { ok: false, blocked: true, reason: 'You must call compare_with_design before requesting changes. Run it now — if the visual match is acceptable, consider whether your remaining issues warrant a full revision or just a pass_with_notes.' }
+      }
+
       // Count only Leo REVISION tasks (sort_order >= 100), not the initial build.
       // This was previously >= 2 on ALL Leo completed tasks, which meant Tara could only
       // ever request one correction (initial build counted as 1, revision as 2 = escalate).
