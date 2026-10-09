@@ -603,7 +603,7 @@ Rules:
   5. Any img tags in Nia's screen files must be copied into the matching screen in your app — do not drop images.
 - Write complete, working files using write_file — no stubs, no placeholders, no TODOs
 - **Founder images**: If your task description includes a "FOUNDER IMAGES" section with URLs, embed them as real img tags (src="URL") with object-fit:cover. Never use placeholder colours, CSS patterns, or emoji when real photos are provided. Distribute images across sections naturally (hero, gallery grid, product cards, about photo).
-- **Stock photos**: For HTML landing pages — call search_photos before writing sections that need images. Use the returned URLs as real img tags. If generate_image returns upgrade_required:true, call search_photos immediately as fallback. Never output empty placeholder divs or grey boxes.
+- **Images — reuse Nia's, never generate new ones**: When you read Nia's screen files (step 1 of design fidelity above), collect every img src URL you find. Use those exact URLs in your app — do NOT call generate_image or search_photos. Nia has already sourced and approved all images. Only call search_photos if you find zero img tags across all of Nia's design files.
 - Stack: for HTML preview apps (Quick/Balanced) — React via CDN + plain CSS; for fullstack (Premium/Next.js) — Next.js App Router + Supabase + TypeScript strict mode
 - Every UI feature needs a visible component so the founder can actually see it
 - Write each file individually with write_file (one call per file)
