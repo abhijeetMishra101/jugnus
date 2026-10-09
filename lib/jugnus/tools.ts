@@ -6,6 +6,19 @@ import { flags } from '../feature-flags'
 
 import { getPreviewUrl } from './deploy-static'
 
+// Extracts visible UI labels from Nia's design HTML so Tara knows what to verify.
+function extractNiaComponents(html: string): string {
+  const seen = new Set<string>()
+  const items: string[] = []
+  // headings, buttons, labels, list items, table headers — things that identify features
+  const re = /<(button|h1|h2|h3|h4|label|th|li)[^>]*>([^<]{3,60})<\/\1>/gi
+  for (const m of html.matchAll(re)) {
+    const text = m[2].trim().replace(/\s+/g, ' ')
+    if (text && !seen.has(text)) { seen.add(text); items.push(text) }
+  }
+  return items.slice(0, 16).join(' · ')
+}
+
 export interface ToolSet {
   definitions: Anthropic.Tool[]
   handlers: Record<string, (input: Record<string, unknown>) => Promise<unknown>>
@@ -1033,6 +1046,29 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
         }).eq('id', taskId)
       }
 
+      // Append Nia's design component list to the pending Tara task so she knows
+      // exactly what to verify — features, labels, and layout elements Nia designed.
+      try {
+        // Prefer first screen file; fall back to assembled.html
+        const { data: screenFiles } = await db.from('file_snapshots').select('path, content')
+          .eq('project_id', projectId).ilike('path', 'design/screen-%.html').order('path').limit(1)
+        const { data: assembledFile } = await db.from('file_snapshots').select('content')
+          .eq('project_id', projectId).eq('path', 'design/assembled.html').maybeSingle()
+        const designHtml = screenFiles?.[0]?.content ?? assembledFile?.content ?? ''
+        const niaComponents = extractNiaComponents(designHtml)
+        if (niaComponents) {
+          const { data: taraTasks } = await db.from('tasks')
+            .select('id, description')
+            .eq('project_id', projectId).eq('jugnu_key', 'tara').eq('status', 'pending')
+            .order('created_at', { ascending: false }).limit(1)
+          if (taraTasks?.[0] && !taraTasks[0].description?.includes("Nia's design contained")) {
+            await db.from('tasks').update({
+              description: (taraTasks[0].description ?? '') + `\n\n**Nia's design contained:** ${niaComponents}`,
+            }).eq('id', taraTasks[0].id)
+          }
+        }
+      } catch { /* non-critical — don't block submission */ }
+
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'leo',
         content: `🔀 **Leo submitted ${files.length} file${files.length !== 1 ? 's' : ''} for review.**\n\n${input.summary}\n\n✅ Build check passed — preview available at [${previewUrl}](${previewUrl})`,
@@ -1480,14 +1516,23 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
 
       // Always queue a Tara re-review after the revision — without this the project
       // goes straight to "completed" after Leo's revision without any further QA.
-      await db.from('tasks').insert({
-        project_id: projectId,
-        title: 'Re-review revised implementation',
-        description: `Leo revised the implementation. Run your full review suite again: verify_assets → call_api → browse_app. If all checks pass, approve. This is the final review — if issues remain, approve with reservations rather than requesting another round.`,
-        capability: 'review', jugnu_key: 'tara',
-        depends_on: leoRevTask?.id ? [leoRevTask.id] : [],
-        sort_order: 1000, status: 'pending',
-      })
+      {
+        const { data: screenFiles } = await db.from('file_snapshots').select('path, content')
+          .eq('project_id', projectId).ilike('path', 'design/screen-%.html').order('path').limit(1)
+        const { data: assembledFile } = await db.from('file_snapshots').select('content')
+          .eq('project_id', projectId).eq('path', 'design/assembled.html').maybeSingle()
+        const designHtml = screenFiles?.[0]?.content ?? assembledFile?.content ?? ''
+        const niaComponents = extractNiaComponents(designHtml)
+        const niaNote = niaComponents ? `\n\n**Nia's design contained:** ${niaComponents}` : ''
+        await db.from('tasks').insert({
+          project_id: projectId,
+          title: 'Re-review revised implementation',
+          description: `Leo revised the implementation. Run your full review suite again: verify_assets → call_api → browse_app. If all checks pass, approve. This is the final review — if issues remain, approve with reservations rather than requesting another round.${niaNote}`,
+          capability: 'review', jugnu_key: 'tara',
+          depends_on: leoRevTask?.id ? [leoRevTask.id] : [],
+          sort_order: 1000, status: 'pending',
+        })
+      }
 
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'tara',

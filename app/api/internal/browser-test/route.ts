@@ -148,7 +148,7 @@ export async function POST(request: Request): Promise<Response> {
 
     let screenshot: string | undefined
     if (returnScreenshot) {
-      const buf = await page.screenshot({ type: 'jpeg', quality: 75, fullPage: false }) as Buffer
+      const buf = await page.screenshot({ type: 'jpeg', quality: 75, fullPage: true }) as Buffer
       screenshot = buf.toString('base64')
     }
 
