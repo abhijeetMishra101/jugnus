@@ -9,6 +9,7 @@ interface Task {
   depends_on: string[]
   status: string
   eta?: string | null
+  retry_count?: number | null
 }
 
 export async function getNextReadyTask(
@@ -17,23 +18,37 @@ export async function getNextReadyTask(
 ): Promise<Task | null> {
   const { data: tasks } = await db
     .from('tasks')
-    .select('id, title, jugnu_key, depends_on, status, eta')
+    .select('id, title, jugnu_key, depends_on, status, eta, retry_count')
     .eq('project_id', projectId)
     .order('sort_order', { ascending: true })
 
   if (!tasks?.length) return null
 
-  // 'failed' is treated as satisfied so downstream tasks (e.g. Tara reviewing a failed Leo build)
-  // can still run — otherwise the project deadlocks permanently with a pending task that never fires.
   const satisfiedIds = new Set(
-    tasks.filter((t) => ['completed', 'skipped', 'failed'].includes(t.status)).map((t) => t.id)
+    tasks.filter((t) => ['completed', 'skipped'].includes(t.status)).map((t) => t.id)
   )
 
-  return tasks.find((t) => {
+  const readyTask = tasks.find((t) => {
     if (t.status !== 'pending') return false
     const deps = (t.depends_on ?? []) as string[]
     return deps.every((dep) => satisfiedIds.has(dep))
   }) ?? null
+
+  if (readyTask) return readyTask
+
+  // No ready pending task — check if a failed build task is blocking the pipeline.
+  // Instead of sending Tara to review a failed build, auto-retry the failed task (up to 3 times).
+  const BUILD_AUTO_RETRY_CAP = 3
+  const failedBuild = tasks.find(
+    (t) => t.status === 'failed' && ['leo', 'nia'].includes(t.jugnu_key) && (t.retry_count ?? 0) < BUILD_AUTO_RETRY_CAP
+  )
+  if (failedBuild) {
+    const nextRetry = (failedBuild.retry_count ?? 0) + 1
+    await db.from('tasks').update({ status: 'pending', retry_count: nextRetry }).eq('id', failedBuild.id)
+    return { ...failedBuild, status: 'pending' }
+  }
+
+  return null
 }
 
 export async function advanceProject(projectId: string, db: SupabaseClient): Promise<{
