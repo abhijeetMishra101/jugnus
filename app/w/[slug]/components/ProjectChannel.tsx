@@ -190,15 +190,28 @@ function FileStreamBubble({ msg, j }: { msg: Message; j: { color: string; bg: st
   const meta = (msg.metadata ?? {}) as Record<string, unknown>
   const filePath = meta.file_path as string | null | undefined
   const isStreaming = meta.streaming === true
-  const lines = msg.content.split('\n').length
+  const content = msg.content ?? ''
+  const lines = content.split('\n').length
+  // Auto-expand while actively streaming; collapse once done
+  const [expanded, setExpanded] = useState(isStreaming)
+
+  // Expand automatically when streaming starts; collapse when it finishes
+  useEffect(() => {
+    if (isStreaming) setExpanded(true)
+  }, [isStreaming])
 
   return (
     <div
       className="w-full rounded-2xl rounded-tl-sm overflow-hidden shadow-sm"
-      style={{ border: `1px solid ${j.color}22`, background: '#0d1117' }}
+      style={{ border: `1px solid ${j.color}22`, background: expanded ? '#0d1117' : j.bg }}
     >
-      {/* File header */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b" style={{ borderColor: j.color + '22', background: j.bg }}>
+      {/* File header — always visible, click to toggle code */}
+      <button
+        type="button"
+        onClick={() => { if (!isStreaming) setExpanded((v) => !v) }}
+        className="w-full flex items-center gap-2 px-4 py-2 text-left"
+        style={{ background: j.bg, borderBottom: expanded ? `1px solid ${j.color}22` : 'none', cursor: isStreaming ? 'default' : 'pointer' }}
+      >
         <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: j.color }}>
           <path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M9 2v4h4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -207,14 +220,16 @@ function FileStreamBubble({ msg, j }: { msg: Message; j: { color: string; bg: st
         <span className="ml-auto text-[10px]" style={{ color: j.color, opacity: 0.5 }}>
           {isStreaming ? (
             <span style={{ animation: 'jugnu-bounce 1s ease-in-out infinite' }}>writing…</span>
-          ) : `${lines} lines`}
+          ) : expanded ? `${lines} lines ▲` : `${lines} lines ▼`}
         </span>
-      </div>
-      {/* Content — overflow-x-auto gives horizontal scroll; pre preserves formatting */}
-      <pre className="px-4 py-3 text-xs overflow-x-auto max-h-64 leading-relaxed"
-        style={{ color: 'rgba(200,210,230,0.9)', fontFamily: 'ui-monospace, SFMono-Regular, monospace', whiteSpace: 'pre' }}>
-        {msg.content}
-      </pre>
+      </button>
+      {/* Code content — only rendered when expanded */}
+      {expanded && (
+        <pre className="px-4 py-3 text-xs overflow-x-auto max-h-64 leading-relaxed"
+          style={{ color: 'rgba(200,210,230,0.9)', fontFamily: 'ui-monospace, SFMono-Regular, monospace', whiteSpace: 'pre' }}>
+          {content}
+        </pre>
+      )}
     </div>
   )
 }
