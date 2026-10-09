@@ -341,7 +341,7 @@ function JugnuSection({ authorKey, messages, isNew, pendingMsgId, projectId, use
     <div className="flex items-start gap-1 px-3 py-1.5">
       <div
         className="shrink-0 self-start sticky top-4"
-        style={isNew ? { animation: `jugnu-fly-in ${flyDuration}s cubic-bezier(0.22,1,0.36,1) forwards`, willChange: 'transform' } : {}}
+        style={isNew ? { animation: `jugnu-fly-in ${flyDuration}s cubic-bezier(0.22,1,0.36,1) forwards` } : {}}
       >
         <div style={{ animation: `jugnu-float 2.6s ease-in-out ${isNew ? `${flyDuration}s` : floatDelay} infinite` }}>
           <JugnuIllustration jugnuKey={authorKey} size={120} />
@@ -1028,8 +1028,10 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     item.type === 'jugnu' && item.authorKey === 'nia' ? i : acc, -1)
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative">
+    <div className="flex-1 flex flex-col min-h-0 relative" style={{ background: '#090e1c' }}>
         {/* ── Background + animated overlays — outside scroll container so they never scroll away ── */}
+        {/* background: #090e1c on the outer div acts as a repaint guard so scroll compositing       */}
+        {/* never flashes the white <main> background through during GPU layer promotion.             */}
         <div
           className="absolute inset-0 pointer-events-none overflow-hidden"
           style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(/chat-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 55%' }}
