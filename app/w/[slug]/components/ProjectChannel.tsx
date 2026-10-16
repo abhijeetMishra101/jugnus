@@ -1028,14 +1028,16 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
     item.type === 'jugnu' && item.authorKey === 'nia' ? i : acc, -1)
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative" style={{ background: '#090e1c' }}>
-        {/* ── Background + animated overlays — outside scroll container so they never scroll away ── */}
-        {/* background: #090e1c on the outer div acts as a repaint guard so scroll compositing       */}
-        {/* never flashes the white <main> background through during GPU layer promotion.             */}
-        <div
-          className="absolute inset-0 pointer-events-none overflow-hidden"
-          style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(/chat-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 55%' }}
-        >
+    <div className="flex-1 flex flex-col min-h-0 relative"
+      style={{
+        background: '#090e1c',
+        backgroundImage: 'linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(/chat-bg.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center 55%',
+      }}
+    >
+        {/* ── Animated overlays — outside scroll container so they never scroll away ── */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
           {/* Lantern glows */}
           {[
             { left: '17%', top: '20%', delay: '0s',    dur: '3.1s', size: 100 },
