@@ -1660,9 +1660,23 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
               required: ['description', 'failure'],
             },
           },
+          lessons: {
+            type: 'array',
+            description: 'Required. At least one reusable lesson from this review cycle — general enough to help on future projects. Attribute to "leo" for implementation mistakes, "nia" for design issues caught during compare_with_design (wrong layout, missing screens, broken visual hierarchy). State the rule, not the symptom.',
+            minItems: 1,
+            items: {
+              type: 'object' as const,
+              properties: {
+                jugnu_key:     { type: 'string', enum: ['leo', 'nia'], description: 'Who made the mistake.' },
+                learning_type: { type: 'string', enum: ['mistake', 'pattern', 'fix'], description: 'mistake = what to avoid, pattern = what works, fix = corrective technique.' },
+                content:       { type: 'string', description: 'One actionable sentence under 400 chars.' },
+              },
+              required: ['jugnu_key', 'learning_type', 'content'],
+            },
+          },
           summary: { type: 'string', description: 'One-line overview shown to the founder, e.g. "3 functional issues found — returning to Leo."' },
         },
-        required: ['failing_criteria'],
+        required: ['failing_criteria', 'lessons'],
       },
     })
 
@@ -1687,6 +1701,27 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
           reason: 'Leo has already revised four times. You are NOT allowed to call request_changes again. Call approve now. If issues remain, describe them in your approval comment so the founder is aware — but the project must ship.',
         }
       }
+
+      // Enforce at least one lesson — attribution to the right jugnu is required.
+      type Lesson = { jugnu_key: string; learning_type: string; content: string }
+      const lessons = (input.lessons as Lesson[]) ?? []
+      if (lessons.length === 0) {
+        return { ok: false, error: 'lessons is required and must have at least one entry. Identify what went wrong and whether it was Leo\'s implementation or Nia\'s design.' }
+      }
+
+      // Save lessons now — before the revision task is created so they persist even if downstream fails.
+      await Promise.all(
+        lessons
+          .filter((l) => l.content?.trim().length >= 20)
+          .map((l) =>
+            db.from('jugnu_learnings').insert({
+              jugnu_key: l.jugnu_key,
+              source_project_id: projectId,
+              learning_type: l.learning_type,
+              content: l.content.trim().slice(0, 400),
+            })
+          )
+      )
 
       // Build a consolidated feedback string from the structured failing_criteria array.
       // Leo gets the full list at once — one revision attempt per round, not one bug at a time.
@@ -1748,7 +1783,7 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
     // ── record_learning — intentional, reusable lesson capture ───────────────
     definitions.push({
       name: 'record_learning',
-      description: 'Save a reusable lesson to the learnings store so future builds avoid the same mistake. Call this when you identify a root-cause pattern — something general enough to help on a different project, not just a description of this specific bug. Write one concise actionable sentence. Call this separately from request_changes; do not duplicate raw feedback here.',
+      description: 'Save an additional reusable lesson beyond what you already recorded in request_changes. Use this on approval too — record what worked well (patterns) so future Leos and Nias can repeat them. Do not duplicate lessons already submitted via request_changes.',
       input_schema: {
         type: 'object' as const,
         properties: {
