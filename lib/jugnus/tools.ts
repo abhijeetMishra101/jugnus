@@ -998,6 +998,64 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
     }
   }
 
+  // ── set_tech_stack — Leo only ────────────────────────────────────────────────
+  // Lets Leo override the tech_stack Maya declared if the task description or
+  // founder approval feedback implies a different approach. Must be called before
+  // write_file — the write_file gate reads tech_stack fresh from DB each call.
+  if (jugnuKey === 'leo') {
+    definitions.push({
+      name: 'set_tech_stack',
+      description: 'Override the tech stack Maya declared for this project. Call this ONCE at the start of your task — before any write_file call — if your task description or the founder\'s approval feedback implies a different renderer, CSS approach, or data layer than what was originally declared. After calling this, write_file will enforce your declared stack. Do not call this mid-build.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          renderer: {
+            type: 'string',
+            enum: ['vanilla-js', 'react-cdn', 'vue-cdn'],
+            description: 'JS rendering approach for this build.',
+          },
+          css: {
+            type: 'string',
+            enum: ['plain', 'tailwind-cdn', 'tokens'],
+            description: 'CSS approach for this build.',
+          },
+          data: {
+            type: 'string',
+            enum: ['localStorage', 'data-api', 'supabase', 'none'],
+            description: 'Data persistence for this build.',
+          },
+          reason: {
+            type: 'string',
+            description: 'One sentence explaining why this differs from Maya\'s declared stack, e.g. "Founder requested React during design approval."',
+          },
+        },
+        required: ['renderer', 'css', 'data', 'reason'],
+      },
+    })
+
+    handlers['set_tech_stack'] = async (input) => {
+      const newStack = { renderer: input.renderer, css: input.css, data: input.data }
+      const { data: proj } = await db.from('projects').select('constraints').eq('id', projectId).single()
+      const existing = (proj?.constraints ?? {}) as Record<string, unknown>
+      const previous = existing.tech_stack as Record<string, string> | undefined
+
+      await db.from('projects').update({
+        constraints: { ...existing, tech_stack: newStack },
+      }).eq('id', projectId)
+
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'activity',
+        author_key: 'leo',
+        content: `🔧 Tech stack updated: renderer=${newStack.renderer}, css=${newStack.css}, data=${newStack.data}`,
+        task_id: taskId,
+        metadata: { event_type: 'TECH_STACK_UPDATED', previous, updated: newStack, reason: input.reason },
+      })
+
+      return { ok: true, tech_stack: newStack, previous: previous ?? null }
+    }
+  }
+
   // Executes DDL and DML against the shared Jugnus Postgres instance so Leo can
   // provision real tables (CREATE TABLE, GRANT, RLS policies) without any founder credentials.
   // Tables must follow the naming convention: p_{shortProjectId}_{tablename}
