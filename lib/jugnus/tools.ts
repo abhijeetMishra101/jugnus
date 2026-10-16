@@ -358,28 +358,6 @@ ${body}
               required: ['id', 'description', 'source'],
             },
           },
-          tech_stack: {
-            type: 'object',
-            description: 'Technology choices for Leo\'s build. Required for any project with a build task. Maya must declare these upfront — Leo reads them before writing any file and must not deviate.',
-            properties: {
-              renderer: {
-                type: 'string',
-                enum: ['vanilla-js', 'react-cdn', 'vue-cdn'],
-                description: 'JS rendering approach. vanilla-js = plain DOM APIs, no frameworks. react-cdn = React loaded via CDN script tag. vue-cdn = Vue loaded via CDN script tag.',
-              },
-              css: {
-                type: 'string',
-                enum: ['plain', 'tailwind-cdn', 'tokens'],
-                description: 'CSS approach. plain = hand-written CSS. tailwind-cdn = Tailwind Play CDN. tokens = use design/tokens.css custom properties.',
-              },
-              data: {
-                type: 'string',
-                enum: ['localStorage', 'data-api', 'supabase', 'none'],
-                description: 'Data persistence. localStorage = browser storage. data-api = Jugnus /api/data endpoint. supabase = direct Supabase client. none = no persistence needed.',
-              },
-            },
-            required: ['renderer', 'css', 'data'],
-          },
           design_tokens: {
             type: 'object',
             description: 'Brand design tokens for web page projects. Provide these for any landing page, campaign page, or HTML output — Nia and Leo will use them as CSS custom properties instead of hardcoded values.',
@@ -590,7 +568,6 @@ ${body}
       // Store jugnu_roles, build_tier, and acceptance_criteria in project constraints
       {
         const acceptance_criteria = input.acceptance_criteria as Array<Record<string, unknown>> | undefined
-        const tech_stack = input.tech_stack as Record<string, string> | undefined
         const { data: proj } = await db.from('projects').select('constraints').eq('id', projectId).single()
         const existing = (proj?.constraints ?? {}) as Record<string, unknown>
         await db.from('projects').update({
@@ -600,7 +577,6 @@ ${body}
             build_tier,
             ...(jugnu_roles ? { jugnu_roles } : {}),
             ...(acceptance_criteria?.length ? { acceptance_criteria } : {}),
-            ...(tech_stack ? { tech_stack } : {}),
           },
         }).eq('id', projectId)
       }
@@ -867,16 +843,21 @@ ${body}
       const projConstraints = (tierProj?.constraints as Record<string, unknown>) ?? {}
       const tier = (projConstraints.build_tier as string) ?? 'balanced'
 
-      // Tech-stack consistency gate — reject Leo writing React APIs in a vanilla-js project.
+      // Tech-stack consistency gate — Leo must declare his stack before writing any file.
       // Prevents wrong-foundation starts where Leo commits to a framework mid-file and cascades bugs.
       if (jugnuKey === 'leo') {
         const techStack = projConstraints.tech_stack as Record<string, string> | undefined
+
+        if (!techStack) {
+          return { ok: false, error: 'You must call set_tech_stack before writing any file. Declare your renderer, CSS approach, and data layer first.' }
+        }
+
         const filePath = input.path as string
-        if (techStack?.renderer === 'vanilla-js' && filePath.endsWith('.js')) {
+        if (techStack.renderer === 'vanilla-js' && filePath.endsWith('.js')) {
           const violations = REACT_IN_VANILLA_PATTERNS.filter(({ pattern }) => pattern.test(content))
           if (violations.length > 0) {
             const msgs = violations.map(v => `  • ${v.reason}`)
-            return { ok: false, error: `Rejected — this project declared renderer: vanilla-js, but ${filePath} contains React APIs:\n${msgs.join('\n')}\n\nRewrite using plain DOM APIs (document.createElement, addEventListener, etc.). No frameworks.` }
+            return { ok: false, error: `Rejected — you declared renderer: vanilla-js, but ${filePath} contains React APIs:\n${msgs.join('\n')}\n\nRewrite using plain DOM APIs (document.createElement, addEventListener, etc.). No frameworks.` }
           }
         }
       }
@@ -1005,7 +986,7 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
   if (jugnuKey === 'leo') {
     definitions.push({
       name: 'set_tech_stack',
-      description: 'Override the tech stack Maya declared for this project. Call this ONCE at the start of your task — before any write_file call — if your task description or the founder\'s approval feedback implies a different renderer, CSS approach, or data layer than what was originally declared. After calling this, write_file will enforce your declared stack. Do not call this mid-build.',
+      description: 'Declare the tech stack for this build. Call this ONCE before your first write_file — it is required. Choose based on the project requirements: what data storage is needed, whether the UI has complex state, what complexity level justifies a framework. Your choice is recorded and enforced for all file writes. Do not ask the founder — this is a technical decision you make.',
       input_schema: {
         type: 'object' as const,
         properties: {
@@ -1026,7 +1007,7 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
           },
           reason: {
             type: 'string',
-            description: 'One sentence explaining why this differs from Maya\'s declared stack, e.g. "Founder requested React during design approval."',
+            description: 'One sentence explaining your choice, e.g. "Multi-step wizard with shared state warrants React CDN" or "Simple form with no dynamic UI — vanilla JS is sufficient."',
           },
         },
         required: ['renderer', 'css', 'data', 'reason'],
