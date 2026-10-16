@@ -1566,11 +1566,6 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
     })
 
     handlers['request_changes'] = async (input) => {
-      // Must have compared with design before blocking Leo with a revision request
-      if (!compareWithDesignCalled) {
-        return { ok: false, blocked: true, reason: 'You must call compare_with_design before requesting changes. Run it now — if the visual match is acceptable, consider whether your remaining issues warrant a full revision or just a pass_with_notes.' }
-      }
-
       // Count only Leo REVISION tasks (sort_order >= 100), not the initial build.
       // This was previously >= 2 on ALL Leo completed tasks, which meant Tara could only
       // ever request one correction (initial build counted as 1, revision as 2 = escalate).
