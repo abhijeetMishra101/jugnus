@@ -1032,8 +1032,8 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
       style={{
         background: '#090e1c',
         backgroundImage: 'linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(/chat-bg.png)',
-        backgroundSize: '100% auto',
-        backgroundPosition: 'center bottom',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
         backgroundRepeat: 'no-repeat',
       }}
     >
