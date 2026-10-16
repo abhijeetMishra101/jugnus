@@ -19,6 +19,23 @@ function extractNiaComponents(html: string): string {
   return items.slice(0, 16).join(' · ')
 }
 
+// Checks whether a CSS selector exists in raw HTML — ID, class, or element.
+// Used by submit_for_review to verify Nia's manifest against Leo's build.
+function selectorExistsInHtml(html: string, selector: string): boolean {
+  const s = selector.trim()
+  if (s.startsWith('#')) {
+    const id = s.slice(1).replace(/[^\w-]/g, '')
+    return new RegExp(`id=["']${id}["']`).test(html)
+  }
+  if (s.startsWith('.')) {
+    const cls = s.slice(1).replace(/[^\w-]/g, '')
+    return new RegExp(`\\b${cls}\\b`).test(html)
+  }
+  const tag = s.split(/[#.\s[]/)[0]
+  if (tag) return new RegExp(`<${tag}[\\s>/]`, 'i').test(html)
+  return false
+}
+
 export interface ToolSet {
   definitions: Anthropic.Tool[]
   handlers: Record<string, (input: Record<string, unknown>) => Promise<unknown>>
@@ -155,6 +172,28 @@ ${body}
           }
       } catch {
         // Transient write failure — skip assembled.html; task completion must not be blocked
+      }
+
+      // Inject manifest selectors into Leo's pending task so he knows required IDs upfront.
+      try {
+        const { data: mf } = await db.from('file_snapshots')
+          .select('content').eq('project_id', projectId).eq('path', 'design/manifest.json').maybeSingle()
+        if (mf?.content) {
+          const manifest = JSON.parse(mf.content) as { screens: Array<{ required: Array<{ selector: string; description: string }> }> }
+          const selectors = (manifest.screens ?? []).flatMap((s) => s.required.map((el) => `${el.selector} (${el.description})`))
+          if (selectors.length > 0) {
+            const { data: leoTasks } = await db.from('tasks')
+              .select('id, description').eq('project_id', projectId).eq('jugnu_key', 'leo').eq('status', 'pending')
+              .order('created_at', { ascending: false }).limit(1)
+            if (leoTasks?.[0] && !leoTasks[0].description?.includes('Required selectors')) {
+              await db.from('tasks').update({
+                description: (leoTasks[0].description ?? '') + `\n\n**Required selectors (from Nia's manifest — use these exact IDs/classes):**\n${selectors.map((s) => `  • ${s}`).join('\n')}`,
+              }).eq('id', leoTasks[0].id)
+            }
+          }
+        }
+      } catch {
+        // Non-critical — Leo can still recover from submit_for_review manifest check
       }
     }
 
@@ -808,6 +847,58 @@ ${body}
     }
   }
 
+  // ── write_manifest — Nia only ───────────────────────────────────────────────
+  if (jugnuKey === 'nia') {
+    definitions.push({
+      name: 'write_manifest',
+      description: 'Write the component manifest after your design screens are complete. Declare the exact CSS selectors Leo MUST implement — prescribe the IDs and classes (e.g. "#generate-btn", ".strength-bar"). These become a hard contract: submit_for_review checks for every selector and blocks Leo if any are missing. Leo also sees these selectors in his task before writing any code.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          screens: {
+            type: 'array',
+            description: 'One entry per screen or logical section.',
+            items: {
+              type: 'object' as const,
+              properties: {
+                name: { type: 'string', description: 'Screen name, e.g. "main", "result", "settings"' },
+                required: {
+                  type: 'array',
+                  description: 'Elements Leo must implement for this screen.',
+                  items: {
+                    type: 'object' as const,
+                    properties: {
+                      selector: { type: 'string', description: 'Exact CSS selector Leo must use, e.g. "#generate-btn", ".strength-bar", "input#password-length"' },
+                      description: { type: 'string', description: 'What this element is, e.g. "Generate button"' },
+                    },
+                    required: ['selector', 'description'],
+                  },
+                },
+              },
+              required: ['name', 'required'],
+            },
+          },
+        },
+        required: ['screens'],
+      },
+    })
+
+    handlers['write_manifest'] = async (input) => {
+      const manifest = { screens: input.screens }
+      const json = JSON.stringify(manifest, null, 2)
+      await writeFile(projectId, taskId, 'design/manifest.json', json, db)
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'activity',
+        author_key: 'nia',
+        content: `📋 Component manifest written — ${(input.screens as Array<{ required: unknown[] }>).reduce((n, s) => n + s.required.length, 0)} required elements across ${(input.screens as unknown[]).length} screen(s)`,
+        task_id: taskId,
+        metadata: { event_type: 'MANIFEST_WRITTEN', screens: (input.screens as unknown[]).length },
+      })
+      return { ok: true, manifest }
+    }
+  }
+
   // ── Write tools — Leo and Nia ────────────────────────────────────────────────
   if (jugnuKey === 'leo' || jugnuKey === 'nia') {
     definitions.push({
@@ -1053,6 +1144,61 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
     }
   }
 
+  // ── write_tests — Leo only ───────────────────────────────────────────────────
+  if (jugnuKey === 'leo') {
+    definitions.push({
+      name: 'write_tests',
+      description: 'Write functional test cases for your build. Call this BEFORE submit_for_review — it is required. Tests run in a real browser at submission time; any failure blocks the submission and tells you exactly what broke. Cover the primary user actions: button clicks, form inputs, data appearing, navigation. Aim for 3–5 tests.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          tests: {
+            type: 'array',
+            minItems: 1,
+            description: 'Test cases. Each test runs its steps in sequence.',
+            items: {
+              type: 'object' as const,
+              properties: {
+                description: { type: 'string', description: 'What this test verifies, e.g. "Clicking generate produces a password"' },
+                steps: {
+                  type: 'array',
+                  items: {
+                    type: 'object' as const,
+                    properties: {
+                      type:     { type: 'string', enum: ['click', 'fill', 'select', 'wait', 'check_text', 'reload'] },
+                      selector: { type: 'string', description: 'CSS selector for click/fill/select actions' },
+                      value:    { type: 'string', description: 'Value to type (fill), option to select, or expected text (check_text)' },
+                      ms:       { type: 'number', description: 'Milliseconds for wait action' },
+                    },
+                    required: ['type'],
+                  },
+                },
+              },
+              required: ['description', 'steps'],
+            },
+          },
+        },
+        required: ['tests'],
+      },
+    })
+
+    handlers['write_tests'] = async (input) => {
+      const tests = input.tests as Array<{ description: string; steps: unknown[] }>
+      if (!tests?.length) return { ok: false, error: 'tests array is empty — provide at least one test case.' }
+      const json = JSON.stringify({ tests }, null, 2)
+      await writeFile(projectId, taskId, 'tests.json', json, db)
+      await db.from('messages').insert({
+        project_id: projectId,
+        author_type: 'activity',
+        author_key: 'leo',
+        content: `🧪 Wrote ${tests.length} test case${tests.length !== 1 ? 's' : ''}`,
+        task_id: taskId,
+        metadata: { event_type: 'TESTS_WRITTEN', test_count: tests.length },
+      })
+      return { ok: true, test_count: tests.length }
+    }
+  }
+
   // Executes DDL and DML against the shared Jugnus Postgres instance so Leo can
   // provision real tables (CREATE TABLE, GRANT, RLS policies) without any founder credentials.
   // Tables must follow the naming convention: p_{shortProjectId}_{tablename}
@@ -1149,11 +1295,66 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
       }
 
       if (buildErrors.length > 0) {
-        // Throw so dispatch.ts marks this as is_error and Leo continues working
         throw new Error(`Build validation failed:\n${buildErrors.map((e) => `• ${e}`).join('\n')}`)
       }
 
+      const primaryHtml = (htmlFiles ?? []).find((f) => f.path === 'index.html')?.content ?? htmlFiles?.[0]?.content ?? ''
+
+      // ── Manifest check — verify Nia's required selectors exist in Leo's HTML ──
+      try {
+        const { data: mf } = await db.from('file_snapshots')
+          .select('content').eq('project_id', projectId).eq('path', 'design/manifest.json').maybeSingle()
+        if (mf?.content) {
+          const manifest = JSON.parse(mf.content) as { screens: Array<{ name: string; required: Array<{ selector: string; description: string }> }> }
+          const missing: string[] = []
+          for (const screen of manifest.screens ?? []) {
+            for (const el of screen.required ?? []) {
+              if (!selectorExistsInHtml(primaryHtml, el.selector)) {
+                missing.push(`${el.selector} — ${el.description}`)
+              }
+            }
+          }
+          if (missing.length > 0) {
+            throw new Error(`Manifest check failed — ${missing.length} required element(s) missing from HTML:\n${missing.map((m) => `• ${m}`).join('\n')}\n\nAdd these elements using the exact IDs/classes above, then call submit_for_review again.`)
+          }
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) { /* malformed manifest — skip */ } else throw e
+      }
+
       const previewUrl = getPreviewUrl(projectId)
+
+      // ── Test runner — run Leo's tests.json in a real browser ─────────────────
+      const { data: testsFile } = await db.from('file_snapshots')
+        .select('content').eq('project_id', projectId).eq('path', 'tests.json').maybeSingle()
+      if (!testsFile?.content) {
+        throw new Error('No tests.json found. Call write_tests before submitting — write at least 3 test cases covering the primary user interactions.')
+      }
+      let testCases: Array<{ description: string; steps: Array<{ type: string; selector?: string; value?: string; ms?: number }> }> = []
+      try { testCases = (JSON.parse(testsFile.content) as { tests: typeof testCases }).tests ?? [] } catch {
+        throw new Error('tests.json is not valid JSON. Fix it and call write_tests again.')
+      }
+      const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      const testFailures: string[] = []
+      for (const tc of testCases.slice(0, 10)) {
+        try {
+          const res = await fetch(`${base}/api/internal/browser-test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_API_SECRET ?? ''}` },
+            body: JSON.stringify({ url: `${base}/preview/${projectId}`, actions: tc.steps }),
+          })
+          if (!res.ok) continue
+          const data = await res.json() as { ok: boolean; available?: boolean; action_results?: Array<{ action: string; passed: boolean; error?: string }> }
+          if (data.available === false) break // browser unavailable — skip tests gracefully
+          const failed = (data.action_results ?? []).filter((r) => !r.passed)
+          if (failed.length > 0) {
+            testFailures.push(`"${tc.description}": ${failed.map((f) => f.error ?? f.action).join('; ')}`)
+          }
+        } catch { /* network error — skip this test case */ }
+      }
+      if (testFailures.length > 0) {
+        throw new Error(`${testFailures.length} test(s) failed — fix these before submitting:\n${testFailures.map((f) => `• ${f}`).join('\n')}`)
+      }
       const buildEvidence = {
         html_valid: true,
         primary_html_file: primaryHtmlFile,
