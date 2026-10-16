@@ -24,6 +24,15 @@ export interface ToolSet {
   handlers: Record<string, (input: Record<string, unknown>) => Promise<unknown>>
 }
 
+// React API patterns that must not appear in vanilla-js files.
+// Checked at write_file time when tech_stack.renderer === 'vanilla-js'.
+const REACT_IN_VANILLA_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /React\.createElement\(/, reason: 'React.createElement() in a vanilla-js file. Use document.createElement() instead.' },
+  { pattern: /ReactDOM\.render\(|ReactDOM\.createRoot\(/, reason: 'ReactDOM in a vanilla-js file. Remove React and use plain DOM APIs.' },
+  { pattern: /\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\buseCallback\s*\(|\buseMemo\s*\(/, reason: 'React hooks in a vanilla-js file. Manage state with plain variables or objects.' },
+  { pattern: /from\s+['"]react['"]|require\s*\(\s*['"]react['"]\s*\)/, reason: 'React import in a vanilla-js file. This project declared renderer: vanilla-js.' },
+]
+
 // CDN patterns Leo must never add without an explicit feature need.
 // Checked at write_file time so the violation is caught immediately, not after a full Tara review cycle.
 const BANNED_CDN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -349,6 +358,28 @@ ${body}
               required: ['id', 'description', 'source'],
             },
           },
+          tech_stack: {
+            type: 'object',
+            description: 'Technology choices for Leo\'s build. Required for any project with a build task. Maya must declare these upfront — Leo reads them before writing any file and must not deviate.',
+            properties: {
+              renderer: {
+                type: 'string',
+                enum: ['vanilla-js', 'react-cdn', 'vue-cdn'],
+                description: 'JS rendering approach. vanilla-js = plain DOM APIs, no frameworks. react-cdn = React loaded via CDN script tag. vue-cdn = Vue loaded via CDN script tag.',
+              },
+              css: {
+                type: 'string',
+                enum: ['plain', 'tailwind-cdn', 'tokens'],
+                description: 'CSS approach. plain = hand-written CSS. tailwind-cdn = Tailwind Play CDN. tokens = use design/tokens.css custom properties.',
+              },
+              data: {
+                type: 'string',
+                enum: ['localStorage', 'data-api', 'supabase', 'none'],
+                description: 'Data persistence. localStorage = browser storage. data-api = Jugnus /api/data endpoint. supabase = direct Supabase client. none = no persistence needed.',
+              },
+            },
+            required: ['renderer', 'css', 'data'],
+          },
           design_tokens: {
             type: 'object',
             description: 'Brand design tokens for web page projects. Provide these for any landing page, campaign page, or HTML output — Nia and Leo will use them as CSS custom properties instead of hardcoded values.',
@@ -559,6 +590,7 @@ ${body}
       // Store jugnu_roles, build_tier, and acceptance_criteria in project constraints
       {
         const acceptance_criteria = input.acceptance_criteria as Array<Record<string, unknown>> | undefined
+        const tech_stack = input.tech_stack as Record<string, string> | undefined
         const { data: proj } = await db.from('projects').select('constraints').eq('id', projectId).single()
         const existing = (proj?.constraints ?? {}) as Record<string, unknown>
         await db.from('projects').update({
@@ -568,6 +600,7 @@ ${body}
             build_tier,
             ...(jugnu_roles ? { jugnu_roles } : {}),
             ...(acceptance_criteria?.length ? { acceptance_criteria } : {}),
+            ...(tech_stack ? { tech_stack } : {}),
           },
         }).eq('id', projectId)
       }
@@ -831,7 +864,22 @@ ${body}
       // one screen per file (~100–200 lines each), so this only triggers on genuine over-writes.
       const lineCount = content.split('\n').length
       const { data: tierProj } = await db.from('projects').select('constraints').eq('id', projectId).single()
-      const tier = ((tierProj?.constraints as Record<string, unknown>)?.build_tier as string) ?? 'balanced'
+      const projConstraints = (tierProj?.constraints as Record<string, unknown>) ?? {}
+      const tier = (projConstraints.build_tier as string) ?? 'balanced'
+
+      // Tech-stack consistency gate — reject Leo writing React APIs in a vanilla-js project.
+      // Prevents wrong-foundation starts where Leo commits to a framework mid-file and cascades bugs.
+      if (jugnuKey === 'leo') {
+        const techStack = projConstraints.tech_stack as Record<string, string> | undefined
+        const filePath = input.path as string
+        if (techStack?.renderer === 'vanilla-js' && filePath.endsWith('.js')) {
+          const violations = REACT_IN_VANILLA_PATTERNS.filter(({ pattern }) => pattern.test(content))
+          if (violations.length > 0) {
+            const msgs = violations.map(v => `  • ${v.reason}`)
+            return { ok: false, error: `Rejected — this project declared renderer: vanilla-js, but ${filePath} contains React APIs:\n${msgs.join('\n')}\n\nRewrite using plain DOM APIs (document.createElement, addEventListener, etc.). No frameworks.` }
+          }
+        }
+      }
       const LINE_LIMITS: Record<string, number> = { quick: 600, balanced: 1200, premium: 1800 }
       const limit = LINE_LIMITS[tier] ?? 1200
       if (lineCount > limit) {
@@ -1555,13 +1603,27 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
 
     definitions.push({
       name: 'request_changes',
-      description: 'Request changes from Leo. Describe exactly what needs to be fixed. Do not call this if Leo has already revised four times — approve with reservations instead, listing every remaining issue in your comment.',
+      description: 'Request changes from Leo. You MUST enumerate EVERY failing criterion before calling this — do a complete review pass first, then list all failures at once. Leo gets one consolidated fix list, not one bug at a time. Do not call this if Leo has already revised four times — approve with reservations instead.',
       input_schema: {
         type: 'object' as const,
         properties: {
-          feedback: { type: 'string', description: 'Specific changes required, file by file if possible.' },
+          failing_criteria: {
+            type: 'array',
+            description: 'ALL acceptance criteria that failed. Check every criterion before calling — include every failure in this single call. Each item names exactly which file to fix and what to change.',
+            minItems: 1,
+            items: {
+              type: 'object' as const,
+              properties: {
+                id:          { type: 'string', description: 'Acceptance criterion ID e.g. "ac-001", or a short label.' },
+                description: { type: 'string', description: 'What the criterion requires.' },
+                failure:     { type: 'string', description: 'What is wrong and which file to fix, e.g. "app.js line 42: getLast7Days() returns strings, not Date objects — rewrite to return new Date()."' },
+              },
+              required: ['description', 'failure'],
+            },
+          },
+          summary: { type: 'string', description: 'One-line overview shown to the founder, e.g. "3 functional issues found — returning to Leo."' },
         },
-        required: ['feedback'],
+        required: ['failing_criteria'],
       },
     })
 
@@ -1587,10 +1649,19 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
         }
       }
 
+      // Build a consolidated feedback string from the structured failing_criteria array.
+      // Leo gets the full list at once — one revision attempt per round, not one bug at a time.
+      type FailingCriterion = { id?: string; description: string; failure: string }
+      const failingCriteria = (input.failing_criteria as FailingCriterion[]) ?? []
+      const feedback = failingCriteria
+        .map((c, i) => `${i + 1}. [${c.id ?? `issue-${i + 1}`}] ${c.description}\n   → Fix: ${c.failure}`)
+        .join('\n\n')
+      const summary = (input.summary as string | undefined) ?? `${failingCriteria.length} issue${failingCriteria.length !== 1 ? 's' : ''} found — returning to Leo.`
+
       if (taskId) {
         await db.from('tasks').update({
           status: 'completed',
-          result: `Changes requested: ${input.feedback}`,
+          result: `Changes requested: ${summary}`,
           completed_at: new Date().toISOString(),
         }).eq('id', taskId)
       }
@@ -1598,7 +1669,7 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
       const { data: leoRevTask } = await db.from('tasks').insert({
         project_id: projectId,
         title: 'Revise implementation based on Tara\'s feedback',
-        description: `Tara requested these changes:\n\n${input.feedback}\n\nFix the issues in the existing files using write_file, then call submit_for_review again.`,
+        description: `Tara requested these changes:\n\n${feedback}\n\nFix ALL of the above issues in the existing files using write_file, then call submit_for_review again.`,
         capability: 'build', jugnu_key: 'leo',
         depends_on: taskId ? [taskId] : [],
         sort_order: 999, status: 'pending',
@@ -1624,11 +1695,12 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
         })
       }
 
+      const founderMsg = failingCriteria.map(c => `• **${c.id ?? ''}** ${c.failure}`).join('\n')
       await db.from('messages').insert({
         project_id: projectId, author_type: 'jugnu', author_key: 'tara',
-        content: `🔁 **Tara requested changes.**\n\n${input.feedback}`,
+        content: `🔁 **Tara requested changes.** ${summary}\n\n${founderMsg}`,
         task_id: taskId,
-        metadata: { event_type: 'TASK_RETURNED', review_verdict: 'changes_requested' },
+        metadata: { event_type: 'TASK_RETURNED', review_verdict: 'changes_requested', failing_count: failingCriteria.length },
       })
 
       return { ok: true, verdict: 'changes_requested' }
