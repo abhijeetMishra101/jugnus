@@ -28,16 +28,9 @@ export async function getNextReadyTask(
     tasks.filter((t) => ['completed', 'skipped'].includes(t.status)).map((t) => t.id)
   )
 
-  const readyTask = tasks.find((t) => {
-    if (t.status !== 'pending') return false
-    const deps = (t.depends_on ?? []) as string[]
-    return deps.every((dep) => satisfiedIds.has(dep))
-  }) ?? null
-
-  if (readyTask) return readyTask
-
-  // No ready pending task — check if a failed build task is blocking the pipeline.
-  // Instead of sending Tara to review a failed build, auto-retry the failed task (up to 3 times).
+  // Auto-retry failed build tasks BEFORE dispatching anything else.
+  // Critical: Tara must never review a build that hasn't succeeded — if Leo/Nia failed,
+  // retry them first regardless of whether downstream tasks (tara) look "ready".
   const BUILD_AUTO_RETRY_CAP = 3
   const failedBuild = tasks.find(
     (t) => t.status === 'failed' && ['leo', 'nia'].includes(t.jugnu_key) && (t.retry_count ?? 0) < BUILD_AUTO_RETRY_CAP
@@ -48,7 +41,20 @@ export async function getNextReadyTask(
     return { ...failedBuild, status: 'pending' }
   }
 
-  return null
+  // Treat a failed Leo/Nia task that hit the retry cap as a hard blocker —
+  // do not dispatch Tara to review a build that never succeeded.
+  const exhaustedBuild = tasks.find(
+    (t) => t.status === 'failed' && ['leo', 'nia'].includes(t.jugnu_key)
+  )
+  if (exhaustedBuild) return null
+
+  const readyTask = tasks.find((t) => {
+    if (t.status !== 'pending') return false
+    const deps = (t.depends_on ?? []) as string[]
+    return deps.every((dep) => satisfiedIds.has(dep))
+  }) ?? null
+
+  return readyTask
 }
 
 export async function advanceProject(projectId: string, db: SupabaseClient): Promise<{
@@ -56,10 +62,9 @@ export async function advanceProject(projectId: string, db: SupabaseClient): Pro
   jugnuKey: JugnuKey | null
   taskId: string | null
 }> {
-  // Never advance a paused project — let the current in-flight task finish,
-  // then stop. User must resume explicitly.
+  // Never advance a completed or paused project.
   const { data: projStatus } = await db.from('projects').select('status').eq('id', projectId).single()
-  if (projStatus?.status === 'paused') return { dispatched: false, jugnuKey: null, taskId: null }
+  if (projStatus?.status === 'paused' || projStatus?.status === 'completed') return { dispatched: false, jugnuKey: null, taskId: null }
 
   const { data: inProgress } = await db
     .from('tasks')

@@ -54,6 +54,7 @@ const REACT_IN_VANILLA_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 // Checked at write_file time so the violation is caught immediately, not after a full Tara review cycle.
 const BANNED_CDN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /@tailwindcss\/browser/,       reason: 'experimental CDN build — causes 508 timeouts on the preview proxy. Use plain CSS instead.' },
+  { pattern: /tailwindcss\/browser/,        reason: 'experimental CDN build — causes 508 timeouts on the preview proxy. Use plain CSS instead.' },
   { pattern: /unpkg\.com\/chart\.js/,       reason: 'chart.js is not needed unless the task explicitly requires charts. Remove it.' },
   { pattern: /cdn\.jsdelivr\.net\/npm\/chart\.js/, reason: 'chart.js is not needed unless the task explicitly requires charts. Remove it.' },
   { pattern: /unpkg\.com\/lodash/,          reason: 'lodash is not needed — use native JS array/object methods.' },
@@ -589,6 +590,30 @@ ${body}
             error: `Revision quiz incomplete — only ${incomingCriteria?.length ?? 0} acceptance criteria provided (minimum 3 required for a revision). Compile testable criteria from the revision Q&As.`,
           }
         }
+      }
+
+      // Enforce pipeline ordering: in a standard nia→leo→tara chain, Leo must depend on
+      // the human gate (or nia if no human gate) and Tara must depend on Leo.
+      // Maya often omits depends_on_indices — patch them before inserting so downstream
+      // tasks never run before their upstream is complete.
+      const leoIdx = rawTasks.findIndex((t) => t.jugnu_key === 'leo')
+      const taraIdx = rawTasks.findIndex((t) => t.jugnu_key === 'tara')
+      const humanIdx = rawTasks.findIndex((t) => t.jugnu_key === 'human')
+      const niaIdx = rawTasks.findIndex((t) => t.jugnu_key === 'nia')
+
+      if (leoIdx !== -1) {
+        const leoTask = rawTasks[leoIdx]
+        const deps = new Set(leoTask.depends_on_indices ?? [])
+        // Leo must wait for the human gate (or nia if no human gate)
+        const upstream = humanIdx !== -1 ? humanIdx : niaIdx
+        if (upstream !== -1 && upstream < leoIdx) deps.add(upstream)
+        leoTask.depends_on_indices = Array.from(deps)
+      }
+      if (taraIdx !== -1 && leoIdx !== -1 && leoIdx < taraIdx) {
+        const taraTask = rawTasks[taraIdx]
+        const deps = new Set(taraTask.depends_on_indices ?? [])
+        deps.add(leoIdx)
+        taraTask.depends_on_indices = Array.from(deps)
       }
 
       const insertedIds: string[] = []
