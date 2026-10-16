@@ -1778,7 +1778,7 @@ Read status: GET /api/data/PROJECT_ID/scheduled_actions`,
         await db.from('tasks').insert({
           project_id: projectId,
           title: 'Re-review revised implementation',
-          description: `Leo revised the implementation. Run your full review suite again: verify_assets → call_api → browse_app. If all checks pass, approve. This is the final review — if issues remain, approve with reservations rather than requesting another round.${niaNote}`,
+          description: `Leo revised the implementation. Run your FULL review suite in this exact order: verify_assets → browse_app → compare_with_design → then approve or request_changes. You MUST call compare_with_design before approve — skipping it will block the approval. If all checks pass, approve or pass_with_notes.${niaNote}`,
           capability: 'review', jugnu_key: 'tara',
           depends_on: leoRevTask?.id ? [leoRevTask.id] : [],
           sort_order: 1000, status: 'pending',

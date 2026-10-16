@@ -800,8 +800,13 @@ export async function dispatchJugnu(input: DispatchInput): Promise<DispatchResul
         const content = Array.isArray(result) ? result : JSON.stringify(result)
         toolResults.push({ toolUseId: toolCall.id, content })
 
-        const terminalTools = ['complete_task', 'create_task_plan', 'submit_for_review', 'approve', 'request_changes', 'ask_founder', 'join_v2_waitlist', 'request_info']
-        if (terminalTools.includes(toolCall.name)) {
+        const terminalTools = ['complete_task', 'create_task_plan', 'submit_for_review', 'approve', 'pass_with_notes', 'request_changes', 'ask_founder', 'join_v2_waitlist', 'request_info']
+        // Only treat as terminal if the tool succeeded (ok: true) or has no ok field.
+        // Blocked responses (ok: false, blocked: true) must be returned to the LLM
+        // so it can recover — e.g. call compare_with_design before retrying approve.
+        const resultObj = Array.isArray(result) ? null : (result as Record<string, unknown>)
+        const wasBlocked = resultObj?.ok === false && resultObj?.blocked === true
+        if (terminalTools.includes(toolCall.name) && !wasBlocked) {
           done = true
           break
         }
