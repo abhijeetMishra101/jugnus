@@ -861,6 +861,22 @@ ${body}
           }
         }
       }
+      // React/Babel script order check — HTML files only.
+      // Babel must be loaded before any type="text/babel" block, and React/ReactDOM before both.
+      // Wrong order causes SyntaxError on first load (blank screen with no obvious error).
+      if (jugnuKey === 'leo' && (input.path as string).endsWith('.html')) {
+        const babelIdx  = content.search(/@babel\/standalone/)
+        const reactIdx  = content.search(/unpkg\.com\/react@|jsdelivr\.net\/npm\/react@/)
+        const textBabelIdx = content.indexOf('type="text/babel"')
+
+        if (textBabelIdx !== -1 && babelIdx !== -1 && textBabelIdx < babelIdx) {
+          return { ok: false, error: 'Script order error: type="text/babel" appears before the @babel/standalone CDN script. Babel must be loaded first. Required order: React CDN → ReactDOM CDN → @babel/standalone → <script type="text/babel">.' }
+        }
+        if (textBabelIdx !== -1 && reactIdx !== -1 && textBabelIdx < reactIdx) {
+          return { ok: false, error: 'Script order error: type="text/babel" JSX appears before React CDN scripts. Required order: React CDN → ReactDOM CDN → @babel/standalone → <script type="text/babel">.' }
+        }
+      }
+
       const LINE_LIMITS: Record<string, number> = { quick: 600, balanced: 1200, premium: 1800 }
       const limit = LINE_LIMITS[tier] ?? 1200
       if (lineCount > limit) {
