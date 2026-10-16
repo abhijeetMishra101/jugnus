@@ -1034,6 +1034,7 @@ export function ProjectChannel({ projectId, userId, initialMessages, activeJugnu
         backgroundImage: 'linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(/chat-bg.png)',
         backgroundSize: '100% auto',
         backgroundPosition: 'center bottom',
+        backgroundRepeat: 'no-repeat',
       }}
     >
         {/* ── Animated overlays — outside scroll container so they never scroll away ── */}
